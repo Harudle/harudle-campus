@@ -87,7 +87,7 @@ function sanitize(p) {
   return {
     f: [11, 12, 13, 14].includes(p.f) ? p.f : 11, x: num(p.x, 0, 56), y: num(p.y, 0, 34), h: num(p.h, -7, 7),
     m: p.m ? 1 : 0, r: p.r ? 1 : 0, look: Math.floor(num(p.look, 0, 99)), jc: Math.floor(num(p.jc, 0, 1e9)), ac: Math.floor(num(p.ac, 0, 1e9)),
-    an: ["draw", "wave", "heart"].includes(p.an) ? p.an : null, as: Math.floor(num(p.as, 0, 1e7)), say: clean(p.say, 40) || null,
+    l: p.l ? 1 : 0, ly: num(p.ly, -7, 7), an: ["draw", "wave", "heart"].includes(p.an) ? p.an : null, as: Math.floor(num(p.as, 0, 1e7)), say: clean(p.say, 40) || null,
   };
 }
 wss.on("connection", (ws) => {
