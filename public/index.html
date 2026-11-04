@@ -72,13 +72,15 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--brand);outline-
 #hint button{font:700 11px system-ui,sans-serif;border:1.5px solid var(--ink);border-radius:6px;background:#fff;padding:1px 6px;cursor:pointer}
 #guide{position:fixed;inset:0;z-index:40;display:grid;place-items:center;background:rgba(14,30,70,.5);padding:16px}
 #guide[hidden]{display:none!important}
-.gbox{background:#fff;border:3px solid var(--ink);border-radius:18px;padding:18px 20px;max-width:420px;width:100%;box-shadow:3px 4px 0 var(--ink);font-family:var(--hand)}
+.gbox{background:#fff;border:3px solid var(--ink);border-radius:18px;padding:18px 20px;max-width:300px;width:100%;box-shadow:3px 4px 0 var(--ink);font-family:var(--hand)}
 .gbox h4{margin:0 0 10px;font-size:24px}
 .gbox ul{list-style:none;margin:0 0 14px;padding:0;display:grid;gap:9px;font-size:16px}
-.gbox li{display:grid;grid-template-columns:112px 1fr;align-items:center;gap:8px;line-height:1.3}
+.gbox li{display:grid;grid-template-columns:100px 1fr;align-items:center;gap:8px;line-height:1.3}
 .gbox li p{margin:0}.gbox li b{margin-right:6px}.gbox li span{white-space:nowrap}
 .gbox .btn{width:100%}
 #updateChip{position:fixed;z-index:35;top:calc(64px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);font-family:var(--hand);font-size:16px;font-weight:700;background:#FFD43B;color:#0E1E46;border:2px solid var(--ink);border-radius:999px;padding:6px 16px;box-shadow:2px 2px 0 var(--ink);cursor:pointer}
+#cross{position:fixed;z-index:3;left:50%;top:50%;width:10px;height:10px;margin:-5px 0 0 -5px;border:2px solid #fff;border-radius:50%;box-shadow:0 0 0 1.5px var(--ink);pointer-events:none}
+#cross[hidden]{display:none}
 #hint{border:1.5px solid var(--ink);position:fixed;z-index:4;left:max(12px,env(safe-area-inset-left,0px));bottom:calc(116px + env(safe-area-inset-bottom,0px));font-size:12px;color:var(--muted);background:rgba(255,255,255,.88);padding:4px 8px;border-radius:8px;max-width:calc(100% - 90px)}
 #skills{left:max(12px,env(safe-area-inset-left,0px));bottom:calc(70px + env(safe-area-inset-bottom,0px));gap:6px;max-width:calc(100% - 80px)}
 .skill{font-family:var(--hand);font-size:16px;background:var(--paper);color:var(--ink);border:2px solid var(--ink);border-radius:12px;padding:4px 10px;cursor:pointer;box-shadow:1px 2px 0 var(--ink);display:flex;align-items:center;gap:5px}
@@ -128,6 +130,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--brand);outline-
 
 <canvas id="stage" aria-label="우아한테크코스 판교 캠퍼스 11~14층 3D 지도. 방향키로 움직이고 Shift로 달리고 Space로 점프하며, 캐릭터 옆에서 F로 대화합니다."></canvas>
 <div id="labels"></div>
+<div id="cross" hidden></div>
 <div id="fade"></div>
 <div id="loading"><div>캠퍼스를 접는 중…<small>종이 디오라마를 세우고 있어요</small></div></div>
 
@@ -150,13 +153,12 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--brand);outline-
 <div id="guide" hidden><div class="gbox" role="dialog" aria-labelledby="guideTitle">
   <h4 id="guideTitle">이렇게 움직여요</h4>
   <ul>
-    <li><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><p><b>걷기</b> 방향키도 되고, 바닥을 눌러도 걸어가요</p></li>
-    <li><span><kbd>Shift</kbd></span><p><b>달리기</b> 누르고 있는 동안 빨라져요</p></li>
-    <li><span><kbd>Space</kbd></span><p><b>점프</b> 트램펄린 위에선 저절로 통통</p></li>
-    <li><span><kbd>F</kbd></span><p><b>상호작용</b> 크루와 대화 · 의자에 앉기 · 빈백에 눕기 · 엘리베이터</p></li>
-    <li><span><kbd>V</kbd></span><p><b>시점</b> 위에서 → 들어가기 → 1인칭</p></li>
-    <li><span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></span><p><b>스킬</b> 네 컷 그리기 · 인사 · 하트</p></li>
-    <li><span>클릭</span><p><b>의자·빈백</b> 누르면 걸어가서 앉거나 누워요</p></li>
+    <li><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><p><b>걷기</b></p></li>
+    <li><span><kbd>Shift</kbd></span><p><b>달리기</b></p></li>
+    <li><span><kbd>Space</kbd></span><p><b>점프</b></p></li>
+    <li><span><kbd>F</kbd></span><p><b>대화 · 앉기 · 눕기</b></p></li>
+    <li><span><kbd>V</kbd></span><p><b>시점 바꾸기</b></p></li>
+    <li><span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></span><p><b>네 컷 · 인사 · 하트</b></p></li>
   </ul>
   <button class="btn" type="button" id="guideOk">시작하기</button>
 </div></div>
@@ -1049,7 +1051,10 @@ function setView(mode) {
   document.getElementById("viewBtn").textContent = { top: "들어가기", third: "1인칭", first: "위에서 보기" }[mode];
   if (mode === "third") { cam.ipT = cam.ip = .3; cam.idT = cam.id = 3.2; }
   if (mode === "first") { cam.lookT = cam.look = 0; }
-  showFloors(); showToast({ top: "위에서 보기", third: "들어가서 보기", first: "1인칭으로 보기" }[mode], mode === "top" ? "캠퍼스를 한눈에 내려다봐요. V로 다시 들어갈 수 있어요." : "끌어서 고개를 돌리고 W로 앞으로 가요. 의자에서 F를 누르면 앉아요.", 3200);
+  if (mode !== "top") cam.yawT = cam.yaw = me.h + Math.PI;    // 내가 바라보는 쪽이 정면
+  else if (document.pointerLockElement === canvas) document.exitPointerLock?.();
+  document.getElementById("cross").hidden = mode === "top";
+  showFloors(); showToast({ top: "위에서 보기", third: "들어가서 보기", first: "1인칭으로 보기" }[mode], mode === "top" ? "캠퍼스를 한눈에 내려다봐요. V로 다시 들어갈 수 있어요." : "마우스로 둘러봐요. 화면을 누르면 마우스 고정, Esc로 해제.", 3200);
 }
 function placeCamera() { const c = Math.cos(cam.pitch); camera.position.set(cam.target.x + Math.sin(cam.yaw) * c * cam.dist, cam.target.y + Math.sin(cam.pitch) * cam.dist, cam.target.z + Math.cos(cam.yaw) * c * cam.dist); camera.lookAt(cam.target); }
 const floorGroups = {};
@@ -1146,9 +1151,25 @@ canvas.addEventListener("pointermove", (e) => {
 });
 const endDrag = (e) => {
   pointers.delete(e.pointerId); canvas.classList.remove("dragging");
-  if (drag && !drag.moved && pointers.size === 0) clickAt(e.clientX, e.clientY);
+  if (drag && !drag.moved && pointers.size === 0) {
+    if (inside() && e.pointerType === "mouse" && !locked() && !lockFailed && canvas.requestPointerLock) { try { const r = canvas.requestPointerLock(); r?.catch?.(() => { lockFailed = true; }); } catch { lockFailed = true; } }
+    else if (locked()) clickAt(innerWidth / 2, innerHeight / 2);   // 고정 중엔 화면 가운데를 누른 것으로
+    else clickAt(e.clientX, e.clientY);
+  }
   if (pointers.size === 0) drag = null;
 };
+// 들어가 있을 때: 마우스를 움직이는 만큼 고개가 돌아간다 (누르고 있지 않아도)
+let lastLook = 0, lockFailed = false;
+const locked = () => document.pointerLockElement === canvas;
+function look(dx, dy) {
+  if (!dx && !dy) return; lastLook = performance.now();
+  cam.yawT -= dx * .0032;
+  if (VIEW.mode === "first") cam.lookT = clamp(cam.lookT - dy * .0026, -1.0, 1.1);
+  else cam.ipT = clamp(cam.ipT + dy * .0026, -.05, 1.1);
+}
+document.addEventListener("mousemove", (e) => { if (!inside()) return; if (locked() || (e.target === canvas && pointers.size === 0)) look(e.movementX || 0, e.movementY || 0); });
+document.addEventListener("pointerlockerror", () => { lockFailed = true; });
+document.addEventListener("pointerlockchange", () => { document.getElementById("cross").classList.toggle("on", locked()); });
 canvas.addEventListener("pointerup", endDrag); canvas.addEventListener("pointercancel", endDrag);
 canvas.addEventListener("wheel", (e) => {
   e.preventDefault();
@@ -1202,6 +1223,7 @@ const atCall = () => floor.calls.some((k) => inRect({ x: k.x - .2, y: k.y - .3, 
 function interact() { if (me.lie || me.seat) { standUp(); return; } const st = nearSeat(); if (st && !(nearNPC() && Math.hypot(st.x - me.x, st.y - me.y) > .55)) { sitDown(st); return; } const n = nearNPC(); if (n) { n.say = "반가워!"; n.sayAt = performance.now(); NPCS.forEach((o) => (o.talk = o === n)); openPanel(n.p); return; } const bag = nearBag(); if (bag) { lieDown(bag); return; } if (atCall()) openPicker(); }
 let openP = null;
 function openPanel(p) {
+  if (locked()) document.exitPointerLock();
   openP = p;
   document.getElementById("pName").textContent = p.nick;
   document.getElementById("pAvatar").src = p.avatar || avatarURL(lookFrom(p.nick));
@@ -1230,6 +1252,7 @@ function closePanel() { openP = null; NPCS.forEach((o) => (o.talk = false)); pan
 document.getElementById("pClose").onclick = closePanel;
 lb.addEventListener("click", (e) => { if (e.target === lb || e.target === lbImg) lb.hidden = true; });
 function openPicker() {
+  if (locked()) document.exitPointerLock();
   const list = document.getElementById("pickList"); list.replaceChildren();
   for (const f of [14, 13, 12, 11]) { const b = document.createElement("button"); b.type = "button"; b.disabled = f === me.f; const l = document.createElement("b"); l.textContent = f + "F"; const s = document.createElement("span"); s.textContent = f === me.f ? "지금 있는 층" : FLOOR_INFO[f]; b.append(l, s); b.onclick = () => { closePicker(); goFloor(f, ELEV_SPAWN); }; list.append(b); }
   picker.hidden = false; list.querySelector("button:not([disabled])")?.focus();
@@ -1379,6 +1402,10 @@ function step(dt, t) {
   me.moving = !!(vx || vy);
   if (!runTipShown) { if (me.moving && running()) runTipShown = true; else if (me.moving) { walkFor += dt; if (walkFor > 5) { runTipShown = true; showToast("더 빨리 가고 싶다면", "Shift를 누른 채로 걸으면 달리고, Space를 누르면 점프해요.", 4200); } } }
   if (me.moving) { me.h = Math.atan2(vx, vy); if (me.act) endAct(me); sendPresence(false); }
+  if (inside() && me.moving && performance.now() - lastLook > 700) {
+    const want = me.h + Math.PI; let diff = (want - cam.yawT) % (Math.PI * 2); if (diff > Math.PI) diff -= Math.PI * 2; if (diff < -Math.PI) diff += Math.PI * 2;
+    if (Math.abs(diff) < 2.5) cam.yawT += diff * Math.min(1, dt * (running() ? 4 : 3));
+  }
   if (me.jz > 0 || me.jv > 0) { me.jv -= 15 * dt; me.jz += me.jv * dt; if (me.jz <= 0) { me.jz = 0; me.jv = 0; } }
   // 트램펄린 위에서는 저절로 통통
   if (me.jz <= 0 && me.jv <= 0 && floor.furn.some((o) => o.kind === "trampoline" && inRect(o, me.x, me.y))) { me.jv = 6.4; me.jc++; sendPresence(true); }
