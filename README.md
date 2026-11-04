@@ -30,6 +30,7 @@ npm run dev   # http://localhost:8080
 ## 배포
 
 AWS 서울 리전 EC2 (t4g.small, Amazon Linux 2023, Project=harudle).
+주소는 https://campus.harudle.com 이고, Caddy가 인증서를 자동으로 받습니다. 앱은 3000번, Caddy가 80·443을 받습니다.
 `main`에 푸시하면 서버가 10분 안에 받아서 다시 시작합니다.
 
 층 배치를 바꾸려면 `public/index.html`의 `makeFloor()`만 고치면 됩니다.
