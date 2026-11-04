@@ -195,12 +195,12 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.m
 
 /* ════════════════ 1. 설정 · 유틸 ════════════════ */
 const W = 56, H = 34;          // 층 격자(칸)
-const S = 1.0;                 // 한 칸 = 1m (캐릭터 대비 방·통로를 넉넉하게)
-const FH = 3.2;                // 층 높이
+const S = 1.25;                // 한 칸 = 1.25m (캐릭터 대비 방·통로를 넉넉하게)
+const FH = 4.6;                // 층 높이
 const WALL = 0.9;              // 벽 높이(인형의 집처럼 낮게)
 const DOLL = 1.12;
 // 들어가서 볼 때 천장 높이. 12층은 13층과 계단·오픈 천장으로 이어져 13층 바닥 밑까지 탁 트여 있다
-const CEIL = { 11: 2.4, 12: 3.0, 13: 2.4, 14: 2.7 };
+const CEIL = { 11: 3.5, 12: 4.4, 13: 3.5, 14: 3.8 };
 const VIEW = { mode: "top" };            // top 위에서 · third 들어가서(뒤에서) · first 1인칭
 const inside = () => VIEW.mode !== "top";             // 말풍선을 띄울 키
 const INK = 0x111118, BRAND = "#FFD43B", NAVY = "#0E1E46", WEAK = "#FFF6C7";
@@ -585,7 +585,7 @@ function buildFurn(G, o, fl) {
     case "ltable": box(G, w - .12, .44, d * .55, C.white, x, 0, z); chairs(o.y + 1, .12);
       for (let i = 0; i < o.w; i += 2) box(G, .3, .02, .2, 0xE7E2D6, wx(o.x + i + .5), .44, z, { line: .006 }); break;
     case "storage": box(G, w, 1.05, d * .7, C.gray, x, 0, z); for (let i = 1; i < o.w; i += 2) box(G, .02, .9, .02, C.grayD, wx(o.x + i), .07, z + d * .36, { line: 0 }); break;
-    case "desk": { box(G, w - .12, .44, d - .2, C.white, x, 0, z); const n = Math.max(1, Math.round(o.w / 2));
+    case "desk": { box(G, w - .12, .44, d - .2, C.white, x, 0, z); const n = Math.max(1, Math.round(w / 1.3));
       for (let k = 0; k < n; k++) { const px = wx(o.x) + (k + .5) * w / n; for (const s of [-1, 1]) { monitor(G, px, .44, z + s * .1, s < 0 ? 0 : Math.PI); chair(G, px, z + s * (d / 2 + .02), s < 0 ? 0 : Math.PI); } } break; }
     case "booth": box(G, w - .08, 1.25, d - .1, 0xB0B256, x, 0, z, { mat: toon(0xB0B256, { opacity: .45 }), line: .015, cast: false }); box(G, w - .08, .06, d - .1, C.white, x, 1.25, z); box(G, w * .5, .4, d * .3, C.wood, x, 0, z - d * .2, { line: .01 }); chair(G, x, z + d * .1, Math.PI, 0x6E7A3A); break;
     case "mtable": box(G, w - .1, .44, d - .2, C.white, x, 0, z);
@@ -615,7 +615,7 @@ function buildFurn(G, o, fl) {
     case "vending": box(G, .54, 1.55, .5, 0xF15B5B, x, 0, z); box(G, .38, .9, .02, C.glass, x - .04, .5, z + .26, { mat: glassMat(), line: .005, cast: false });
       for (let r2 = 0; r2 < 3; r2++) for (let c = 0; c < 3; c++) cyl(G, .035, .035, .14, [0xFFD43B, 0x7FCFAE, 0x7DB3F0][c], x - .16 + c * .12, .55 + r2 * .3, z + .18, { line: .005 }); break;
     case "bigtable": case "table": box(G, w - .12, .44, d - .12, C.wood, x, 0, z);
-      if (horiz) { const n = o.kind === "bigtable" ? o.w : Math.max(1, Math.round(o.w / 2)); for (let k = 0; k < n; k++) for (const s of [-1, 1]) chair(G, wx(o.x) + (k + .5) * w / n, z + s * (d / 2 + .02), s < 0 ? 0 : Math.PI, o.kind === "bigtable" ? 0xFFD43B : C.white);
+      if (horiz) { const n = o.kind === "bigtable" ? o.w : Math.max(1, Math.round(w / 1.2)); for (let k = 0; k < n; k++) for (const s of [-1, 1]) chair(G, wx(o.x) + (k + .5) * w / n, z + s * (d / 2 + .02), s < 0 ? 0 : Math.PI, o.kind === "bigtable" ? 0xFFD43B : C.white);
         for (let k = 0; k < n; k += (o.kind === "bigtable" ? 2 : 1)) cyl(G, .04, .035, .09, k % 2 ? 0x7DB3F0 : C.white, wx(o.x) + (k + .5) * w / n, .44, z + (k % 4 ? .1 : -.1), { line: .006 }); }
       break;
     case "planter": box(G, w, .3, d * .8, C.brick, x, 0, z); for (let i = 0; i < o.w; i++) ball(G, .18 + (i % 3) * .03, C.leaf, wx(o.x + i + .5), .4, z, { line: .012 }); break;
@@ -992,11 +992,11 @@ let campusTower = null;
 { const r = rng(2026);
   const winTex = canvasTex(64, 128, (g) => { g.fillStyle = "#14224A"; g.fillRect(0, 0, 64, 128); for (let y = 4; y < 124; y += 8) for (let x = 4; x < 60; x += 8) { const v = r(); g.fillStyle = v > .6 ? (v > .9 ? "#FFF4C2" : "#FFD86B") : "#1E2E5C"; g.fillRect(x, y, 5, 5); } });
   const roof = new THREE.MeshBasicMaterial({ color: 0x0C1838 });
-  const ground = new THREE.Mesh(new THREE.CircleGeometry(190, 48), new THREE.MeshBasicMaterial({ color: 0x08122C })); ground.rotation.x = -Math.PI / 2; ground.position.y = GROUND; scene.add(ground);
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(230, 48), new THREE.MeshBasicMaterial({ color: 0x08122C })); ground.rotation.x = -Math.PI / 2; ground.position.y = GROUND; scene.add(ground);
   const tower = (x, z, w, d, h, ry) => { const t = winTex.clone(); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(Math.max(1, Math.round(w / 3)), Math.max(1, Math.round(h / 6))); t.needsUpdate = true; const side = new THREE.MeshBasicMaterial({ map: t });
     const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), [side, side, roof, roof, side, side]); m.position.set(x, GROUND + h / 2, z); m.rotation.y = ry; scene.add(m); return m; };
   campusTower = tower(0, 0, W * S - .4, H * S - .4, -GROUND - .2, 0);   // 우리 건물 아래층들 (보고 있는 층 바로 밑까지)
-  for (let i = 0; i < 90; i++) { const a = r() * Math.PI * 2, d = 48 + r() * 85; tower(Math.cos(a) * d, Math.sin(a) * d, 4 + r() * 9, 4 + r() * 9, 10 + r() * (d < 70 ? 30 : 46), r() * Math.PI); }
+  for (let i = 0; i < 90; i++) { const a = r() * Math.PI * 2, d = 60 + r() * 90; tower(Math.cos(a) * d, Math.sin(a) * d, 5 + r() * 10, 5 + r() * 10, 10 + r() * (d < 85 ? 30 : 48), r() * Math.PI); }
   const n = 900, pos = new Float32Array(n * 3); for (let i = 0; i < n; i++) { const a = r() * Math.PI * 2, d = 22 + r() * 140; pos.set([Math.cos(a) * d, GROUND + .3, Math.sin(a) * d], i * 3); }
   const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(pos, 3)); scene.add(new THREE.Points(g, new THREE.PointsMaterial({ color: 0xFFC94D, size: .7, sizeAttenuation: true, depthWrite: false })));
 }
@@ -1020,11 +1020,11 @@ function tickMeteors(dt) {
     _mx.copy(s.vel).normalize(); _mz.copy(camera.position).sub(s.m.position).normalize(); _my.crossVectors(_mz, _mx).normalize(); _mz.crossVectors(_mx, _my); _mm.makeBasis(_mx, _my, _mz); s.m.quaternion.setFromRotationMatrix(_mm);
     if (k >= 1) { scene.remove(s.m); s.m.geometry.dispose(); s.m.material.dispose(); meteors.splice(i, 1); } }
 }
-const camera = new THREE.PerspectiveCamera(38, 1, .1, 300);
+const camera = new THREE.PerspectiveCamera(38, 1, .1, 360);
 scene.add(new THREE.HemisphereLight(0xffffff, 0xCFD6E8, 1.6));
 const sun = new THREE.DirectionalLight(0xffffff, 1.5); sun.castShadow = true; sun.shadow.mapSize.set(narrow() ? 1024 : 2048, narrow() ? 1024 : 2048);
-Object.assign(sun.shadow.camera, { left: -32, right: 32, top: 22, bottom: -22, near: 1, far: 80 }); sun.shadow.bias = -.0006; scene.add(sun, sun.target);
-const cam = { ip: .3, ipT: .3, id: 3.2, idT: 3.2, look: 0, lookT: 0, yaw: -.35, pitch: .95, dist: narrow() ? 19 : 23, yawT: -.35, pitchT: .95, distT: narrow() ? 19 : 23, target: new THREE.Vector3() };
+Object.assign(sun.shadow.camera, { left: -40, right: 40, top: 28, bottom: -28, near: 1, far: 95 }); sun.shadow.bias = -.0006; scene.add(sun, sun.target);
+const cam = { ip: .3, ipT: .3, id: 3.2, idT: 3.2, look: 0, lookT: 0, yaw: -.35, pitch: .95, dist: narrow() ? 24 : 29, yawT: -.35, pitchT: .95, distT: narrow() ? 24 : 29, target: new THREE.Vector3() };
 function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / Math.max(1, h); camera.updateProjectionMatrix(); }
 addEventListener("resize", resize); resize();
 const eyeV = new THREE.Vector3(), lookV = new THREE.Vector3();
@@ -1053,7 +1053,7 @@ function setView(mode) {
   if (mode === "first") { cam.lookT = cam.look = 0; }
   if (mode !== "top") cam.yawT = cam.yaw = me.h + Math.PI;    // 내가 바라보는 쪽이 정면
   else if (document.pointerLockElement === canvas) document.exitPointerLock?.();
-  document.getElementById("cross").hidden = mode === "top";
+  document.getElementById("cross").hidden = !(mode === "first" || locked());
   showFloors(); showToast({ top: "위에서 보기", third: "들어가서 보기", first: "1인칭으로 보기" }[mode], mode === "top" ? "캠퍼스를 한눈에 내려다봐요. V로 다시 들어갈 수 있어요." : "마우스로 둘러봐요. 화면을 누르면 마우스 고정, Esc로 해제.", 3200);
 }
 function placeCamera() { const c = Math.cos(cam.pitch); camera.position.set(cam.target.x + Math.sin(cam.yaw) * c * cam.dist, cam.target.y + Math.sin(cam.pitch) * cam.dist, cam.target.z + Math.cos(cam.yaw) * c * cam.dist); camera.lookAt(cam.target); }
@@ -1144,7 +1144,7 @@ const pinchDist = () => { const [a, b] = [...pointers.values()]; return Math.hyp
 canvas.addEventListener("pointerdown", (e) => { canvas.setPointerCapture(e.pointerId); pointers.set(e.pointerId, { x: e.clientX, y: e.clientY }); drag = { x: e.clientX, y: e.clientY, moved: pointers.size > 1, yaw: cam.yawT, pitch: cam.pitchT, ip: cam.ipT, look: cam.lookT, pinch: pointers.size === 2 ? pinchDist() : 0, dist: cam.distT, id: cam.idT }; });
 canvas.addEventListener("pointermove", (e) => {
   if (!drag || !pointers.has(e.pointerId)) return; pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  if (pointers.size === 2) { if (!drag.pinch) { drag.pinch = pinchDist(); drag.dist = cam.distT; drag.id = cam.idT; } const ratio = drag.pinch / Math.max(1, pinchDist()); if (inside()) cam.idT = clamp(drag.id * ratio, 1.2, 6); else cam.distT = clamp(drag.dist * ratio, 6, 52); drag.moved = true; return; }
+  if (pointers.size === 2) { if (!drag.pinch) { drag.pinch = pinchDist(); drag.dist = cam.distT; drag.id = cam.idT; } const ratio = drag.pinch / Math.max(1, pinchDist()); if (inside()) cam.idT = clamp(drag.id * ratio, 1.2, 6); else cam.distT = clamp(drag.dist * ratio, 6, 66); drag.moved = true; return; }
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
   if (Math.hypot(dx, dy) > 6) { drag.moved = true; canvas.classList.add("dragging"); }
   if (drag.moved) { cam.yawT = drag.yaw - dx * .006; if (VIEW.mode === "first") cam.lookT = clamp(drag.look + dy * .004, -1.0, 1.1); else if (inside()) cam.ipT = clamp(drag.ip + dy * .004, -.05, 1.1); else cam.pitchT = clamp(drag.pitch + dy * .004, .45, 1.35); }
@@ -1169,11 +1169,11 @@ function look(dx, dy) {
 }
 document.addEventListener("mousemove", (e) => { if (!inside()) return; if (locked() || (e.target === canvas && pointers.size === 0)) look(e.movementX || 0, e.movementY || 0); });
 document.addEventListener("pointerlockerror", () => { lockFailed = true; });
-document.addEventListener("pointerlockchange", () => { document.getElementById("cross").classList.toggle("on", locked()); });
+document.addEventListener("pointerlockchange", () => { document.getElementById("cross").hidden = !(VIEW.mode === "first" || locked()); });
 canvas.addEventListener("pointerup", endDrag); canvas.addEventListener("pointercancel", endDrag);
 canvas.addEventListener("wheel", (e) => {
   e.preventDefault();
-  if (VIEW.mode === "top") cam.distT = clamp(cam.distT * (1 + e.deltaY * .0012), 6, 52);
+  if (VIEW.mode === "top") cam.distT = clamp(cam.distT * (1 + e.deltaY * .0012), 6, 66);
   else if (VIEW.mode === "third") { cam.idT = clamp(cam.idT * (1 + e.deltaY * .0012), 1.2, 6); }
 }, { passive: false });
 function clickAt(cx, cy) {
@@ -1397,7 +1397,7 @@ function step(dt, t) {
     if (gl.bag && !gl.bag.taken && Math.hypot(gl.x - me.x, gl.y - me.y) < 2.2) lieDown(gl.bag);
     else if (gl.seat && !gl.seat.taken && Math.hypot(gl.x - me.x, gl.y - me.y) < 1.4) sitDown(gl.seat);
   }
-  const sp = running() ? 6.6 : 3.8, len = Math.hypot(vx, vy) || 1; vx = vx / len * sp * dt; vy = vy / len * sp * dt;
+  const sp = running() ? 5.6 : 3.2, len = Math.hypot(vx, vy) || 1; vx = vx / len * sp * dt; vy = vy / len * sp * dt;
   const free = (x, y) => fits(floor, x, y);
   // 끼임 방지: 몸이 벽·가구와 겹친 채 시작하면(예전 에스컬레이터 도착 자리) 어떤 방향으로도 못 움직였다 → 가장 가까운 빈 칸으로 옮긴다
   if (!me.lie && !me.seat && !free(me.x, me.y)) { [me.x, me.y] = nearestFree(floor, me.x, me.y); me.path = null; }
@@ -1457,7 +1457,7 @@ function render(dt, t) {
     bub.hidden = !(n.say && performance.now() - n.sayAt < 2500); if (!bub.hidden) { bub.textContent = n.say; project(bub, p.x, p.y + DOLL, p.z); }
   }
   for (const rt of roomTags) { // 들어가 있으면 가까운 이름표만
-    if (inside() && Math.hypot(rt.x - wx(me.x), rt.z - wz(me.y)) > 9) { rt.el.style.display = "none"; continue; }
+    if (inside() && Math.hypot(rt.x - wx(me.x), rt.z - wz(me.y)) > 12) { rt.el.style.display = "none"; continue; }
     project(rt.el, rt.x, floorY(me.f) + (inside() && rt.y === WALL + .35 ? 1.6 : rt.y), rt.z); }
   const near = nearNPC();
   if (near && !openP) { hintBub.hidden = false; hintBub.textContent = "F · 대화하기"; const p = near.doll.root.position; project(hintBub, p.x, p.y + DOLL + .15, p.z); }
