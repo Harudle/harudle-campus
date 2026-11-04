@@ -1,0 +1,16 @@
+{
+  "name": "wooteco-metaverse",
+  "version": "1.0.0",
+  "description": "하루들 캐릭터로 걷는 우아한테크코스 판교 캠퍼스 11~14층 3D 메타버스",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "PORT=8080 node server.js"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "ws": "8.18.0"
+  },
+  "license": "MIT"
+}
