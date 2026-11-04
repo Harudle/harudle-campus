@@ -7,6 +7,12 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap">
 <style>
+/* 독립 실행용 기본 스타일(아티팩트 뷰어가 넣어 주던 것) */
+[hidden]{display:none!important}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;font-size:14px}
+img{max-width:100%}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 /* Layout: full-bleed 3D paper diorama; HUD chips float at the corners; feed drawer slides in from the right (bottom sheet on phones). One paper look on purpose. */
 :root{
   --paper:#FFFFFF; --paper-2:#FFFBEA; --ground:#0E1E46; --ink:#111118; --muted:#6F6B79; --line:#E8E6EB;
