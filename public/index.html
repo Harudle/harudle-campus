@@ -185,97 +185,150 @@ const tX = (x) => (x + (W * S) / 2) / S;            // 월드 → 격자
 const tY = (z) => (z + (H * S) / 2) / S;
 const floorY = (f) => (f - 11) * FH;
 
-/* ════════════════ 2. 층 데이터 (뉴스레터 20호 + 자취남 사옥 투어) ════════════════ */
-const FLOOR_INFO = { 11: "배움이 시작되는 공간", 12: "함께, 또 따로 학습의 공간", 13: "개방감과 아늑함이 만나는 공간", 14: "쉬어 가고 모이는 공간" };
+/* ════════════════ 2. 층 데이터 (우테코 11·12·13층 공간 선택 도면 + 14층 놀이터) ════════════════ */
+const FLOOR_INFO = { 11: "배움이 시작되는 공간", 12: "함께, 또 따로 학습의 공간", 13: "몰입하고 발표하는 공간", 14: "놀고 쉬어 가는 놀이터" };
+// 도면(11·12·13층 공간 선택 화면)을 56×34칸으로 옮긴 배치. 1칸 = 0.6m
 function makeFloor(f) {
   const rooms = [], furn = [], zones = [], portals = [], calls = [];
   const R = (x, y, w, h, name, o = {}) => rooms.push({ x, y, w, h, name, ...o });
   const F = (kind, x, y, w, h, o = {}) => furn.push({ kind, x, y, w, h, ...o });
-  const Z = (x, y, w, h, name, desc) => zones.push({ x, y, w, h, name, desc });
+  const Z = (x, y, w, h, name, desc, o = {}) => zones.push({ x, y, w, h, name, desc, ...o });
   const P = (kind, x, y, w, h, to, spawn, label) => portals.push({ kind, x, y, w, h, to, spawn, label });
-  // 엘리베이터 코어: 모든 층 같은 자리
-  R(22, 12, 13, 11, "", { doors: [{ s: "w", from: 4, len: 3 }, { s: "e", from: 4, len: 3 }], core: true });
-  Z(23, 13, 11, 9, "엘리베이터 홀", "엘리베이터 6대. 앞에 서서 F를 누르면 다른 층으로 가요.");
-  for (const x of [23, 27, 31]) { F("elev", x, 13, 2, 1); F("elev", x, 21, 2, 1); calls.push({ x, y: 14, w: 2, h: 1 }, { x, y: 20, w: 2, h: 1 }); }
-  F("wsign", 21, 14, 1, 1);
+  const closed = (x, y, w, h, name, tint = "#E6E5EC") => { R(x, y, w, h, name, { closed: true }); Z(x + 1, y + 1, w - 2, h - 2, name, "", { npc: false, tint }); };
+
+  /* 출입구(엘리베이터 홀): 모든 층 같은 자리. 북쪽·남쪽 가운데가 뚫려 있다 */
+  R(18, 12, 28, 10, "", { doors: [{ s: "n", from: 11, len: 5 }, { s: "s", from: 11, len: 5 }], core: true });
+  Z(19, 13, 26, 8, "엘리베이터 홀", "엘리베이터 6대. 앞에 서서 F를 누르면 다른 층으로 가요.", { npc: false, tint: "#EEF0F5" });
+  for (const x of [20, 23, 26, 36, 39, 42]) { F("elev", x, 13, 2, 1); calls.push({ x, y: 14, w: 2, h: 1 }); }
+  F("wsign", 30, 18, 3, 1);
+  F("sofa", 20, 19, 4, 2); F("sofa", 39, 19, 4, 2); F("plant", 25, 19, 2, 2); F("plant", 36, 19, 2, 2);
+
+  /* 오른쪽 기둥: 공조실 · 화장실(못 들어가는 방) */
+  closed(47, 1, 9, 12, "공조실"); F("acunit", 49, 3, 3, 2); F("acunit", 49, 7, 3, 2); F("acunit", 52, 3, 2, 6);
+  closed(47, 12, 9, 11, "화장실", "#E3EEF3"); F("door", 47, 15, 1, 2); F("door", 47, 19, 1, 2); F("wc", 49, 14, 5, 7);
+
+  const meetings = (names, desc) => {
+    [[33, 1, "e"], [33, 5, "e"], [41, 1, "w"], [41, 5, "w"]].forEach(([x, y, s], i) => {
+      R(x, y, 6, 5, names[i], { doors: [{ s, from: 2, len: 1 }], planet: true });
+      Z(x + 1, y + 1, 4, 3, `회의실 ${names[i]}`, desc, { npc: false, tint: "#F4F2FA" });
+      F("tv", x + 1, y + 1, 4, 1); F("mtable", x + 2, y + 2, 2, 1);
+    });
+  };
+
   if (f === 11) {
-    R(2, 2, 19, 19, "큰강의실", { doors: [{ s: "e", from: 12, len: 4 }] });
-    Z(3, 3, 17, 17, "큰강의실", "공통 수업과 외부 강연이 열리는 곳. 크루 전원이 한자리에 모여요.");
-    F("screen", 3, 5, 1, 7);
-    for (let r = 0; r < 5; r++) for (let c = 0; c < 3; c++) F("ltable", 6 + c * 5, 4 + r * 3, 4, 1);
-    Z(2, 21, 19, 2, "간이 작업대", "큰강의실과 작은강의실 사이 완충 공간. 소리가 부딪히지 않게 벌려 두고 짧은 작업을 하는 자리예요.");
-    F("ledge", 3, 21, 17, 1);
-    R(2, 23, 19, 10, "작은강의실", { doors: [{ s: "n", from: 7, len: 4 }] });
-    Z(3, 24, 17, 8, "작은강의실", "분반 수업과 페어 활동이 열리는 강의실이에요.");
-    for (let r = 0; r < 2; r++) for (let c = 0; c < 3; c++) F("ltable", 5 + c * 5, 26 + r * 3, 4, 1);
-    Z(22, 2, 15, 9, "코치 사무실", "칸막이 없는 오픈 데스크. 지정석 없이 그날 앉고 싶은 자리에 앉아요.");
-    F("storage", 22, 1, 14, 1);
-    for (const [x, y] of [[23, 4], [28, 4], [33, 4], [23, 8], [28, 8]]) F("desk", x, y, 4, 2);
-    Z(37, 1, 7, 4, "폰부스", "올리브빛 유리문 1인 부스. 통화나 화상 회의가 필요할 때 쏙 들어가요.");
-    for (const x of [38, 40, 42]) F("booth", x, 1, 2, 3);
-    R(45, 1, 10, 7, "목성", { doors: [{ s: "s", from: 2, len: 2 }], planet: true }); Z(46, 2, 8, 5, "회의실 목성", "원시부터 우주까지. 회의실마다 행성 이름이 붙어 있어요."); F("mtable", 47, 3, 5, 2); F("tv", 53, 3, 1, 2);
-    R(45, 8, 10, 7, "토성", { doors: [{ s: "w", from: 3, len: 2 }], planet: true }); Z(46, 9, 8, 5, "회의실 토성", "화상 카메라를 일부러 화면 아래에 달아 시선을 맞춰요."); F("mtable", 47, 10, 5, 2); F("tv", 53, 10, 1, 2);
-    R(37, 5, 7, 7, "천왕성", { doors: [{ s: "s", from: 2, len: 2 }], planet: true }); Z(38, 6, 5, 5, "회의실 천왕성", "흡음 마감으로 문을 닫으면 밖을 신경 쓰지 않아요."); F("mtable", 38, 7, 4, 2);
-    Z(36, 16, 19, 17, "코워킹 · 우물가", "바퀴 달린 테이블과 천장에서 내려오는 콘센트. 탕비실 앞 빅테이블이 소문이 퍼지는 우물가예요.");
-    for (const [x, y] of [[38, 18], [42, 18], [38, 22], [42, 22], [38, 27], [42, 27]]) F("wtable", x, y, 2, 2);
-    F("counter", 53, 17, 2, 13); F("bigtable", 47, 20, 3, 8);
-    Z(22, 24, 13, 9, "트랙룸", "일부러 조금 불편하게 만든 높은 의자. 빨리 하고 움직이라는 뜻이래요.");
-    F("woodtable", 23, 26, 10, 2); F("woodtable", 23, 29, 10, 1); F("planter", 22, 32, 13, 1);
+    R(1, 1, 14, 21, "큰 강의실", { doors: [{ s: "e", from: 5, len: 2 }, { s: "e", from: 15, len: 2 }] });
+    Z(2, 2, 12, 19, "큰 강의실", "공통 수업과 외부 강연이 열리는 곳. 크루 전원이 한자리에 모여요.");
+    F("screen", 4, 2, 7, 1); F("lectern", 12, 3, 1, 1);
+    for (const y of [6, 9, 12, 15, 18]) { F("ltable", 3, y, 4, 1); F("ltable", 8, y, 4, 1); }
+    Z(16, 1, 17, 10, "코워킹 존", "바퀴 달린 테이블과 천장에서 내려오는 콘센트. 인원에 맞춰 붙였다 떼었다 해요.", { tint: "#FFF8DC" });
+    for (const [x, y] of [[17, 3], [21, 3], [17, 7], [21, 7]]) F("wtable", x, y, 2, 2);
+    F("counter", 25, 1, 6, 1, { props: ["sink", "coffee", "micro"] }); F("purifier", 31, 1, 1, 1); F("fridge", 32, 1, 1, 1);
+    F("bigtable", 25, 6, 7, 2); F("plant", 30, 3, 2, 2);
+    Z(25, 2, 8, 7, "우물가", "탕비실 앞 빅테이블. 소문이 퍼지는 곳이라 우물가라고 불러요.", { npc: true });
+    meetings(["금성", "수성", "지구", "화성"], "원시부터 우주까지. 11층 회의실은 행성 이름이에요.");
+    R(1, 24, 16, 9, "옆 강의실", { doors: [{ s: "n", from: 13, len: 2 }] });
+    Z(2, 25, 14, 7, "옆 강의실", "분반 수업과 페어 활동이 열리는 강의실이에요.");
+    F("screen", 3, 25, 7, 1); F("lectern", 12, 25, 1, 1);
+    for (const y of [27, 30]) { F("ltable", 3, y, 4, 1); F("ltable", 8, y, 4, 1); }
+    R(17, 24, 13, 9, "캔틴", { doors: [{ s: "n", from: 9, len: 2 }] });
+    Z(18, 25, 11, 7, "캔틴", "간식과 음료를 꺼내 먹는 곳. 정수기와 커피 머신이 있어요.", { tint: "#FFF4E0" });
+    F("counter", 18, 25, 5, 1, { props: ["sink", "micro", "coffee"] }); F("purifier", 23, 25, 1, 1); F("fridge", 24, 25, 1, 1); F("vending", 28, 25, 1, 1);
+    F("table", 19, 28, 3, 2); F("table", 24, 28, 3, 2);
+    R(30, 24, 15, 9, "코치룸", { doors: [{ s: "n", from: 4, len: 2 }, { s: "n", from: 12, len: 2 }] });
+    Z(35, 25, 9, 7, "코치룸", "코치들이 일하는 오픈 데스크. 지정석 없이 그날 앉고 싶은 자리에 앉아요.");
+    F("desk", 36, 26, 4, 2); F("desk", 40, 26, 3, 2); F("desk", 36, 29, 4, 2); F("storage", 40, 31, 4, 1);
+    R(30, 29, 5, 4, "상담실", { doors: [{ s: "e", from: 1, len: 2 }] }); F("round", 31, 30, 2, 2);
+    Z(31, 30, 3, 2, "상담실", "코치와 단둘이 이야기하는 작은 방이에요.", { npc: false });
+    closed(45, 24, 5, 9, "비상계단"); F("stairsdeco", 46, 25, 3, 7);
+    closed(50, 24, 6, 9, "창고"); F("crates", 51, 25, 4, 3); F("crates", 51, 29, 3, 2);
   }
+
   if (f === 12) {
-    Z(2, 2, 17, 13, "도서관", "12층의 시그니처. 원형 서가에 기술서와 개발 문화 책이 빼곡해요.");
-    F("tower", 7, 4, 6, 6); F("shelf", 2, 2, 1, 12); F("shelf", 14, 3, 4, 1); F("shelf", 14, 6, 4, 1); F("redsteps", 3, 11, 5, 2); F("table", 13, 10, 4, 2);
-    Z(2, 17, 19, 16, "오픈 강의장", "천장을 뚫어 13층까지 열린 공간. 퍼져서 자유롭게 일하라는 뜻이에요.");
-    for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) F("ltable", 4 + c * 5, 19 + r * 4, 4, 1);
-    Z(36, 1, 19, 11, "페어존", "두 사람이 한 모니터를 나란히 보는 자리. 가장 우아한테크코스다운 공간이에요.");
-    for (const [x, y] of [[38, 3], [44, 3], [50, 3], [38, 7], [44, 7]]) F("pair", x, y, 4, 2);
-    F("poster", 50, 8, 4, 1, { label: "페어 프로그래밍 선언문" });
-    Z(36, 14, 19, 11, "스타트랙 (12층)", "13층으로 이어지는 계단식 객석. 오른쪽 계단으로 13층에 올라가요.");
-    F("screen", 37, 16, 1, 7); F("bleacher", 42, 15, 9, 9);
-    P("stairs", 52, 15, 3, 9, 13, [49, 24], "13층 계단");
-    Z(22, 24, 13, 9, "탕비실", "숨기지 않고 꺼내 둔 탕비실. 빅테이블에서 자연스럽게 이야기해요.");
-    F("counter", 23, 31, 11, 1); F("bigtable", 25, 26, 7, 2);
-    F("planter", 38, 31, 16, 1); F("plant", 36, 27, 2, 2); F("plant", 18, 15, 2, 2);
+    Z(1, 1, 5, 22, "스타트랙 계단", "13층 스타트랙으로 이어지는 계단식 좌석. 아래쪽 계단으로 올라가요.", { tint: "#F2F4E2" });
+    for (const y of [3, 7, 11, 15]) F("bench", 2, y, 3, 1);
+    P("stairs", 2, 19, 3, 3, 13, [3.5, 27.5], "13층 스타트랙");
+    R(7, 1, 24, 10, "라이브러리", { doors: [{ s: "w", from: 4, len: 2 }, { s: "s", from: 4, len: 3 }, { s: "s", from: 16, len: 3 }] });
+    Z(8, 2, 22, 8, "라이브러리", "12·13층을 잇는 복층 서재. 원형 서가에 기술서와 개발 문화 책이 빼곡해요.", { tint: "#FBF4E6" });
+    F("tower", 23, 3, 5, 5); F("shelf", 8, 2, 13, 1); F("table", 10, 5, 4, 2); F("table", 16, 5, 4, 2);
+    F("redsteps", 15, 8, 4, 2); F("beanbag", 20, 8, 1, 1); F("beanbag", 9, 8, 1, 1);
+    meetings(["보이저", "아폴로", "디스커버리", "허블"], "12층 회의실은 우주 탐사선 이름이에요.");
+    Z(7, 12, 10, 11, "코워킹 존", "칸막이 너머로 자유롭게 퍼져서 일하는 자리예요.", { tint: "#FFF8DC" });
+    F("partition", 8, 13, 1, 8);
+    for (const [x, y] of [[10, 13], [13, 13], [10, 17], [13, 17]]) F("wtable", x, y, 2, 2);
+    F("plant", 14, 20, 2, 2);
+    R(1, 24, 17, 9, "작은 강의실", { doors: [{ s: "n", from: 13, len: 2 }] });
+    Z(2, 25, 15, 7, "작은 강의실", "작은 규모 수업과 스터디가 열리는 강의실이에요.");
+    F("screen", 3, 25, 8, 1); F("lectern", 13, 25, 1, 1);
+    for (const y of [27, 30]) { F("ltable", 3, y, 4, 1); F("ltable", 9, y, 4, 1); }
+    R(18, 24, 10, 9, "캔틴", { doors: [{ s: "n", from: 4, len: 2 }] });
+    Z(19, 25, 8, 7, "캔틴", "간식과 음료를 꺼내 먹는 곳. 정수기와 커피 머신이 있어요.", { tint: "#FFF4E0" });
+    F("fridge", 19, 25, 1, 1); F("purifier", 20, 25, 1, 1); F("counter", 24, 25, 3, 1, { props: ["sink", "coffee"] });
+    F("table", 19, 28, 3, 2); F("table", 23, 28, 3, 2);
+    Z(28, 24, 6, 9, "폰부스", "올리브빛 유리문 1인 부스. 통화나 화상 회의가 필요할 때 쏙 들어가요.", { npc: false });
+    for (const [x, y] of [[29, 25], [31, 25], [29, 29], [31, 29]]) F("booth", x, y, 2, 3);
+    R(34, 24, 13, 9, "코치룸", { doors: [{ s: "n", from: 3, len: 2 }, { s: "n", from: 9, len: 2 }] });
+    Z(35, 25, 11, 7, "코치룸", "코치들이 일하는 오픈 데스크예요.");
+    for (const [x, y] of [[36, 26], [41, 26], [36, 29], [41, 29]]) F("desk", x, y, 4, 2);
+    closed(47, 22, 9, 11, "서버실", "#E2E4EE"); for (const x of [49, 51, 53]) F("rack", x, 24, 1, 7);
   }
+
   if (f === 13) {
-    for (const [n, x] of [["수성", 2], ["금성", 10], ["지구", 18], ["화성", 26]]) { R(x, 1, 8, 8, n, { doors: [{ s: "s", from: 3, len: 2 }], planet: true }); F("mtable", x + 2, 3, 4, 2); F("tv", x + 6, 3, 1, 2); }
-    Z(2, 1, 32, 8, "회의실", "창가 회의실. 치열하게 논의하다가도 바깥 풍경으로 머리를 식혀요.");
-    F("void", 4, 12, 14, 10);
-    Z(4, 12, 14, 10, "오픈 천장", "12층 오픈 강의장이 내려다보여요.");
-    Z(36, 1, 19, 12, "우물가", "가볍게 모여 수다를 나누는 곳. 약속이 없어도 마주친 크루와 안부를 물어요.");
-    F("counter", 37, 1, 17, 1);
-    R(41, 4, 13, 8, "", { ring: true, doors: [{ s: "s", from: 5, len: 3 }] }); F("round", 44, 6, 2, 2); F("round", 48, 6, 2, 2); F("round", 46, 8, 2, 2);
-    Z(36, 14, 19, 13, "스타트랙", "테코톡과 선배 기수와의 만남이 열리는 계단식 발표 공간이에요.");
-    F("screenwall", 36, 15, 1, 10); F("bleacher", 41, 15, 9, 9, { down: true });
-    P("stairs", 52, 23, 3, 4, 12, [49, 19], "12층 계단");
-    R(2, 24, 19, 9, "안드로메다같은 방", { doors: [{ s: "n", from: 14, len: 3 }] });
-    Z(3, 25, 17, 7, "안드로메다같은 방", "코치와 차분히 이야기 나누는 방. 고민과 방향을 조용히 나눠요.");
-    F("sofa", 3, 26, 7, 2); F("sofa", 3, 28, 2, 3); F("coffee", 6, 29, 3, 2); F("island", 12, 28, 6, 2); F("plant", 18, 25, 2, 2);
-    Z(22, 24, 13, 3, "정수기", "제빙기 대신 정수기. 얼음 위생을 생각한 선택이래요.");
-    F("counter", 23, 24, 11, 1);
-    Z(22, 28, 9, 5, "라운지", ""); F("round", 24, 29, 2, 2); F("round", 27, 30, 2, 2);
-    P("escal", 31, 28, 3, 5, 14, [40, 19], "14층 에스컬레이터");
+    R(1, 1, 30, 10, "라이브러리", { doors: [{ s: "s", from: 16, len: 3 }, { s: "s", from: 24, len: 3 }, { s: "e", from: 4, len: 2 }] });
+    Z(2, 2, 28, 8, "라이브러리 (위층)", "복층 서재의 위층. 난간 아래로 원형 서가와 12층이 내려다보여요.", { tint: "#FBF4E6" });
+    F("void", 21, 2, 8, 7); F("shelf", 2, 2, 17, 1); F("sofa", 3, 6, 5, 2); F("table", 11, 5, 4, 2); F("beanbag", 17, 8, 1, 1); F("beanbag", 9, 8, 1, 1);
+    R(1, 11, 12, 22, "스타트랙", { doors: [{ s: "e", from: 3, len: 2 }, { s: "e", from: 16, len: 3 }] });
+    Z(2, 12, 10, 20, "스타트랙", "테코톡과 선배 기수와의 만남이 열리는 계단식 발표 공간이에요.", { tint: "#F2F4E2" });
+    F("screenwall", 3, 12, 8, 1); F("bleacher", 4, 15, 8, 13, { axis: "y" });
+    P("stairs", 2, 29, 3, 3, 12, [3.5, 17.5], "12층 계단");
+    R(35, 1, 12, 9, "우물가", { doors: [{ s: "s", from: 6, len: 2 }] });
+    Z(36, 2, 10, 7, "우물가", "가볍게 모여 수다를 나누는 곳. 탕비실 앞 빅테이블에서 안부를 물어요.", { tint: "#FFF8DC" });
+    F("counter", 36, 2, 6, 1, { props: ["sink", "coffee", "micro"] }); F("purifier", 42, 2, 1, 1); F("fridge", 43, 2, 1, 1); F("purifier", 44, 2, 1, 1);
+    F("bigtable", 37, 5, 5, 2); F("round", 43, 5, 2, 2);
+    Z(14, 23, 20, 10, "코워킹 존", "넓게 퍼져서 일하는 자리. 테이블을 붙여 팀 작업도 해요.", { tint: "#FFF8DC" });
+    for (const [x, y] of [[15, 24], [19, 24], [15, 28], [19, 28]]) F("wtable", x, y, 2, 2);
+    F("bigtable", 24, 25, 7, 2); F("planter", 24, 31, 9, 1); F("purifier", 32, 24, 1, 1);
+    R(35, 23, 21, 5, "포커스 존", { doors: [{ s: "w", from: 1, len: 3 }, { s: "n", from: 6, len: 3 }, ...[2, 5, 8, 11, 14, 17].map((from) => ({ s: "s", from, len: 2 }))] });
+    Z(36, 24, 19, 3, "포커스 존", "혼자 깊게 몰입하는 자리. 뒤쪽 페어룸에서는 둘이 붙어 앉아 코드를 짜요.");
+    F("focusdesk", 38, 24, 3, 1); F("focusdesk", 45, 24, 3, 1); F("focusdesk", 50, 24, 4, 1);
+    [36, 39, 42, 45, 48, 51].forEach((x, i) => {
+      R(x, 27, 4, 7, `페어룸 0${i + 1}`, { doors: [{ s: "n", from: 1, len: 2 }], planet: true, small: true });
+      Z(x + 1, 28, 2, 5, `페어룸 0${i + 1}`, "두 사람이 한 모니터를 나란히 보는 방이에요.", { npc: i % 2 === 0, tint: "#F4F2FA" });
+      F("pairdesk", x + 1, 32, 2, 1);
+    });
+    R(13, 13, 5, 8, "은하수", { doors: [{ s: "n", from: 1, len: 3 }], planet: true });
+    Z(14, 14, 3, 6, "회의실 은하수", "13층의 단 하나뿐인 회의실이에요.", { npc: false, tint: "#F4F2FA" });
+    F("mtable", 15, 16, 1, 2); F("tv", 14, 19, 3, 1);
   }
+
   if (f === 14) {
-    R(2, 2, 19, 13, "유럽방", { doors: [{ s: "e", from: 7, len: 3 }] });
-    Z(3, 3, 17, 11, "유럽방", "가평 펜션 같은 파티룸. 신입 환영, 생일 파티, 마라톤 회의가 열려요.");
-    F("kitchen", 3, 3, 17, 1); F("longtable", 5, 7, 11, 2); F("plant", 17, 11, 2, 2);
-    R(2, 17, 19, 16, "아시아방", { doors: [{ s: "e", from: 4, len: 3 }] });
-    Z(3, 18, 17, 14, "아시아방", "초밥집 콘셉트의 방. 워크숍 때 아시아 음식을 여기서 먹어요.");
-    F("bar", 5, 20, 13, 1); F("stools", 5, 21, 13, 1); F("lowtable", 5, 26, 4, 3); F("lowtable", 12, 26, 4, 3);
-    Z(36, 1, 19, 12, "카페", "무료 커피와 편한 의자. 일만 하지 말고 잡담도 하라는 곳이에요.");
-    F("cafebar", 38, 2, 13, 2); for (const [x, y] of [[39, 7], [44, 7], [49, 7]]) F("round", x, y, 2, 2); F("armchair", 52, 7, 2, 2);
-    P("escal", 37, 15, 3, 9, 13, [29, 30], "13층 에스컬레이터");
-    Z(36, 14, 19, 11, "에스컬레이터", "건물 설계부터 있던 에스컬레이터. 시선이 일자로 쭉 뻗어 나가요.");
-    Z(48, 26, 7, 7, "외부 동선", "아직 쓰지 않는, 바깥으로 나가는 길이에요."); F("door", 54, 27, 1, 4);
-    F("planter", 42, 31, 10, 1);
+    R(1, 1, 14, 11, "노래방", { doors: [{ s: "e", from: 7, len: 2 }] });
+    Z(2, 2, 12, 9, "노래방", "마이크 두 개와 미러볼. 회식 2차는 여기서 해결해요.", { tint: "#F3E9FF" });
+    F("karaoke", 3, 2, 6, 1); F("sofa", 3, 7, 7, 2); F("coffee", 5, 5, 3, 1); F("mirrorball", 6, 4, 1, 1); F("speaker", 11, 2, 1, 1); F("speaker", 2, 2, 1, 1);
+    R(1, 12, 14, 11, "게임방", { doors: [{ s: "e", from: 4, len: 2 }] });
+    Z(2, 13, 12, 9, "게임방", "오락기와 콘솔 게임. 미션 끝난 날 한 판씩 붙어요.", { tint: "#E8F0FF" });
+    for (const x of [3, 5, 7, 9]) F("arcade", x, 13, 1, 1);
+    F("tv", 3, 18, 4, 1); F("beanbag", 3, 20, 1, 1); F("beanbag", 5, 20, 1, 1); F("sofa", 9, 19, 4, 2);
+    Z(16, 1, 17, 10, "트램펄린", "올라가면 저절로 통통 튀어요. 머리 식히기에 딱이에요.", { tint: "#FFF8DC" });
+    F("trampoline", 17, 2, 5, 5); F("trampoline", 23, 2, 5, 5); F("trampoline", 17, 7, 4, 3, { small: true }); F("plant", 30, 2, 2, 2);
+    R(34, 1, 13, 9, "볼풀", { doors: [{ s: "s", from: 5, len: 3 }] });
+    Z(35, 2, 11, 7, "볼풀", "알록달록 공이 가득한 볼풀. 들어가면 몸이 쏙 잠겨요.", { tint: "#FFF1F0" });
+    F("ballpit", 36, 2, 8, 5); F("slide", 44, 2, 2, 5);
+    Z(1, 24, 32, 9, "놀이 광장", "탁구, 보드게임, 포토존. 쉬는 시간마다 사람이 모여요.", { tint: "#E9F4E6" });
+    F("pingpong", 3, 26, 4, 2); F("pingpong", 9, 26, 4, 2); F("boardgame", 16, 26, 3, 2); F("boardgame", 21, 26, 3, 2);
+    F("sculpture", 27, 26, 3, 3); F("planter", 2, 32, 30, 1); F("parasol", 16, 30, 2, 2); F("parasol", 21, 30, 2, 2);
+    R(34, 24, 13, 9, "쉼터", { doors: [{ s: "n", from: 5, len: 3 }] });
+    Z(35, 25, 11, 7, "쉼터", "조용히 눕거나 기대어 쉬는 방. 빈백이 넉넉해요.", { tint: "#EEF0F8" });
+    for (const [x, y] of [[36, 27], [38, 27], [40, 27], [36, 30], [38, 30]]) F("beanbag", x, y, 1, 1);
+    F("sofa", 42, 29, 4, 2); F("plant", 44, 25, 2, 2);
+    closed(47, 23, 9, 10, "창고"); F("crates", 49, 25, 4, 3); F("crates", 49, 29, 3, 2);
   }
   return { f, rooms, furn, zones, portals, calls };
 }
 const FLOORS = {}; for (const f of [11, 12, 13, 14]) FLOORS[f] = makeFloor(f);
 
 /* 충돌 격자 · 단 높이 */
-const WALK_THROUGH = new Set(["bleacher", "redsteps", "wsign", "stools"]);
+const WALK_THROUGH = new Set(["bleacher", "redsteps", "mirrorball", "trampoline", "ballpit"]);
+const ELEV_SPAWN = [31.5, 16.5];   // 엘리베이터에서 내리는 자리(칸 한가운데)
 for (const fl of Object.values(FLOORS)) {
   const g = new Uint8Array(W * H); const set = (x, y) => { if (x >= 0 && y >= 0 && x < W && y < H) g[y * W + x] = 1; };
   for (let x = 0; x < W; x++) { set(x, 0); set(x, H - 1); } for (let y = 0; y < H; y++) { set(0, y); set(W - 1, y); }
@@ -287,16 +340,38 @@ for (const fl of Object.values(FLOORS)) {
   for (const o of fl.furn) { if (WALK_THROUGH.has(o.kind)) continue; for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) set(x, y); }
   fl.grid = g;
 }
+// 엘리베이터에서 걸어서 갈 수 있는 칸: 크루 배치와 끼임 탈출에 쓴다
+for (const fl of Object.values(FLOORS)) {
+  const reach = new Uint8Array(W * H), q = [Math.floor(ELEV_SPAWN[1]) * W + Math.floor(ELEV_SPAWN[0])]; reach[q[0]] = 1;
+  for (let i = 0; i < q.length; i++) { const x = q[i] % W, y = (q[i] / W) | 0; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy, ni = ny * W + nx; if (nx < 0 || ny < 0 || nx >= W || ny >= H || fl.grid[ni] || reach[ni]) continue; reach[ni] = 1; q.push(ni); } }
+  fl.reach = reach;
+}
 const solid = (fl, x, y) => { x = Math.floor(x); y = Math.floor(y); return x < 0 || y < 0 || x >= W || y >= H || fl.grid[y * W + x] === 1; };
 const inRect = (r, x, y) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
 const STEP = 0.13;
+const bleacherLevel = (o, i) => Math.floor((o.down ? (o.axis === "y" ? o.h : o.w) - 1 - i : i) / (o.axis === "y" ? 2 : 1));
 function heightAt(fl, x, y) {
   for (const o of fl.furn) {
     if (!inRect(o, x, y)) continue;
-    if (o.kind === "bleacher") { const col = Math.floor(x - o.x); return ((o.down ? o.w - 1 - col : col) + 1) * STEP; }
+    if (o.kind === "bleacher") return (bleacherLevel(o, Math.floor(o.axis === "y" ? y - o.y : x - o.x)) + 1) * STEP;
     if (o.kind === "redsteps") return (Math.floor(y - o.y) === 0 ? 2 : 1) * 0.1;
+    if (o.kind === "trampoline") return 0.2;
+    if (o.kind === "ballpit") return -0.22;   // 볼풀에 들어가면 몸이 반쯤 잠긴다
   }
   return 0;
+}
+// 캐릭터 몸통(반지름 R_ME)이 벽·가구와 겹치지 않는지
+const R_ME = .28;
+const fits = (fl, x, y) => !solid(fl, x - R_ME, y - R_ME) && !solid(fl, x + R_ME, y - R_ME) && !solid(fl, x - R_ME, y + R_ME) && !solid(fl, x + R_ME, y + R_ME);
+// 겹친 자리에서 가장 가까운, 걸어서 닿는 칸 한가운데
+function nearestFree(fl, x, y) {
+  if (fits(fl, x, y) && fl.reach[Math.floor(y) * W + Math.floor(x)]) return [x, y];
+  let best = null, bd = Infinity;
+  for (let rad = 0; rad < Math.max(W, H) && !best; rad++) for (let ty = Math.floor(y) - rad; ty <= Math.floor(y) + rad; ty++) for (let tx = Math.floor(x) - rad; tx <= Math.floor(x) + rad; tx++) {
+    if (tx < 0 || ty < 0 || tx >= W || ty >= H || !fl.reach[ty * W + tx]) continue;
+    const d = Math.hypot(tx + .5 - x, ty + .5 - y); if (d < bd) { bd = d; best = [tx + .5, ty + .5]; }
+  }
+  return best || [...ELEV_SPAWN];
 }
 
 /* ════════════════ 3. 재료 (덕후감 3D 서고 방식: 툰 3단 + 먹선 + 종이결) ════════════════ */
@@ -355,13 +430,12 @@ function floorTexture(fl) {
   const P = 32;
   return canvasTex(W * P, H * P, (g) => {
     g.fillStyle = "#FBFAFD"; g.fillRect(0, 0, W * P, H * P);
-    const tint = { "우물가": WEAK, "코워킹 · 우물가": WEAK, "도서관": "#FBF4E6", "안드로메다같은 방": "#F8EEE2", "카페": "#F4EADF", "유럽방": "#F3ECE2", "아시아방": "#F7EDE2", "페어존": "#EEF6F1", "스타트랙": "#F2F4E2", "스타트랙 (12층)": "#F2F4E2", "트랙룸": "#F8F1E6", "엘리베이터 홀": "#F1EFF4" };
-    for (const z of fl.zones) if (tint[z.name]) { g.fillStyle = tint[z.name]; g.fillRect(z.x * P, z.y * P, z.w * P, z.h * P); }
+    for (const z of fl.zones) if (z.tint) { g.fillStyle = z.tint; g.fillRect(z.x * P, z.y * P, z.w * P, z.h * P); }
+    for (const r of fl.rooms) if (r.closed) { g.fillStyle = "#E6E5EC"; g.fillRect(r.x * P, r.y * P, r.w * P, r.h * P); }
     g.fillStyle = "#E3E0EA"; for (let y = 1; y < H; y++) for (let x = 1; x < W; x++) g.fillRect(x * P - 1.5, y * P - 1.5, 3, 3);
     for (const k of fl.calls) { g.fillStyle = "rgba(255,212,59,.45)"; g.fillRect(k.x * P + 2, k.y * P + 2, k.w * P - 4, k.h * P - 4); }
-    for (const p of fl.portals) { g.fillStyle = p.kind === "escal" ? "#DCEFE3" : "#FFF3B0"; g.fillRect(p.x * P, p.y * P, p.w * P, p.h * P); }
-    g.font = `700 40px ${HAND}`; g.fillStyle = "rgba(14,30,70,.2)"; g.textBaseline = "top";
-    for (const z of fl.zones) if (z.desc && !["엘리베이터 홀", "오픈 천장"].includes(z.name)) g.fillText(z.name, z.x * P + 10, z.y * P + z.h * P - 50);
+    for (const p of fl.portals) { g.fillStyle = "#FFF3B0"; g.fillRect(p.x * P, p.y * P, p.w * P, p.h * P); }
+    // 방 이름은 바닥에 쓰지 않는다 (벽 위 이름표로만)
   });
 }
 function wallSegs(r) {
@@ -392,7 +466,7 @@ function buildFloor(fl) {
   for (const [w, d, x, z] of [[L, .04, 0, wz(0.5)], [L, .04, 0, wz(H - 0.5)], [.04, D, wx(W - 0.5), 0]]) box(G, w, 0.9, d, C.glass, x, 0.32, z, { mat: toon(C.glass, { opacity: .28 }), line: 0.01, soft: true, cast: false });
   // 방 벽(행성 회의실은 유리)
   for (const r of fl.rooms) {
-    const col = r.ring ? C.grayD : C.white, h = r.ring ? 0.45 : WALL;
+    const col = r.ring ? C.grayD : r.closed ? 0xD5D3DD : C.white, h = r.ring ? 0.45 : WALL;
     for (const [s, a, b] of wallSegs(r)) {
       const len = (b - a) * S; let x, z, w, d;
       if (s === "n" || s === "s") { x = wx(r.x + (a + b) / 2); z = wz((s === "n" ? r.y : r.y + r.h - 1) + 0.5); w = len; d = 0.1; }
@@ -405,58 +479,149 @@ function buildFloor(fl) {
   for (const p of fl.portals) buildPortal(G, p, fl);
   return G;
 }
+const spinners = [];
 const BOOKS = ["#0E1E46", "#2F8A62", "#F15B5B", "#111118", "#F5C85C", "#7DB3F0"];
+const glassMat = () => toon(C.glass, { opacity: .3 });
+// 의자: 방향(rot)에 맞춰 앉는 면 + 등받이
+const chair = (G, x, z, rot = 0, color = C.white) => {
+  const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = rot; G.add(g);
+  box(g, .3, .24, .3, color, 0, 0, 0, { line: .012 }); box(g, .3, .26, .06, color, 0, .24, -.13, { line: .012 }); return g;
+};
+const monitor = (G, x, y, z, rot = 0, w = .42) => {
+  const g = new THREE.Group(); g.position.set(x, y, z); g.rotation.y = rot; G.add(g);
+  box(g, w, .26, .04, C.dark, 0, .06, 0, { line: .01 }); board(g, w - .06, .2, screenTex, 0, .19, .025, 0); box(g, .05, .06, .05, C.dark, 0, 0, 0, { line: 0 }); return g;
+};
+const screenTex = canvasTex(128, 64, (g) => { g.fillStyle = "#1C2B55"; g.fillRect(0, 0, 128, 64); const r = rng(9); for (let i = 0; i < 7; i++) { g.fillStyle = ["#FFD43B", "#7FCFAE", "#F7A6A0", "#7DB3F0", "#ffffff"][i % 5]; g.fillRect(10 + (i % 2) * 8, 8 + i * 7, 30 + r() * 70, 3); } });
+const slideTex = canvasTex(512, 256, (g) => { g.fillStyle = "#FFFFFF"; g.fillRect(0, 0, 512, 256); g.fillStyle = "#0E1E46"; g.fillRect(0, 0, 512, 54); g.fillStyle = "#FFD43B"; g.font = `700 34px ${HAND}`; g.textBaseline = "middle"; g.fillText("우아한테크코스", 20, 28); g.fillStyle = "#0E1E46"; g.font = `700 30px ${HAND}`; for (const [i, t] of ["오늘의 미션: 페어로 함께 풀기", "· 테스트 먼저, 작게 커밋", "· 질문은 언제든 환영"].entries()) g.fillText(t, 26, 100 + i * 46); });
+const tekoTex = canvasTex(512, 256, (g) => { g.fillStyle = "#0E1E46"; g.fillRect(0, 0, 512, 256); g.fillStyle = "#FFD43B"; g.font = `700 76px ${HAND}`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("테코톡", 256, 108); g.fillStyle = "#fff"; g.font = `700 30px ${HAND}`; g.fillText("오늘 발표: 나의 첫 리팩터링", 256, 190); });
+const karaokeTex = canvasTex(512, 256, (g) => { const gr = g.createLinearGradient(0, 0, 512, 256); gr.addColorStop(0, "#3B2A7A"); gr.addColorStop(1, "#C2477F"); g.fillStyle = gr; g.fillRect(0, 0, 512, 256); g.textAlign = "center"; g.textBaseline = "middle"; g.font = `700 40px ${HAND}`; g.fillStyle = "#FFD43B"; g.fillText("♪ 하루 한 컷 ♪", 256, 96); g.fillStyle = "#fff"; g.font = `700 30px ${HAND}`; g.fillText("반주 시작 · 마이크 두 개", 256, 170); });
+const arcadeTex = (hue) => canvasTex(128, 96, (g) => { g.fillStyle = "#111118"; g.fillRect(0, 0, 128, 96); g.fillStyle = hue; for (let i = 0; i < 6; i++) g.fillRect(14 + i * 18, 20 + (i % 3) * 14, 10, 10); g.fillStyle = "#FFD43B"; g.fillRect(56, 70, 16, 10); });
+const totemTex = (f) => canvasTex(512, 256, (g) => { g.fillStyle = "#0E1E46"; g.fillRect(0, 0, 512, 256); g.strokeStyle = "#fff"; g.lineWidth = 6; g.beginPath(); g.arc(92, 112, 40, 0, 7); g.stroke(); g.beginPath(); g.ellipse(92, 118, 72, 18, -.25, 0, 7); g.stroke(); g.fillStyle = "#fff"; g.font = `700 56px ${HAND}`; g.textBaseline = "middle"; g.fillText("우아한테크코스", 178, 96); g.fillStyle = "#FFD43B"; g.font = `700 44px ${HAND}`; g.fillText(`${f}F · ${FLOOR_INFO[f]}`, 178, 170); });
+const BALLS = [0xF15B5B, 0xFFD43B, 0x7DB3F0, 0x7FCFAE, 0xF7A6A0, 0xFFFFFF];
 function buildFurn(G, o, fl) {
-  const x = wx(o.x + o.w / 2), z = wz(o.y + o.h / 2), w = o.w * S, d = o.h * S;
-  const chairs = (row, off) => { for (let i = 0; i < o.w; i++) cyl(G, .1, .1, .22, C.white, wx(o.x + i + .5), 0, wz(row) + off, { line: .015 }); };
+  const x = wx(o.x + o.w / 2), z = wz(o.y + o.h / 2), w = o.w * S, d = o.h * S, horiz = o.w >= o.h;
+  const chairs = (row, off) => { for (let i = 0; i < o.w; i++) chair(G, wx(o.x + i + .5), wz(row) + off, Math.PI); };
   switch (o.kind) {
-    case "elev": box(G, w - .1, 1.5, d * .5, C.gray, x, 0, z); box(G, .03, 1.3, d * .52, C.grayD, x, 0, z, { line: 0 }); break;
-    case "wsign": { const t = canvasTex(256, 512, (g) => { g.fillStyle = "#0E1E46"; g.fillRect(0, 0, 256, 512); g.strokeStyle = "#fff"; g.lineWidth = 6; g.beginPath(); g.arc(128, 150, 50, 0, 7); g.stroke(); g.beginPath(); g.ellipse(128, 156, 92, 24, -.25, 0, 7); g.stroke(); g.fillStyle = "#fff"; g.font = `700 64px ${HAND}`; g.textAlign = "center"; g.fillText("우아한", 128, 330); g.fillText("테크코스", 128, 400); g.font = `700 48px ${HAND}`; g.fillStyle = "#FFD43B"; g.fillText(`${fl.f}F`, 128, 470); });
-      board(G, .55, 1.1, t, wx(o.x + .5), .7, wz(o.y + .5), Math.PI / 2); break; }
-    case "screen": case "tv": box(G, .08, .55, d * .9, C.dark, x, .25, z); break;
-    case "screenwall": box(G, .14, 1.6, d, C.dark, x, 0, z); board(G, 1.4, .35, signTex("테코톡", { bg: "#2E2C38", fg: "#fff" }), x + .09, 1.2, z, Math.PI / 2); break;
-    case "ltable": box(G, w - .12, .44, d * .55, C.white, x, 0, z); chairs(o.y + 1, .12); break;
-    case "ledge": box(G, w, .5, d * .35, C.wood, x, 0, z); break;
-    case "storage": box(G, w, 1.05, d * .7, C.gray, x, 0, z); break;
-    case "desk": box(G, w - .12, .44, d - .2, C.white, x, 0, z); for (let i = 0; i < o.w; i += 2) for (const dz of [-.12, .12]) box(G, .4, .22, .04, C.dark, wx(o.x + i + 1), .44, z + dz, { line: .01 }); break;
-    case "booth": box(G, w - .08, 1.25, d - .1, 0xB0B256, x, 0, z, { mat: toon(0xB0B256, { opacity: .45 }), line: .015, cast: false }); box(G, w - .08, .06, d - .1, C.white, x, 1.25, z); break;
-    case "mtable": box(G, w - .1, .44, d - .2, C.white, x, 0, z); break;
-    case "wtable": box(G, w - .3, .42, d - .3, C.white, x, 0, z); for (const [a, b] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) ball(G, .04, C.dark, x + a * (w / 2 - .2), .04, z + b * (d / 2 - .2), { line: 0 }); break;
-    case "counter": box(G, w - .05, .55, d - .05, C.gray, x, 0, z); cyl(G, .1, .1, .02, 0xEDEBF0, x, .55, z, { line: .01 }); break;
-    case "bigtable": case "table": box(G, w - .12, .44, d - .12, C.wood, x, 0, z); break;
-    case "woodtable": box(G, w - .1, .6, d * .7, C.wood, x, 0, z); for (let i = 0; i < o.w; i += 2) cyl(G, .1, .08, .42, C.woodD, wx(o.x + i + 1), 0, wz(o.y) - .15, { line: .012 }); break;
-    case "longtable": box(G, w - .1, .44, d * .7, C.wood, x, 0, z); for (let i = 0; i < o.w; i += 2) for (const s of [-1, 1]) box(G, .26, .26, .26, C.white, wx(o.x + i + 1), 0, z + s * (d / 2 + .1), { line: .012 }); break;
+    case "elev": { // 문틀 + 두 짝 문 + 층 표시등
+      const zf = wz(o.y + 1) - .06;
+      box(G, w - .05, 1.5, .1, C.grayD, x, 0, zf - .05);
+      for (const s of [-1, 1]) box(G, w / 2 - .12, 1.3, .04, 0xD8DCE6, x + s * (w / 4 - .03), 0, zf + .02, { line: .01 });
+      board(G, .5, .16, signTex(`${fl.f}F ▲▼`, { bg: "#111118", fg: "#FFD43B", size: 70 }), x, 1.4, zf + .05);
+      break; }
+    case "wsign": box(G, w * .95, .9, .16, 0x0E1E46, x, 0, z); board(G, w * .9, w * .45, totemTex(fl.f), x, .5, z + .09); board(G, w * .9, w * .45, totemTex(fl.f), x, .5, z - .09, Math.PI); break;
+    case "screen": case "tv": {
+      const big = o.kind === "screen";
+      if (horiz) { box(G, w * .9, big ? .62 : .5, .08, C.dark, x, big ? .3 : .25, wz(o.y) + .15); board(G, w * .9 - .08, big ? .54 : .42, big ? slideTex : screenTex, x, (big ? .3 : .25) + (big ? .31 : .25), wz(o.y) + .2); }
+      else { box(G, .08, .55, d * .9, C.dark, x, .25, z); board(G, d * .9 - .08, .47, screenTex, x + .05, .52, z, Math.PI / 2); }
+      if (!big) box(G, .1, .25, .1, C.dark, x, 0, horiz ? wz(o.y) + .15 : z, { line: 0 });
+      break; }
+    case "screenwall": box(G, w, 1.6, .14, C.dark, x, 0, wz(o.y) + .1); board(G, w - .2, 1.0, tekoTex, x, .95, wz(o.y) + .18); break;
+    case "lectern": box(G, w * .7, .62, d * .6, C.woodD, x, 0, z); box(G, w * .8, .04, d * .7, C.wood, x, .62, z); break;
+    case "ltable": box(G, w - .12, .44, d * .55, C.white, x, 0, z); chairs(o.y + 1, .12);
+      for (let i = 0; i < o.w; i += 2) box(G, .3, .02, .2, 0xE7E2D6, wx(o.x + i + .5), .44, z, { line: .006 }); break;
+    case "storage": box(G, w, 1.05, d * .7, C.gray, x, 0, z); for (let i = 1; i < o.w; i += 2) box(G, .02, .9, .02, C.grayD, wx(o.x + i), .07, z + d * .36, { line: 0 }); break;
+    case "desk": box(G, w - .12, .44, d - .2, C.white, x, 0, z);
+      for (let i = 0; i < o.w; i += 2) for (const s of [-1, 1]) { monitor(G, wx(o.x + i + 1), .44, z + s * .1, s < 0 ? 0 : Math.PI); chair(G, wx(o.x + i + 1), z + s * (d / 2 + .1), s < 0 ? 0 : Math.PI); } break;
+    case "booth": box(G, w - .08, 1.25, d - .1, 0xB0B256, x, 0, z, { mat: toon(0xB0B256, { opacity: .45 }), line: .015, cast: false }); box(G, w - .08, .06, d - .1, C.white, x, 1.25, z); box(G, w * .5, .4, d * .3, C.wood, x, 0, z - d * .2, { line: .01 }); chair(G, x, z + d * .1, Math.PI, 0x6E7A3A); break;
+    case "mtable": box(G, w - .1, .44, d - .2, C.white, x, 0, z);
+      if (horiz) for (let i = 0; i < o.w; i++) { chair(G, wx(o.x + i + .5), wz(o.y) - .12, 0); chair(G, wx(o.x + i + .5), wz(o.y + o.h) + .12, Math.PI); }
+      else for (let i = 0; i < o.h; i++) { chair(G, wx(o.x) - .12, wz(o.y + i + .5), Math.PI / 2); chair(G, wx(o.x + o.w) + .12, wz(o.y + i + .5), -Math.PI / 2); }
+      break;
+    case "wtable": box(G, w - .3, .42, d - .3, C.white, x, 0, z); for (const [a, b] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) ball(G, .04, C.dark, x + a * (w / 2 - .2), .04, z + b * (d / 2 - .2), { line: 0 });
+      chair(G, x - w / 2 + .05, z, Math.PI / 2); chair(G, x + w / 2 - .05, z, -Math.PI / 2); monitor(G, x - .1, .42, z, Math.PI / 2, .3); cyl(G, .015, .015, 1.6, C.grayD, x, .42, z, { line: 0, cast: false }); break;
+    case "counter": { // 탕비 카운터: 위에 개수대 · 커피 머신 · 전자레인지가 실제로 놓인다
+      box(G, w - .05, .55, d - .05, C.gray, x, 0, z); box(G, w - .05, .03, d - .02, 0xF4F3F7, x, .55, z, { line: .008 });
+      const props = o.props || ["sink"]; const n = props.length;
+      props.forEach((p, i) => {
+        const along = (i + .5) / n, px = horiz ? wx(o.x) + along * w : x, pz = horiz ? z : wz(o.y) + along * d;
+        if (p === "sink") { box(G, .42, .03, .3, 0xBFC6D2, px, .58, pz, { line: .008 }); cyl(G, .02, .02, .22, 0xA5ADBB, px, .58, pz - .12, { line: 0 }); box(G, .03, .03, .12, 0xA5ADBB, px, .78, pz - .07, { line: 0 }); }
+        if (p === "coffee") { box(G, .26, .36, .24, C.dark, px, .58, pz, { line: .01 }); box(G, .2, .06, .02, 0xFFD43B, px, .82, pz + .125, { line: 0 }); cyl(G, .045, .04, .08, C.white, px, .58, pz + .05, { line: .006 }); }
+        if (p === "micro") { box(G, .4, .24, .3, C.white, px, .58, pz, { line: .01 }); box(G, .24, .16, .01, C.dark, px - .05, .62, pz + .155, { line: 0 }); }
+      });
+      // 컵 몇 개
+      for (let i = 0; i < 3; i++) cyl(G, .03, .025, .07, [0xF7A6A0, 0xFFD43B, 0x7DB3F0][i], (horiz ? wx(o.x) + .2 + i * .1 : x - .1 + i * .1), .58, horiz ? z + .17 : wz(o.y) + .2, { line: .005 });
+      break; }
+    case "purifier": { // 정수기: 흰 몸통 + 물통 + 출수구 + 종이컵
+      box(G, .38, .95, .34, C.white, x, 0, z); box(G, .3, .1, .2, 0xE7EAF0, x, .45, z + .1, { line: .008 });
+      cyl(G, .14, .14, .3, 0x9FD3F5, x, .95, z, { mat: toon(0x9FD3F5, { opacity: .7 }), line: .01, cast: false }); cyl(G, .05, .05, .06, 0x5AA6D6, x, 1.25, z, { line: 0 });
+      for (const [s, c] of [[-1, 0x7DB3F0], [1, 0xF15B5B]]) box(G, .05, .05, .04, c, x + s * .07, .66, z + .18, { line: 0 });
+      cyl(G, .04, .03, .2, 0xF4EFE6, x + .23, .55, z + .05, { line: .006 }); break; }
+    case "fridge": box(G, .5, 1.5, .5, 0xE9ECF2, x, 0, z); box(G, .48, .01, .02, C.grayD, x, 1.0, z + .26, { line: 0 }); box(G, .03, .3, .03, C.grayD, x + .18, 1.12, z + .27, { line: 0 }); box(G, .03, .45, .03, C.grayD, x + .18, .4, z + .27, { line: 0 }); break;
+    case "vending": box(G, .54, 1.55, .5, 0xF15B5B, x, 0, z); box(G, .38, .9, .02, C.glass, x - .04, .5, z + .26, { mat: glassMat(), line: .005, cast: false });
+      for (let r2 = 0; r2 < 3; r2++) for (let c = 0; c < 3; c++) cyl(G, .035, .035, .14, [0xFFD43B, 0x7FCFAE, 0x7DB3F0][c], x - .16 + c * .12, .55 + r2 * .3, z + .18, { line: .005 }); break;
+    case "bigtable": case "table": box(G, w - .12, .44, d - .12, C.wood, x, 0, z);
+      if (horiz) for (let i = 0; i < o.w; i += (o.kind === "bigtable" ? 1 : 2)) for (const s of [-1, 1]) chair(G, wx(o.x + i + (o.kind === "bigtable" ? .5 : 1)), z + s * (d / 2 + .08), s < 0 ? 0 : Math.PI, o.kind === "bigtable" ? 0xFFD43B : C.white);
+      for (let i = 0; i < Math.max(1, o.w >> 1); i++) cyl(G, .04, .035, .09, i % 2 ? 0x7DB3F0 : C.white, wx(o.x + 1 + i * 2) - .1, .44, z + .05, { line: .006 });
+      break;
     case "planter": box(G, w, .3, d * .8, C.brick, x, 0, z); for (let i = 0; i < o.w; i++) ball(G, .18 + (i % 3) * .03, C.leaf, wx(o.x + i + .5), .4, z, { line: .012 }); break;
     case "plant": cyl(G, .2, .16, .3, C.white, x, 0, z); ball(G, .38, C.leaf, x, .62, z); ball(G, .24, 0x6FBF88, x + .15, .9, z - .1); break;
     case "tower": { const r = w / 2 - .1; for (let k = 0; k < 4; k++) cyl(G, r, r, .05, C.gray, x, k * .4, z, { seg: 28 });
       const rr = rng(o.x * 13);
       for (let k = 0; k < 3; k++) for (let i = 0; i < 26; i++) { const a = i / 26 * Math.PI * 2; const bh = .22 + rr() * .1; const b = new THREE.Mesh(new THREE.BoxGeometry(.06, bh, .16), toon(new THREE.Color(BOOKS[(i + k) % BOOKS.length]).getHex())); b.position.set(x + Math.cos(a) * (r - .1), k * .4 + .05 + bh / 2, z + Math.sin(a) * (r - .1)); b.rotation.y = -a; b.castShadow = true; G.add(b); }
       cyl(G, .12, .12, 1.25, C.grayD, x, 0, z); break; }
-    case "shelf": { box(G, w - .06, 1.0, d - .06, 0xF4EFE6, x, 0, z); const rr = rng(o.x * 7 + o.y); const horiz = o.w >= o.h; const n = Math.max(o.w, o.h) * 4;
+    case "shelf": { box(G, w - .06, 1.0, d - .06, 0xF4EFE6, x, 0, z); const rr = rng(o.x * 7 + o.y); const n = Math.max(o.w, o.h) * 4;
       for (let k = 0; k < 2; k++) for (let i = 0; i < n; i++) { const bh = .22 + rr() * .08; const along = (i + .5) / n;
         const geo = horiz ? new THREE.BoxGeometry(w / n * .8, bh, .05) : new THREE.BoxGeometry(.05, bh, d / n * .8);
         const b = new THREE.Mesh(geo, toon(new THREE.Color(BOOKS[Math.floor(rr() * BOOKS.length)]).getHex()));
         b.position.set(horiz ? wx(o.x) + along * w : x + w / 2 + .01, .15 + k * .45 + bh / 2, horiz ? z + d / 2 + .01 : wz(o.y) + along * d); G.add(b); }
       break; }
     case "redsteps": box(G, w, .1, d, C.red, x, 0, z, { line: .015 }); box(G, w, .1, d / 2, C.red, x, .1, wz(o.y + .5), { line: .015 }); break;
-    case "lowtable": box(G, w - .12, .22, d - .12, C.wood, x, 0, z); break;
-    case "coffee": box(G, w - .12, .22, d - .12, C.dark, x, 0, z); break;
-    case "pair": box(G, w - .1, .44, d - .25, C.wood, x, 0, z); box(G, .02, .45, d - .25, C.glass, x, .44, z, { mat: toon(C.glass, { opacity: .5 }), line: .01, soft: true, cast: false });
-      for (const s of [-1, 1]) { box(G, .36, .24, .04, C.dark, x + s * w / 4, .44, z - .05, { line: .01 }); cyl(G, .1, .1, .26, C.white, x + s * w / 4, 0, z + d / 2 + .05, { line: .012 }); } break;
-    case "poster": board(G, w * .9, .5, signTex(o.label, { size: 44 }), x, .9, wz(o.y + o.h) - .02, 0); box(G, .04, .65, .04, C.dark, x - w * .4, 0, wz(o.y + o.h)); box(G, .04, .65, .04, C.dark, x + w * .4, 0, wz(o.y + o.h)); break;
-    case "bleacher": for (let i = 0; i < o.w; i++) { const k = o.down ? o.w - 1 - i : i; box(G, S, (k + 1) * STEP, d, k % 2 ? C.olive : 0xC9D08A, wx(o.x + i + .5), 0, z, { line: .012, cast: false }); } break;
-    case "void": { const rail = (w2, d2, x2, z2) => box(G, w2, .5, d2, C.glass, x2, 0, z2, { mat: toon(C.glass, { opacity: .3 }), line: .012, cast: false });
+    case "coffee": box(G, w - .12, .22, d - .12, C.dark, x, 0, z); cyl(G, .05, .04, .08, C.white, x - .2, .22, z, { line: .006 }); break;
+    case "bleacher": { // 두 칸마다 한 단씩 올라가는 객석 (axis y: 앞쪽 화면을 바라본다)
+      const n = o.axis === "y" ? o.h : o.w;
+      for (let i = 0; i < n; i++) { const k = bleacherLevel(o, i); const hh = (k + 1) * STEP;
+        if (o.axis === "y") box(G, w, hh, S, k % 2 ? C.olive : 0xC9D08A, x, 0, wz(o.y + i + .5), { line: .012, cast: false });
+        else box(G, S, hh, d, k % 2 ? C.olive : 0xC9D08A, wx(o.x + i + .5), 0, z, { line: .012, cast: false }); }
+      if (o.axis === "y") for (let i = 1; i < n; i += 2) { const k = bleacherLevel(o, i); for (const c of [1, 4, 6]) if (c < o.w) box(G, .28, .07, .28, [0xFFD43B, 0xF7A6A0, 0x7DB3F0][c % 3], wx(o.x + c + .5), (k + 1) * STEP, wz(o.y + i + .5), { line: .008 }); }
+      break; }
+    case "void": { const rail = (w2, d2, x2, z2) => box(G, w2, .5, d2, C.glass, x2, 0, z2, { mat: glassMat(), line: .012, cast: false });
       rail(w, .04, x, wz(o.y)); rail(w, .04, x, wz(o.y + o.h)); rail(.04, d, wx(o.x), z); rail(.04, d, wx(o.x + o.w), z);
       box(G, w, .04, .06, C.dark, x, .5, wz(o.y), { line: 0 }); box(G, w, .04, .06, C.dark, x, .5, wz(o.y + o.h), { line: 0 }); box(G, .06, .04, d, C.dark, wx(o.x), .5, z, { line: 0 }); box(G, .06, .04, d, C.dark, wx(o.x + o.w), .5, z, { line: 0 }); break; }
-    case "sofa": box(G, w - .1, .22, d - .1, C.sofa, x, 0, z); if (o.w > o.h) box(G, w - .1, .25, .14, C.sofa, x, .22, wz(o.y) + .1); else box(G, .14, .25, d - .1, C.sofa, wx(o.x) + .1, .22, z); break;
-    case "island": box(G, w - .1, .55, d - .2, 0xE8DCCB, x, 0, z); for (let i = 0; i < o.w; i += 2) cyl(G, .09, .09, .38, 0xBFD7E8, wx(o.x + i + 1), 0, wz(o.y + o.h) + .15, { line: .012 }); break;
-    case "round": cyl(G, w / 2 - .12, w / 2 - .12, .04, C.white, x, .4, z); cyl(G, .04, .04, .4, C.dark, x, 0, z, { line: 0 }); break;
-    case "kitchen": box(G, w, .55, d - .05, C.mint, x, 0, z); box(G, w, .3, d * .5, C.mint, x, 1.0, wz(o.y) + .1); break;
-    case "bar": box(G, w, .6, d * .7, C.woodD, x, 0, z); board(G, 1.2, .3, signTex("초밥", { bg: "#C99E6B", fg: "#fff" }), x, .35, z + d * .36, 0); break;
-    case "stools": for (let i = 0; i < o.w; i++) cyl(G, .1, .1, .35, C.white, wx(o.x + i + .5), 0, z, { line: .012 }); break;
-    case "cafebar": box(G, w - .1, .6, d - .2, C.coffee, x, 0, z); board(G, 1.4, .35, signTex("CAFE", { bg: "#8C6A4F", fg: "#fff" }), x, .32, z + d / 2 - .08, 0); break;
-    case "armchair": box(G, w - .2, .25, d - .2, C.sofa, x, 0, z); box(G, w - .2, .25, .14, C.sofa, x, .25, wz(o.y) + .17); break;
-    case "door": box(G, .1, 1.3, d - .1, 0xE7E6EC, x, 0, z); break;
+    case "sofa": box(G, w - .1, .22, d - .1, C.sofa, x, 0, z); if (horiz) box(G, w - .1, .25, .14, C.sofa, x, .22, wz(o.y) + .1); else box(G, .14, .25, d - .1, C.sofa, wx(o.x) + .1, .22, z);
+      for (let i = 0; i < Math.max(o.w, o.h) - 1; i += 2) ball(G, .1, [0xFFD43B, 0xF7A6A0][i / 2 % 2], horiz ? wx(o.x + i + 1) : wx(o.x) + .3, .36, horiz ? wz(o.y) + .3 : wz(o.y + i + 1), { line: .008 }); break;
+    case "round": cyl(G, w / 2 - .12, w / 2 - .12, .04, C.white, x, .4, z); cyl(G, .04, .04, .4, C.dark, x, 0, z, { line: 0 });
+      for (let k = 0; k < 3; k++) { const a = k / 3 * Math.PI * 2 + .3; chair(G, x + Math.sin(a) * (w / 2 + .05), z + Math.cos(a) * (w / 2 + .05), a + Math.PI); } break;
+    case "door": box(G, .1, 1.3, d - .1, 0xE7E6EC, x, 0, z); board(G, .3, .3, signTex(o.y < 17 ? "남" : "여", { size: 90, w: 128, h: 128 }), x - .07, 1.05, z, -Math.PI / 2); break;
+    case "acunit": box(G, w - .1, .9, d - .1, 0xDADCE3, x, 0, z); for (let i = 0; i < Math.max(1, Math.floor(o.w / 2)); i++) cyl(G, .2, .2, .03, C.grayD, wx(o.x + 1 + i * 2), .9, z, { line: .008 }); box(G, .05, .5, .05, C.grayD, x + w / 2 - .2, .9, z, { line: 0 }); break;
+    case "wc": { // 화장실 칸막이와 세면대
+      for (let i = 0; i < 3; i++) { const sx = wx(o.x + 1 + i * 1.6); box(G, .05, 1.0, d * .45, 0xBFD9F0, sx + .4, 0, wz(o.y) + d * .22, { line: .008 }); cyl(G, .14, .12, .3, C.white, sx, 0, wz(o.y) + .3, { line: .008 }); }
+      box(G, w * .7, .55, .4, C.white, x, 0, wz(o.y + o.h) - .3); for (let i = 0; i < 3; i++) box(G, .3, .04, .25, 0xBFC6D2, x - .7 + i * .7, .55, wz(o.y + o.h) - .3, { line: .006 }); break; }
+    case "rack": box(G, w - .1, 1.6, d - .1, C.dark, x, 0, z); { const rr = rng(o.x * 31); for (let i = 0; i < o.h * 3; i++) box(G, .02, .02, .02, rr() > .4 ? 0x7FCFAE : 0xFFD43B, x + w / 2 - .04, .2 + (i % 6) * .22, wz(o.y) + .3 + Math.floor(i / 6) * .5, { line: 0, cast: false }); } break;
+    case "crates": { const rr = rng(o.x * 17 + o.y); for (let i = 0; i < o.w; i++) for (let j = 0; j < o.h; j++) { const hh = .3 + rr() * .3; box(G, .5, hh, .5, 0xD8B48A, wx(o.x + i + .5), 0, wz(o.y + j + .5), { line: .01 }); if (rr() > .5) box(G, .4, .25, .4, 0xE6C9A3, wx(o.x + i + .5), hh, wz(o.y + j + .5), { line: .01 }); } break; }
+    case "stairsdeco": for (let i = 0; i < o.h; i++) box(G, w - .1, (i % 4 + 1) * .12, S, 0xDCDAE3, x, 0, wz(o.y + i + .5), { line: .01, cast: false }); break;
+    case "bench": box(G, w - .1, .3, d * .6, C.wood, x, 0, z); for (const s of [-1, 1]) box(G, .06, .3, d * .5, C.woodD, x + s * (w / 2 - .2), 0, z, { line: 0 }); ball(G, .12, 0xFFD43B, x - .3, .4, z, { line: .008 }); break;
+    case "beanbag": { const c = [0xFFD43B, 0xF7A6A0, 0x7DB3F0, 0x7FCFAE][(o.x + o.y) % 4]; const s2 = solidMesh(new THREE.SphereGeometry(.27, 14, 10), c, { line: .015 }); s2.scale.set(1, .6, 1); s2.position.set(x, .16, z); G.add(s2); break; }
+    case "partition": box(G, w * .5, 1.2, d - .1, 0x7A9A7E, x, 0, z); break;
+    case "focusdesk": box(G, w - .08, .44, d - .2, C.white, x, 0, wz(o.y) + d / 2 - .05);
+      for (let i = 0; i < o.w; i++) { const px = wx(o.x + i + .5); monitor(G, px, .44, wz(o.y) + .15, 0, .36); chair(G, px, wz(o.y + 1) + .1, Math.PI); if (i) box(G, .03, .3, d - .2, 0x7A9A7E, wx(o.x + i), .44, wz(o.y) + d / 2 - .05, { line: .005 }); } break;
+    case "pairdesk": // 안쪽 벽에 붙은 책상 하나, 모니터 하나, 의자 둘
+      box(G, w - .1, .44, d - .2, C.wood, x, 0, z); monitor(G, x, .44, z + .08, Math.PI, .55); box(G, .3, .02, .1, C.white, x - .18, .44, z - .1, { line: .005 }); box(G, .3, .02, .1, C.white, x + .18, .44, z - .1, { line: .005 });
+      chair(G, x - .25, z - d / 2 - .1, 0); chair(G, x + .25, z - d / 2 - .1, 0); break;
+    case "karaoke": box(G, w * .9, .9, .1, C.dark, x, .1, wz(o.y) + .15); board(G, w * .9 - .1, .8, karaokeTex, x, .55, wz(o.y) + .21); box(G, .7, .35, .4, C.dark, x, 0, wz(o.y) + .5);
+      for (const s of [-1, 1]) { cyl(G, .03, .03, .2, 0x2E2C38, x + s * .2, .35, wz(o.y) + .55, { line: 0 }); ball(G, .05, 0xC0C4D0, x + s * .2, .58, wz(o.y) + .55, { line: .005 }); } break;
+    case "mirrorball": { cyl(G, .01, .01, .7, C.dark, x, 1.7, z, { line: 0, cast: false }); const m = new THREE.Mesh(new THREE.IcosahedronGeometry(.22, 1), new THREE.MeshStandardMaterial({ color: 0xE8ECF5, metalness: .9, roughness: .15, flatShading: true })); m.position.set(x, 1.6, z); G.add(m); spinners.push(m);
+      for (let i = 0; i < 9; i++) { const a = i * 2.39, rr = .5 + i * .18; const s2 = new THREE.Mesh(new THREE.CircleGeometry(.09, 10), new THREE.MeshBasicMaterial({ color: [0xFFD43B, 0xF7A6A0, 0x7DB3F0][i % 3], transparent: true, opacity: .55 })); s2.rotation.x = -Math.PI / 2; s2.position.set(x + Math.cos(a) * rr, .012, z + Math.sin(a) * rr); G.add(s2); } break; }
+    case "speaker": box(G, .4, 1.1, .36, C.dark, x, 0, z); for (const yy of [.35, .8]) cyl(G, .12, .12, .02, 0x55525F, x, yy, z + .19, { line: 0 }).rotation.x = Math.PI / 2; break;
+    case "arcade": { const c = [0xF15B5B, 0x7DB3F0, 0xFFD43B, 0x7FCFAE][(o.x >> 1) % 4]; box(G, .5, 1.25, .5, c, x, 0, z); box(G, .44, .36, .02, C.dark, x, .75, z + .26, { line: .005 }); board(G, .4, .3, arcadeTex(["#F15B5B", "#7DB3F0", "#FFD43B", "#7FCFAE"][(o.x >> 1) % 4]), x, .93, z + .28);
+      box(G, .5, .06, .22, C.dark, x, .58, z + .34, { line: .005 }); cyl(G, .015, .015, .1, C.dark, x - .1, .64, z + .34, { line: 0 }); ball(G, .035, 0xF15B5B, x - .1, .76, z + .34, { line: 0 }); ball(G, .03, 0xFFD43B, x + .1, .66, z + .34, { line: 0 }); break; }
+    case "trampoline": { const r = Math.min(w, d) / 2 - .1; cyl(G, r, r, .14, 0x2F6FDB, x, .04, z, { seg: 32 }); const mat2 = new THREE.Mesh(new THREE.CircleGeometry(r - .12, 32), toon(0x1C1C26)); mat2.rotation.x = -Math.PI / 2; mat2.position.set(x, .19, z); mat2.receiveShadow = true; G.add(mat2);
+      for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2; cyl(G, .03, .03, .06, C.dark, x + Math.cos(a) * (r - .05), 0, z + Math.sin(a) * (r - .05), { line: 0 }); } break; }
+    case "ballpit": { box(G, w, .35, .08, 0x7DB3F0, x, 0, wz(o.y) + .04); box(G, w, .35, .08, 0x7DB3F0, x, 0, wz(o.y + o.h) - .04); box(G, .08, .35, d, 0x7DB3F0, wx(o.x) + .04, 0, z); box(G, .08, .35, d, 0x7DB3F0, wx(o.x + o.w) - .04, 0, z);
+      const n = Math.floor(o.w * o.h * 7), geo = new THREE.SphereGeometry(.07, 8, 6), inst = new THREE.InstancedMesh(geo, new THREE.MeshToonMaterial({ gradientMap: gradient }), n); const rr = rng(o.x * 5 + 1), m4 = new THREE.Matrix4(), col = new THREE.Color();
+      for (let i = 0; i < n; i++) { m4.makeTranslation(wx(o.x) + .12 + rr() * (w - .24), .03 + rr() * .2, wz(o.y) + .12 + rr() * (d - .24)); inst.setMatrixAt(i, m4); inst.setColorAt(i, col.setHex(BALLS[i % BALLS.length])); }
+      G.add(inst); break; }
+    case "slide": { box(G, w - .1, 1.0, .4, 0xFFD43B, x, 0, wz(o.y) + .2); const s2 = solidMesh(new THREE.BoxGeometry(w - .2, .06, d * .95), 0xF15B5B, { cast: false }); s2.rotation.x = .38; s2.position.set(x, .55, z + .1); G.add(s2); for (let i = 0; i < 4; i++) box(G, w - .1, .04, .04, C.dark, x, .2 + i * .22, wz(o.y) + .02, { line: 0 }); break; }
+    case "pingpong": box(G, w - .3, .5, d - .3, 0x2F8A62, x, 0, z); box(G, .02, .01, d - .3, C.white, x, .5, z, { line: 0 }); box(G, .04, .12, d - .2, C.white, x, .5, z, { mat: toon(C.white, { opacity: .6 }), line: .005, cast: false });
+      for (const s of [-1, 1]) { cyl(G, .07, .07, .015, 0xF15B5B, x + s * (w / 2 - .4), .5, z + s * .2, { line: .004 }); } ball(G, .03, C.white, x + .3, .62, z, { line: 0 }); break;
+    case "boardgame": box(G, w - .3, .28, d - .3, C.wood, x, 0, z); box(G, .5, .02, .5, 0xFFF6C7, x, .28, z, { line: .006 }); for (let i = 0; i < 4; i++) cyl(G, .03, .04, .09, [0xF15B5B, 0x7DB3F0, 0xFFD43B, 0x7FCFAE][i], x - .15 + i * .1, .3, z - .05 + (i % 2) * .1, { line: .004 });
+      for (const [a, b] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) box(G, .3, .08, .3, 0xF7A6A0, x + a * (w / 2 - .05), 0, z + b * (d / 2 - .05), { line: .008 }); break;
+    case "sculpture": { // 놀이 광장 한가운데 커다란 하루들 얼굴
+      cyl(G, .5, .6, .3, C.gray, x, 0, z); const h = solidMesh(new THREE.SphereGeometry(.6, 24, 18), C.white, { line: .03 }); h.position.set(x, .9, z); G.add(h);
+      for (const s of [-1, 1]) { const e = new THREE.Mesh(new THREE.SphereGeometry(.06, 10, 8), new THREE.MeshBasicMaterial({ color: INK })); e.scale.set(1, 1.4, .5); e.position.set(x + s * .2, .98, z + .56); G.add(e); }
+      const sm = new THREE.Mesh(new THREE.TorusGeometry(.18, .025, 6, 16, Math.PI * .7), new THREE.MeshBasicMaterial({ color: INK })); sm.rotation.z = Math.PI + Math.PI * .15; sm.position.set(x, .86, z + .57); G.add(sm);
+      { const be = solidMesh(new THREE.SphereGeometry(.34, 16, 10), 0xFFD43B, { line: .015 }); be.scale.set(1, .35, 1); be.position.set(x - .12, 1.45, z - .05); be.rotation.z = .25; G.add(be); } break; }
+    case "parasol": cyl(G, .02, .02, 1.5, C.grayD, x, 0, z, { line: 0 }); { const c = solidMesh(new THREE.ConeGeometry(.75, .3, 8), 0xFFD43B, { line: .015 }); c.position.set(x, 1.55, z); G.add(c); }
+      cyl(G, .32, .32, .04, C.white, x, .42, z); for (let k = 0; k < 2; k++) chair(G, x + (k ? .5 : -.5), z, k ? -Math.PI / 2 : Math.PI / 2); break;
   }
 }
 function buildPortal(G, p, fl) {
@@ -691,10 +856,10 @@ function placeNPCs() {
   for (const n of NPCS) n.doll.root.removeFromParent(); NPCS.length = 0;
   const r = rng(4242); const used = { 11: [], 12: [], 13: [], 14: [] };
   PEOPLE.forEach((p, i) => {
-    const f = [11, 12, 13, 14][i % 4], fl = FLOORS[f]; const zs = fl.zones.filter((z) => !["엘리베이터 홀", "오픈 천장"].includes(z.name));
+    const f = [11, 12, 13, 14][i % 4], fl = FLOORS[f]; const zs = fl.zones.filter((z) => z.desc && z.npc !== false);
     for (let k = 0; k < 400; k++) {
       const z = zs[Math.floor(r() * zs.length)]; const x = z.x + Math.floor(r() * z.w), y = z.y + Math.floor(r() * z.h);
-      if (solid(fl, x, y) || fl.portals.some((pp) => inRect(pp, x, y)) || fl.calls.some((c) => inRect(c, x, y))) continue;
+      if (solid(fl, x, y) || !fl.reach[y * W + x] || fl.furn.some((o) => WALK_THROUGH.has(o.kind) && o.kind !== "bleacher" && inRect(o, x, y)) || fl.portals.some((pp) => inRect(pp, x, y)) || fl.calls.some((c) => inRect(c, x, y))) continue;
       if (used[f].some(([a, b]) => Math.abs(a - x) + Math.abs(b - y) < 3)) continue;
       used[f].push([x, y]);
       const look = lookFrom(p.nick); const doll = makeChar(look);
@@ -747,14 +912,14 @@ function showFloors() {
 const LS = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch { } } };
 let lookIdx = parseInt(LS.get("ww.look") || "0", 10) || 0;
 const lookOf = (i) => ({ hair: HAIRS[i % HAIRS.length], acc: ACC[Math.floor(i / HAIRS.length) % ACC.length], prop: "bag" });
-const me = { f: 11, x: 21, y: 17.5, h: Math.PI / 2, jz: 0, jv: 0, jc: 0, ac: 0, an: null, as: 0, act: null, board: null, runHold: false, runToggle: false, moving: false, say: "", sayAt: 0, path: null };
+const me = { f: 11, x: ELEV_SPAWN[0], y: ELEV_SPAWN[1], h: Math.PI / 2, jz: 0, jv: 0, jc: 0, ac: 0, an: null, as: 0, act: null, board: null, runHold: false, runToggle: false, moving: false, say: "", sayAt: 0, path: null };
 let floor = FLOORS[11];
 let meDoll = makeChar(lookOf(lookIdx)); scene.add(meDoll.root);
 Object.defineProperty(me, "doll", { get: () => meDoll });
 const running = () => me.runHold || me.runToggle;
 function jump() { if (me.jz > .001) return; me.jv = 4.6; me.jc++; sendPresence(true); }
 function useSkill(name) { if (!SKILLS[name]) return; me.path = null; startAct(me, name); me.ac++; me.an = name; me.as = me.act.seed; sendPresence(true); }
-const dog = { x: 20, y: 18.5, moving: false, h: 0, doll: makeDog() }; scene.add(dog.doll.root);
+const dog = { x: ELEV_SPAWN[0] - 1, y: ELEV_SPAWN[1] + 1, moving: false, h: 0, doll: makeDog() }; scene.add(dog.doll.root);
 const peers = new Map();
 const setPos = (d, f, x, y) => d.root.position.set(wx(x), floorY(f) + heightAt(FLOORS[f], x, y), wz(y));
 
@@ -773,7 +938,7 @@ function refreshRoomTags() {
   for (const r of floor.rooms) if (r.name) roomTags.push({ el: mkLabel(`room-tag${r.planet ? " planet" : ""}`, r.name), x: wx(r.x + r.w / 2), y: WALL + .35, z: wz(r.y + .5) });
   for (const z of floor.zones) if (z.desc && !floor.rooms.some((r) => r.name && z.name.includes(r.name)) && !["엘리베이터 홀", "회의실"].includes(z.name)) roomTags.push({ el: mkLabel("room-tag", z.name), x: wx(z.x + z.w / 2), y: .9, z: wz(z.y + z.h / 2) });
   for (const p of floor.portals) roomTags.push({ el: mkLabel("room-tag port", "⇅ " + p.label), x: wx(p.x + p.w / 2), y: 1.1, z: wz(p.y + p.h / 2) });
-  roomTags.push({ el: mkLabel("room-tag", "엘리베이터"), x: wx(28.5), y: 1.8, z: wz(13.5) });
+  roomTags.push({ el: mkLabel("room-tag", "엘리베이터"), x: wx(ELEV_SPAWN[0]), y: 2.0, z: wz(13.5) });
 }
 const myTag = mkLabel("name-tag me", "나"), myBub = mkLabel("bub", ""); myBub.hidden = true;
 const hintBub = mkLabel("bub hint", ""); hintBub.hidden = true;
@@ -873,7 +1038,7 @@ document.getElementById("pClose").onclick = closePanel;
 lb.addEventListener("click", (e) => { if (e.target === lb || e.target === lbImg) lb.hidden = true; });
 function openPicker() {
   const list = document.getElementById("pickList"); list.replaceChildren();
-  for (const f of [14, 13, 12, 11]) { const b = document.createElement("button"); b.type = "button"; b.disabled = f === me.f; const l = document.createElement("b"); l.textContent = f + "F"; const s = document.createElement("span"); s.textContent = f === me.f ? "지금 있는 층" : FLOOR_INFO[f]; b.append(l, s); b.onclick = () => { closePicker(); goFloor(f, [28.5, 17.5]); }; list.append(b); }
+  for (const f of [14, 13, 12, 11]) { const b = document.createElement("button"); b.type = "button"; b.disabled = f === me.f; const l = document.createElement("b"); l.textContent = f + "F"; const s = document.createElement("span"); s.textContent = f === me.f ? "지금 있는 층" : FLOOR_INFO[f]; b.append(l, s); b.onclick = () => { closePicker(); goFloor(f, ELEV_SPAWN); }; list.append(b); }
   picker.hidden = false; list.querySelector("button:not([disabled])")?.focus();
 }
 function closePicker() { picker.hidden = true; }
@@ -882,9 +1047,9 @@ picker.addEventListener("click", (e) => { if (e.target === picker) closePicker()
 const fade = document.getElementById("fade"); let lastPortal = 0;
 function goFloor(f, spawn) {
   fade.style.opacity = 1;
-  setTimeout(() => { me.f = f; floor = FLOORS[f]; me.x = spawn[0]; me.y = spawn[1]; dog.x = me.x - 1; dog.y = me.y + .5; me.path = null; curZone = null; showFloors(); refreshRoomTags(); updateFloorHud(); sendPresence(true); cam.target.set(wx(me.x), floorY(f), wz(me.y)); fade.style.opacity = 0; }, 250);
+  setTimeout(() => { me.f = f; floor = FLOORS[f]; [me.x, me.y] = nearestFree(floor, spawn[0], spawn[1]); me.jz = 0; me.jv = 0; dog.x = me.x - 1; dog.y = me.y + .5; me.path = null; curZone = null; showFloors(); refreshRoomTags(); updateFloorHud(); sendPresence(true); cam.target.set(wx(me.x), floorY(f), wz(me.y)); fade.style.opacity = 0; }, 250);
 }
-document.querySelectorAll(".tabs button").forEach((b) => (b.onclick = () => { const f = +b.dataset.f; if (f !== me.f) goFloor(f, [28.5, 17.5]); }));
+document.querySelectorAll(".tabs button").forEach((b) => (b.onclick = () => { const f = +b.dataset.f; if (f !== me.f) goFloor(f, ELEV_SPAWN); }));
 function updateFloorHud() { document.querySelector("#floorBadge b").textContent = me.f + "F"; document.querySelector("#floorBadge span").textContent = FLOOR_INFO[me.f]; document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-current", String(+b.dataset.f === me.f))); }
 const actBtn = document.getElementById("act"); actBtn.onclick = interact;
 document.getElementById("lookBtn").onclick = () => { lookIdx = (lookIdx + 1) % (HAIRS.length * ACC.length); LS.set("ww.look", lookIdx); const l = lookOf(lookIdx); meDoll.root.removeFromParent(); meDoll = makeChar(l); scene.add(meDoll.root); sendPresence(true); };
@@ -997,11 +1162,15 @@ function step(dt, t) {
   if (ix || iy) { const fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw), rx = Math.cos(cam.yaw), rz = -Math.sin(cam.yaw); vx = rx * ix - fx * iy; vy = rz * ix - fz * iy; }
   else if (me.path && me.path.length) { const n = me.path[0]; const dx = n.x - me.x, dy = n.y - me.y, d = Math.hypot(dx, dy); if (d < .15) me.path.shift(); else { vx = dx / d; vy = dy / d; } }
   const sp = running() ? 8.6 : 5.2, len = Math.hypot(vx, vy) || 1; vx = vx / len * sp * dt; vy = vy / len * sp * dt;
-  const r = .28, free = (x, y) => !solid(floor, x - r, y - r) && !solid(floor, x + r, y - r) && !solid(floor, x - r, y + r) && !solid(floor, x + r, y + r);
+  const free = (x, y) => fits(floor, x, y);
+  // 끼임 방지: 몸이 벽·가구와 겹친 채 시작하면(예전 에스컬레이터 도착 자리) 어떤 방향으로도 못 움직였다 → 가장 가까운 빈 칸으로 옮긴다
+  if (!free(me.x, me.y)) { [me.x, me.y] = nearestFree(floor, me.x, me.y); me.path = null; }
   if (vx && free(me.x + vx, me.y)) me.x += vx; if (vy && free(me.x, me.y + vy)) me.y += vy;
   me.moving = !!(vx || vy);
   if (me.moving) { me.h = Math.atan2(vx, vy); if (me.act) endAct(me); sendPresence(false); }
   if (me.jz > 0 || me.jv > 0) { me.jv -= 15 * dt; me.jz += me.jv * dt; if (me.jz <= 0) { me.jz = 0; me.jv = 0; } }
+  // 트램펄린 위에서는 저절로 통통
+  if (me.jz <= 0 && me.jv <= 0 && floor.furn.some((o) => o.kind === "trampoline" && inRect(o, me.x, me.y))) { me.jv = 6.4; me.jc++; sendPresence(true); }
   document.querySelectorAll(".skill[data-skill]").forEach((b) => b.classList.toggle("on", me.act?.name === b.dataset.skill));
   npcSkillTimer -= dt; if (npcSkillTimer <= 0) { npcSkillTimer = 8 + Math.random() * 12; const idle = NPCS.filter((n) => n.f === me.f && !n.moving && !n.act && !n.talk); const n = idle[Math.floor(Math.random() * idle.length)]; if (n) startAct(n, ["draw", "draw", "wave", "heart"][Math.floor(Math.random() * 4)]); }
   if (t * 1000 - lastPortal > 1400) for (const p of floor.portals) if (inRect(p, me.x, me.y)) { lastPortal = t * 1000; goFloor(p.to, p.spawn); break; }
@@ -1032,6 +1201,7 @@ function render(dt, t) {
   setPos(dog.doll, me.f, dog.x, dog.y); dog.doll.update(dt, t, dog.moving, dog.h);
   for (const n of NPCS) if (n.doll.root.visible) { setPos(n.doll, n.f, n.x, n.y); n.doll.update(dt, t, n.moving, n.talk ? Math.atan2(me.x - n.x, me.y - n.y) : n.h, n.seed, performance.now() - n.sayAt < 2500, tickAct(n, dt)); }
   tickFx(dt);
+  for (const s of spinners) s.rotation.y += dt * .9;
   syncPeers(dt, t);
   const mp = meDoll.root.position;
   project(myTag, mp.x, mp.y - .05, mp.z, true);
