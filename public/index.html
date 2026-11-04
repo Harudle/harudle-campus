@@ -1159,11 +1159,11 @@ const endDrag = (e) => {
   if (pointers.size === 0) drag = null;
 };
 // 들어가 있을 때: 마우스를 움직이는 만큼 고개가 돌아간다 (누르고 있지 않아도)
-let lastLook = 0, lockFailed = false;
+let lastLook = 0, lockFailed = false, moveRef = null, moveSig = 0;
 const locked = () => document.pointerLockElement === canvas;
 function look(dx, dy) {
   if (!dx && !dy) return; lastLook = performance.now();
-  cam.yawT -= dx * .0032;
+  cam.yawT -= dx * .0032; if (moveRef !== null) moveRef -= dx * .0032;   // 걷는 중에 마우스로 돌리면 걷는 방향도 같이 돈다
   if (VIEW.mode === "first") cam.lookT = clamp(cam.lookT - dy * .0026, -1.0, 1.1);
   else cam.ipT = clamp(cam.ipT + dy * .0026, -.05, 1.1);
 }
@@ -1386,7 +1386,10 @@ function step(dt, t) {
   if (keys.has("arrowleft") || keys.has("a")) ix -= 1; if (keys.has("arrowright") || keys.has("d")) ix += 1;
   if (keys.has("arrowup") || keys.has("w")) iy -= 1; if (keys.has("arrowdown") || keys.has("s")) iy += 1;
   let vx = 0, vy = 0;
-  if (ix || iy) { const fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw), rx = Math.cos(cam.yaw), rz = -Math.sin(cam.yaw); vx = rx * ix - fx * iy; vy = rz * ix - fz * iy; }
+  // 들어가 있을 때: 키를 누른 순간의 시야를 기준으로 방향을 정한다 (D를 누르면 오른쪽으로 돌아서 곧장 걸어간다)
+  const sig = ix * 3 + iy; if (!(ix || iy)) moveRef = null; else if (moveRef === null || sig !== moveSig) { moveRef = cam.yawT; moveSig = sig; }
+  const ry = inside() && moveRef !== null ? moveRef : cam.yaw;
+  if (ix || iy) { const fx = -Math.sin(ry), fz = -Math.cos(ry), rx = Math.cos(ry), rz = -Math.sin(ry); vx = rx * ix - fx * iy; vy = rz * ix - fz * iy; }
   else if (me.path && me.path.length) { const n = me.path[0]; const dx = n.x - me.x, dy = n.y - me.y, d = Math.hypot(dx, dy); if (d < .15) me.path.shift(); else { vx = dx / d; vy = dy / d; } }
   if (me.lie || me.seat) { if ((ix || iy) || (me.path && me.path.length)) standUp(); else { vx = vy = 0; } }
   if (me.goal && !(me.path && me.path.length)) { // 도착: 앉거나 눕기
@@ -1402,9 +1405,9 @@ function step(dt, t) {
   me.moving = !!(vx || vy);
   if (!runTipShown) { if (me.moving && running()) runTipShown = true; else if (me.moving) { walkFor += dt; if (walkFor > 5) { runTipShown = true; showToast("더 빨리 가고 싶다면", "Shift를 누른 채로 걸으면 달리고, Space를 누르면 점프해요.", 4200); } } }
   if (me.moving) { me.h = Math.atan2(vx, vy); if (me.act) endAct(me); sendPresence(false); }
-  if (inside() && me.moving && performance.now() - lastLook > 700) {
-    const want = me.h + Math.PI; let diff = (want - cam.yawT) % (Math.PI * 2); if (diff > Math.PI) diff -= Math.PI * 2; if (diff < -Math.PI) diff += Math.PI * 2;
-    if (Math.abs(diff) < 2.5) cam.yawT += diff * Math.min(1, dt * (running() ? 4 : 3));
+  if (inside() && me.moving) { // 움직이는 방향으로 시야가 자연스럽게 돈다
+    let diff = (me.h + Math.PI - cam.yawT) % (Math.PI * 2); if (diff > Math.PI) diff -= Math.PI * 2; if (diff < -Math.PI) diff += Math.PI * 2;
+    cam.yawT += diff * Math.min(1, dt * 6);
   }
   if (me.jz > 0 || me.jv > 0) { me.jv -= 15 * dt; me.jz += me.jv * dt; if (me.jz <= 0) { me.jz = 0; me.jv = 0; } }
   // 트램펄린 위에서는 저절로 통통
