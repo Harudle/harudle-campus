@@ -68,6 +68,16 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--brand);outline-
 #sayInput{flex:1;min-width:0;font:inherit;font-size:15px;border:2px solid var(--ink);border-radius:12px;padding:8px 12px;background:var(--paper);color:var(--ink)}
 .btn{font-family:var(--hand);font-size:18px;border:2px solid var(--ink);background:var(--brand);color:var(--brand-strong);border-radius:12px;padding:6px 14px;cursor:pointer;box-shadow:2px 2px 0 var(--ink)}
 .btn.ghost{background:var(--paper);color:var(--ink)}
+#hint kbd,.gbox kbd{display:inline-block;min-width:20px;padding:0 5px;margin-right:2px;border:1.5px solid var(--ink);border-radius:5px;background:#FFF6C7;color:var(--ink);font:700 11px/18px system-ui,sans-serif;text-align:center;box-shadow:0 1.5px 0 var(--ink)}
+#hint button{font:700 11px system-ui,sans-serif;border:1.5px solid var(--ink);border-radius:6px;background:#fff;padding:1px 6px;cursor:pointer}
+#guide{position:fixed;inset:0;z-index:40;display:grid;place-items:center;background:rgba(14,30,70,.5);padding:16px}
+#guide[hidden]{display:none!important}
+.gbox{background:#fff;border:3px solid var(--ink);border-radius:18px;padding:18px 20px;max-width:420px;width:100%;box-shadow:3px 4px 0 var(--ink);font-family:var(--hand)}
+.gbox h4{margin:0 0 10px;font-size:24px}
+.gbox ul{list-style:none;margin:0 0 14px;padding:0;display:grid;gap:9px;font-size:16px}
+.gbox li{display:grid;grid-template-columns:112px 1fr;align-items:center;gap:8px;line-height:1.3}
+.gbox li p{margin:0}.gbox li b{margin-right:6px}.gbox li span{white-space:nowrap}
+.gbox .btn{width:100%}
 #hint{border:1.5px solid var(--ink);position:fixed;z-index:4;left:max(12px,env(safe-area-inset-left,0px));bottom:calc(116px + env(safe-area-inset-bottom,0px));font-size:12px;color:var(--muted);background:rgba(255,255,255,.88);padding:4px 8px;border-radius:8px;max-width:calc(100% - 90px)}
 #skills{left:max(12px,env(safe-area-inset-left,0px));bottom:calc(70px + env(safe-area-inset-bottom,0px));gap:6px;max-width:calc(100% - 80px)}
 .skill{font-family:var(--hand);font-size:16px;background:var(--paper);color:var(--ink);border:2px solid var(--ink);border-radius:12px;padding:4px 10px;cursor:pointer;box-shadow:1px 2px 0 var(--ink);display:flex;align-items:center;gap:5px}
@@ -135,7 +145,20 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--brand);outline-
 </div>
 <input type="file" id="feedFile" accept=".json,application/json" hidden>
 <div id="zoneToast" class="chip" style="opacity:0"><h2></h2><p></p></div>
-<div id="hint">WASD·방향키·클릭 이동 · Shift 달리기 · Space 점프 · F 대화·앉기·눕기·엘리베이터 · 1~3 스킬 · V 시점 · 끌어서 돌리기</div>
+<div id="hint"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 걷기 · <kbd>Shift</kbd> 누른 채 달리기 · <kbd>Space</kbd> 점프 · <kbd>F</kbd> 대화·앉기·눕기 · <kbd>V</kbd> 시점 · <button type="button" id="guideBtn">조작법</button></div>
+<div id="guide" hidden><div class="gbox" role="dialog" aria-labelledby="guideTitle">
+  <h4 id="guideTitle">이렇게 움직여요</h4>
+  <ul>
+    <li><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><p><b>걷기</b> 방향키도 되고, 바닥을 눌러도 걸어가요</p></li>
+    <li><span><kbd>Shift</kbd></span><p><b>달리기</b> 누르고 있는 동안 빨라져요</p></li>
+    <li><span><kbd>Space</kbd></span><p><b>점프</b> 트램펄린 위에선 저절로 통통</p></li>
+    <li><span><kbd>F</kbd></span><p><b>상호작용</b> 크루와 대화 · 의자에 앉기 · 빈백에 눕기 · 엘리베이터</p></li>
+    <li><span><kbd>V</kbd></span><p><b>시점</b> 위에서 → 들어가기 → 1인칭</p></li>
+    <li><span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></span><p><b>스킬</b> 네 컷 그리기 · 인사 · 하트</p></li>
+    <li><span>클릭</span><p><b>의자·빈백</b> 누르면 걸어가서 앉거나 누워요</p></li>
+  </ul>
+  <button class="btn" type="button" id="guideOk">시작하기</button>
+</div></div>
 <div class="hud" id="skills" role="group" aria-label="스킬">
   <button class="skill" data-skill="draw"><kbd>1</kbd>네 컷 그리기</button>
   <button class="skill" data-skill="wave"><kbd>2</kbd>인사</button>
@@ -169,7 +192,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.m
 
 /* ════════════════ 1. 설정 · 유틸 ════════════════ */
 const W = 56, H = 34;          // 층 격자(칸)
-const S = 0.6;                 // 한 칸 = 0.6m
+const S = 0.8;                 // 한 칸 = 0.8m (캐릭터 대비 방·통로를 넉넉하게)
 const FH = 3.2;                // 층 높이
 const WALL = 0.9;              // 벽 높이(인형의 집처럼 낮게)
 const DOLL = 1.12;
@@ -524,7 +547,7 @@ let SEAT_SINK = null;
 const chair = (G, x, z, rot = 0, color = C.white) => {
   if (SEAT_SINK) SEAT_SINK.push({ x: tX(x), y: tY(z), yaw: rot });
   const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = rot; G.add(g);
-  box(g, .3, .24, .3, color, 0, 0, 0, { line: .012 }); box(g, .3, .26, .06, color, 0, .24, -.13, { line: .012 }); return g;
+  box(g, .34, .26, .34, color, 0, 0, 0, { line: .012 }); box(g, .34, .3, .06, color, 0, .26, -.15, { line: .012 }); return g;
 };
 const monitor = (G, x, y, z, rot = 0, w = .42) => {
   const g = new THREE.Group(); g.position.set(x, y, z); g.rotation.y = rot; G.add(g);
@@ -997,8 +1020,8 @@ function tickMeteors(dt) {
 const camera = new THREE.PerspectiveCamera(38, 1, .1, 260);
 scene.add(new THREE.HemisphereLight(0xffffff, 0xCFD6E8, 1.6));
 const sun = new THREE.DirectionalLight(0xffffff, 1.5); sun.castShadow = true; sun.shadow.mapSize.set(narrow() ? 1024 : 2048, narrow() ? 1024 : 2048);
-Object.assign(sun.shadow.camera, { left: -20, right: 20, top: 14, bottom: -14, near: 1, far: 60 }); sun.shadow.bias = -.0006; scene.add(sun, sun.target);
-const cam = { ip: .3, ipT: .3, id: 3.2, idT: 3.2, look: 0, lookT: 0, yaw: -.35, pitch: .95, dist: narrow() ? 13 : 15, yawT: -.35, pitchT: .95, distT: narrow() ? 13 : 15, target: new THREE.Vector3() };
+Object.assign(sun.shadow.camera, { left: -26, right: 26, top: 18, bottom: -18, near: 1, far: 70 }); sun.shadow.bias = -.0006; scene.add(sun, sun.target);
+const cam = { ip: .3, ipT: .3, id: 3.2, idT: 3.2, look: 0, lookT: 0, yaw: -.35, pitch: .95, dist: narrow() ? 16 : 19, yawT: -.35, pitchT: .95, distT: narrow() ? 16 : 19, target: new THREE.Vector3() };
 function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / Math.max(1, h); camera.updateProjectionMatrix(); }
 addEventListener("resize", resize); resize();
 const eyeV = new THREE.Vector3(), lookV = new THREE.Vector3();
@@ -1049,7 +1072,7 @@ function showFloors() {
 const LS = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch { } } };
 let lookIdx = parseInt(LS.get("ww.look") || "0", 10) || 0;
 const lookOf = (i) => ({ hair: HAIRS[i % HAIRS.length], acc: ACC[Math.floor(i / HAIRS.length) % ACC.length], prop: "bag" });
-const me = { lie: null, seat: null, f: 11, x: ELEV_SPAWN[0], y: ELEV_SPAWN[1], h: Math.PI / 2, jz: 0, jv: 0, jc: 0, ac: 0, an: null, as: 0, act: null, board: null, runHold: false, runToggle: false, moving: false, say: "", sayAt: 0, path: null };
+const me = { goal: null, lie: null, seat: null, f: 11, x: ELEV_SPAWN[0], y: ELEV_SPAWN[1], h: Math.PI / 2, jz: 0, jv: 0, jc: 0, ac: 0, an: null, as: 0, act: null, board: null, runHold: false, runToggle: false, moving: false, say: "", sayAt: 0, path: null };
 let floor = FLOORS[11];
 let meDoll = makeChar(lookOf(lookIdx)); scene.add(meDoll.root);
 Object.defineProperty(me, "doll", { get: () => meDoll });
@@ -1084,20 +1107,24 @@ function refreshTags() { npcTags.forEach((t) => { t.tag.remove(); t.bub.remove()
 
 /* ════════════════ 10. 입력 (키보드 · 끌어 돌리기 · 휠/핀치 · 클릭 이동) ════════════════ */
 const keys = new Set();
+// 한글 입력 상태에서는 e.key가 ㅈ·ㅁ·ㄴ·ㅇ로 들어와서 WASD가 안 먹었다 → 자판 위치(e.code)로 읽는다
+const MOVE = { KeyW: "w", KeyA: "a", KeyS: "s", KeyD: "d", ArrowUp: "arrowup", ArrowDown: "arrowdown", ArrowLeft: "arrowleft", ArrowRight: "arrowright" };
+const SKILL_KEY = { Digit1: "draw", Digit2: "wave", Digit3: "heart", Numpad1: "draw", Numpad2: "wave", Numpad3: "heart" };
 addEventListener("keydown", (e) => {
   if (e.target.tagName === "INPUT") return;
-  if (e.key === "Escape") { closePanel(); closePicker(); lb.hidden = true; return; }
+  const c = e.code;
+  if (!guide.hidden) { if (c === "Escape" || c === "Enter" || c === "Space" || c === "KeyF") { e.preventDefault(); closeGuide(); } return; }
+  if (c === "Escape") { closePanel(); closePicker(); lb.hidden = true; return; }
   if (!picker.hidden || !lb.hidden) return;
-  if (e.key === " ") { e.preventDefault(); if (!e.repeat) jump(); return; }
-  if (e.key === "Enter" || e.key.toLowerCase() === "f") { e.preventDefault(); interact(); return; }
-  if (e.key === "Shift") { me.runHold = true; return; }
-  if (!e.repeat && { 1: "draw", 2: "wave", 3: "heart" }[e.key]) { useSkill({ 1: "draw", 2: "wave", 3: "heart" }[e.key]); return; }
-  const k = e.key.toLowerCase();
-  if (k === "v") { setView({ top: "third", third: "first", first: "top" }[VIEW.mode]); return; }
-  if (k === "q") { cam.yawT += Math.PI / 4; return; } if (k === "e") { cam.yawT -= Math.PI / 4; return; }
-  if (["arrowup", "arrowdown", "arrowleft", "arrowright", "w", "a", "s", "d"].includes(k)) { keys.add(k); me.path = null; e.preventDefault(); }
+  if (c === "Space") { e.preventDefault(); if (!e.repeat) jump(); return; }
+  if (c === "Enter" || c === "NumpadEnter" || c === "KeyF") { e.preventDefault(); if (!e.repeat) interact(); return; }
+  if (c === "ShiftLeft" || c === "ShiftRight") { me.runHold = true; return; }
+  if (SKILL_KEY[c]) { if (!e.repeat) useSkill(SKILL_KEY[c]); return; }
+  if (c === "KeyV") { if (!e.repeat) setView({ top: "third", third: "first", first: "top" }[VIEW.mode]); return; }
+  if (c === "KeyQ") { cam.yawT += Math.PI / 4; return; } if (c === "KeyE") { cam.yawT -= Math.PI / 4; return; }
+  if (MOVE[c]) { keys.add(MOVE[c]); me.path = null; me.goal = null; e.preventDefault(); }
 });
-addEventListener("keyup", (e) => { keys.delete(e.key.toLowerCase()); if (e.key === "Shift") me.runHold = false; });
+addEventListener("keyup", (e) => { if (MOVE[e.code]) keys.delete(MOVE[e.code]); if (e.code === "ShiftLeft" || e.code === "ShiftRight" || e.key === "Shift") me.runHold = false; });
 document.querySelectorAll(".skill[data-skill]").forEach((b) => (b.onclick = () => useSkill(b.dataset.skill)));
 document.getElementById("jumpBtn").onclick = jump;
 const runBtn = document.getElementById("runBtn"); runBtn.onclick = () => { me.runToggle = !me.runToggle; runBtn.setAttribute("aria-pressed", String(me.runToggle)); };
@@ -1111,7 +1138,7 @@ const pinchDist = () => { const [a, b] = [...pointers.values()]; return Math.hyp
 canvas.addEventListener("pointerdown", (e) => { canvas.setPointerCapture(e.pointerId); pointers.set(e.pointerId, { x: e.clientX, y: e.clientY }); drag = { x: e.clientX, y: e.clientY, moved: pointers.size > 1, yaw: cam.yawT, pitch: cam.pitchT, ip: cam.ipT, look: cam.lookT, pinch: pointers.size === 2 ? pinchDist() : 0, dist: cam.distT, id: cam.idT }; });
 canvas.addEventListener("pointermove", (e) => {
   if (!drag || !pointers.has(e.pointerId)) return; pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  if (pointers.size === 2) { if (!drag.pinch) { drag.pinch = pinchDist(); drag.dist = cam.distT; drag.id = cam.idT; } const ratio = drag.pinch / Math.max(1, pinchDist()); if (inside()) cam.idT = clamp(drag.id * ratio, 1.2, 6); else cam.distT = clamp(drag.dist * ratio, 6, 30); drag.moved = true; return; }
+  if (pointers.size === 2) { if (!drag.pinch) { drag.pinch = pinchDist(); drag.dist = cam.distT; drag.id = cam.idT; } const ratio = drag.pinch / Math.max(1, pinchDist()); if (inside()) cam.idT = clamp(drag.id * ratio, 1.2, 6); else cam.distT = clamp(drag.dist * ratio, 6, 42); drag.moved = true; return; }
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
   if (Math.hypot(dx, dy) > 6) { drag.moved = true; canvas.classList.add("dragging"); }
   if (drag.moved) { cam.yawT = drag.yaw - dx * .006; if (VIEW.mode === "first") cam.lookT = clamp(drag.look + dy * .004, -1.0, 1.1); else if (inside()) cam.ipT = clamp(drag.ip + dy * .004, -.05, 1.1); else cam.pitchT = clamp(drag.pitch + dy * .004, .45, 1.35); }
@@ -1124,7 +1151,7 @@ const endDrag = (e) => {
 canvas.addEventListener("pointerup", endDrag); canvas.addEventListener("pointercancel", endDrag);
 canvas.addEventListener("wheel", (e) => {
   e.preventDefault();
-  if (VIEW.mode === "top") cam.distT = clamp(cam.distT * (1 + e.deltaY * .0012), 6, 30);
+  if (VIEW.mode === "top") cam.distT = clamp(cam.distT * (1 + e.deltaY * .0012), 6, 42);
   else if (VIEW.mode === "third") { cam.idT = clamp(cam.idT * (1 + e.deltaY * .0012), 1.2, 6); }
 }, { passive: false });
 function clickAt(cx, cy) {
@@ -1132,6 +1159,20 @@ function clickAt(cx, cy) {
   const hit = ray.intersectObjects(NPCS.filter((n) => n.f === me.f).flatMap((n) => n.doll.meshes), false)[0];
   if (hit) { const n = NPCS[hit.object.userData.npc]; n.say = "반가워!"; n.sayAt = performance.now(); NPCS.forEach((o) => (o.talk = o === n)); openPanel(n.p); return; }
   const g = ray.intersectObject(FLOORS[me.f].slab, false)[0];
+  const shown = (o) => { for (let q = o; q; q = q.parent) if (!q.visible) return false; return true; };
+  const hitAny = ray.intersectObject(groupOf(me.f), true).find((h) => shown(h.object) && !h.object.material?.transparent && h.object.material !== inkMat), pt = hitAny || g;
+  if (pt) { // 누른 자리에 빈백이나 의자가 있으면 그쪽으로 걸어가서 눕기·앉기
+    const px = tX(pt.point.x), py = tY(pt.point.z);
+    const bag = floor.furn.find((o) => o.kind === "beanbag" && !o.taken && inRect({ x: o.x - .3, y: o.y - .3, w: o.w + .6, h: o.h + .6 }, px, py));
+    let seat = null, bd = .75; for (const st of floor.seats || []) { if (st.taken) continue; const d = Math.hypot(st.x - px, st.y - py); if (d < bd) { bd = d; seat = st; } }
+    const goal = bag ? { bag, ...bagSpot(bag) } : seat ? { seat, x: seat.x, y: seat.y } : null;
+    if (goal) {
+      if (me.lie || me.seat) standUp();
+      const [fx, fy] = nearestFree(floor, goal.x, goal.y); me.goal = goal;
+      me.path = findPath(Math.floor(me.x), Math.floor(me.y), Math.floor(fx), Math.floor(fy)) || []; return;
+    }
+  }
+  me.goal = null;
   if (g) me.path = findPath(Math.floor(me.x), Math.floor(me.y), Math.floor(tX(g.point.x)), Math.floor(tY(g.point.z)));
 }
 function findPath(sx, sy, gx, gy) {
@@ -1148,9 +1189,9 @@ const feedBtn = document.getElementById("feedBtn"), feedFile = document.getEleme
 const fmtDate = (s) => { const d = new Date(s); return isNaN(d) ? "" : `${d.getMonth() + 1}.${String(d.getDate()).padStart(2, "0")}`; };
 const greeting = (p) => { const cats = [...new Set(p.feeds.map((f) => f.cat).filter(Boolean))]; return p.feeds.length ? `안녕! 나는 ${p.nick}. ${cats.slice(0, 2).join(", ") || "하루"} 이야기를 네 컷으로 그렸어. 구경해 볼래?` : `안녕! 나는 ${p.nick}. 하루들에 그림일기 ${p.total}편을 올렸어.`; };
 function nearNPC() { let best = null, bd = 1.9; for (const n of NPCS) { if (n.f !== me.f) continue; const d = Math.hypot(n.x - me.x, n.y - me.y); if (d < bd) { bd = d; best = n; } } return best; }
-function nearSeat() { if (me.lie || me.seat) return null; let best = null, bd = .8; for (const st of floor.seats || []) { if (st.taken) continue; const d = Math.hypot(st.x - me.x, st.y - me.y); if (d < bd) { bd = d; best = st; } } return best; }
-function sitDown(st) { me.seat = st; st.taken = "me"; me.x = st.x; me.y = st.y; me.h = st.yaw; me.path = null; if (me.act) endAct(me); sendPresence(true); }
-function nearBag() { if (me.lie || me.seat) return null; let best = null, bd = 1.5; for (const o of floor.furn) { if (o.kind !== "beanbag" || o.taken) continue; const s = bagSpot(o), d = Math.hypot(s.x - me.x, s.y - me.y); if (d < bd) { bd = d; best = o; } } return best; }
+function nearSeat() { if (me.lie || me.seat) return null; let best = null, bd = 1.0; for (const st of floor.seats || []) { if (st.taken) continue; const d = Math.hypot(st.x - me.x, st.y - me.y); if (d < bd) { bd = d; best = st; } } return best; }
+function sitDown(st) { me.seat = st; st.taken = "me"; me.x = st.x; me.y = st.y; showToast("의자에 앉았어요", "앉은 채로 1번을 누르면 네 컷을 그려요. 움직이면 일어나요.", 2600); me.h = st.yaw; me.path = null; if (me.act) endAct(me); sendPresence(true); }
+function nearBag() { if (me.lie || me.seat) return null; let best = null, bd = 1.9; for (const o of floor.furn) { if (o.kind !== "beanbag" || o.taken) continue; const s = bagSpot(o), d = Math.hypot(s.x - me.x, s.y - me.y); if (d < bd) { bd = d; best = o; } } return best; }
 function lieDown(o) { const s = bagSpot(o); me.lie = s; me.x = s.x; me.y = s.y; me.path = null; if (me.act) endAct(me); o.taken = "me"; sendPresence(true); showToast("빈백에 누웠어요", "움직이거나 F를 누르면 일어나요.", 2600); }
 function standUp() {
   if (me.seat) { me.seat.taken = false; [me.x, me.y] = nearestFree(floor, me.x + Math.sin(me.seat.yaw) * .5, me.y + Math.cos(me.seat.yaw) * .5); me.seat = null; sendPresence(true); return; }
@@ -1202,6 +1243,13 @@ function goFloor(f, spawn) {
 }
 document.querySelectorAll(".tabs button").forEach((b) => (b.onclick = () => { const f = +b.dataset.f; if (f !== me.f) goFloor(f, ELEV_SPAWN); }));
 function updateFloorHud() { document.querySelector("#floorBadge b").textContent = me.f + "F"; document.querySelector("#floorBadge span").textContent = FLOOR_INFO[me.f]; document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-current", String(+b.dataset.f === me.f))); }
+const guide = document.getElementById("guide");
+function openGuide() { guide.hidden = false; document.getElementById("guideOk").focus(); }
+function closeGuide() { guide.hidden = true; LS.set("ww.guide", "1"); }
+document.getElementById("guideOk").onclick = closeGuide; document.getElementById("guideBtn").onclick = openGuide;
+guide.addEventListener("click", (e) => { if (e.target === guide) closeGuide(); });
+// 걷기만 하고 달려 본 적이 없으면 한 번 알려 준다
+let walkFor = 0, runTipShown = false;
 const actBtn = document.getElementById("act"); actBtn.onclick = interact;
 document.getElementById("lookBtn").onclick = () => { lookIdx = (lookIdx + 1) % (HAIRS.length * ACC.length); LS.set("ww.look", lookIdx); const l = lookOf(lookIdx); meDoll.root.removeFromParent(); meDoll = makeChar(l); scene.add(meDoll.root); sendPresence(true); };
 document.getElementById("sayForm").addEventListener("submit", (e) => { e.preventDefault(); const i = document.getElementById("sayInput"); const v = i.value.trim(); if (!v) return; me.say = v.slice(0, 40); me.sayAt = Date.now(); i.value = ""; i.blur(); sendPresence(true); });
@@ -1312,13 +1360,19 @@ function step(dt, t) {
   let vx = 0, vy = 0;
   if (ix || iy) { const fx = -Math.sin(cam.yaw), fz = -Math.cos(cam.yaw), rx = Math.cos(cam.yaw), rz = -Math.sin(cam.yaw); vx = rx * ix - fx * iy; vy = rz * ix - fz * iy; }
   else if (me.path && me.path.length) { const n = me.path[0]; const dx = n.x - me.x, dy = n.y - me.y, d = Math.hypot(dx, dy); if (d < .15) me.path.shift(); else { vx = dx / d; vy = dy / d; } }
-  if (me.lie || me.seat) { if (vx || vy) standUp(); else { vx = vy = 0; } }
-  const sp = running() ? 8.6 : 5.2, len = Math.hypot(vx, vy) || 1; vx = vx / len * sp * dt; vy = vy / len * sp * dt;
+  if (me.lie || me.seat) { if ((ix || iy) || (me.path && me.path.length)) standUp(); else { vx = vy = 0; } }
+  if (me.goal && !(me.path && me.path.length)) { // 도착: 앉거나 눕기
+    const gl = me.goal; me.goal = null;
+    if (gl.bag && !gl.bag.taken && Math.hypot(gl.x - me.x, gl.y - me.y) < 2.2) lieDown(gl.bag);
+    else if (gl.seat && !gl.seat.taken && Math.hypot(gl.x - me.x, gl.y - me.y) < 1.4) sitDown(gl.seat);
+  }
+  const sp = running() ? 7.4 : 4.4, len = Math.hypot(vx, vy) || 1; vx = vx / len * sp * dt; vy = vy / len * sp * dt;
   const free = (x, y) => fits(floor, x, y);
   // 끼임 방지: 몸이 벽·가구와 겹친 채 시작하면(예전 에스컬레이터 도착 자리) 어떤 방향으로도 못 움직였다 → 가장 가까운 빈 칸으로 옮긴다
   if (!me.lie && !me.seat && !free(me.x, me.y)) { [me.x, me.y] = nearestFree(floor, me.x, me.y); me.path = null; }
   if (vx && free(me.x + vx, me.y)) me.x += vx; if (vy && free(me.x, me.y + vy)) me.y += vy;
   me.moving = !!(vx || vy);
+  if (!runTipShown) { if (me.moving && running()) runTipShown = true; else if (me.moving) { walkFor += dt; if (walkFor > 5) { runTipShown = true; showToast("더 빨리 가고 싶다면", "Shift를 누른 채로 걸으면 달리고, Space를 누르면 점프해요.", 4200); } } }
   if (me.moving) { me.h = Math.atan2(vx, vy); if (me.act) endAct(me); sendPresence(false); }
   if (me.jz > 0 || me.jv > 0) { me.jv -= 15 * dt; me.jz += me.jv * dt; if (me.jz <= 0) { me.jz = 0; me.jv = 0; } }
   // 트램펄린 위에서는 저절로 통통
@@ -1387,6 +1441,7 @@ fontsReady.then(() => {
   cam.target.set(wx(me.x), 0, wz(me.y)); placeCamera();
   const ld = document.getElementById("loading"); ld.style.opacity = 0; setTimeout(() => ld.remove(), 450);
   showToast("11층에 도착했어요", "1번을 눌러 네 컷을 그려 보세요. 캐릭터를 누르면 그 크루의 하루들 피드가 열려요.", 5000);
+  if (!LS.get("ww.guide")) openGuide();
   loadFeed(); joinRoom();
   requestAnimationFrame(loop);
 });
