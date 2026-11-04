@@ -1,115 +1,112 @@
-// 하루들 우테코 캠퍼스 서버
-// - public/ 정적 파일
-// - GET /api/feed : 하루들 공개 피드를 작성자별로 묶어 중계 (4분 캐시)
-// - WS  /ws       : 같은 캠퍼스에 있는 크루 위치·말풍선·스킬 공유
-import http from "node:http";
-import { readFile, stat } from "node:fs/promises";
-import { extname, join, normalize } from "node:path";
-import { fileURLToPath } from "node:url";
-import { WebSocketServer } from "ws";
+// 하루들 우테코 캠퍼스 — 감독 프로세스 (무중단 배포)
+//
+//   systemd ── node server.js (감독, 포트를 쥐고 있다)
+//                 └─ 워커(app.js) ← 요청·WebSocket은 전부 여기서 처리
+//
+// 배포 흐름 (main에 푸시하면 20초 안에 시작)
+//   1. origin/main에 새 커밋이 있는지 본다
+//   2. 새 코드를 임시 폴더에 풀어 검사한다 (문법 · 층 배치 · 끼임)  → 실패하면 배포하지 않는다
+//   3. 작업 폴더를 새 커밋으로 옮기고, 같은 포트에 새 워커를 띄운다
+//   4. 새 워커가 "준비됐어요"를 보내면 옛 워커를 비운다 (새 연결 중단 → 처리 중인 요청 마무리 → 종료)
+//      접속 중인 크루는 WebSocket이 끊기자마자 새 워커로 다시 붙는다
+//   5. 새 워커가 30초 안에 준비되지 않으면 되돌린다: 새 워커 종료, 작업 폴더를 이전 커밋으로
+//
+// 감독 코드(이 파일) 자체가 바뀐 커밋은 워커만 교체하고, 다음 재시작 때 반영된다.
+import cluster from "node:cluster";
 
-const PORT = Number(process.env.PORT || 80);
-const ROOT = join(fileURLToPath(new URL(".", import.meta.url)), "public");
-const HARUDLE = "https://www.harudle.com";
-const FEED_TTL = 4 * 60 * 1000;   // 하루들 이미지 주소는 15분 뒤 만료되므로 그보다 짧게
-const PER_AUTHOR = 6;
+if (!cluster.isPrimary) {
+  await import("./app.js");
+} else {
+  const { execFile } = await import("node:child_process");
+  const { mkdtemp, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join, dirname } = await import("node:path");
+  const { fileURLToPath } = await import("node:url");
+  const { promisify } = await import("node:util");
+  const run = promisify(execFile);
 
-const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".json": "application/json", ".png": "image/png", ".svg": "image/svg+xml", ".ico": "image/x-icon" };
+  const DIR = dirname(fileURLToPath(import.meta.url));
+  const POLL = Number(process.env.DEPLOY_POLL_MS || 20000);
+  const AUTO = process.env.AUTO_DEPLOY !== "0" && process.env.NODE_ENV === "production";
+  const READY_TIMEOUT = 30000;
+  const env = { ...process.env, npm_config_cache: join(tmpdir(), "wm-npm-cache"), GIT_TERMINAL_PROMPT: "0" };
+  const git = async (...a) => (await run("git", a, { cwd: DIR, env, maxBuffer: 1 << 24 })).stdout.trim();
+  const log = (...a) => console.log("[deploy]", ...a);
 
-/* ───────── 하루들 공개 피드 ───────── */
-let feedCache = { at: 0, body: null, pending: null };
-async function fetchFeed() {
-  const items = [];
-  let cursor = null;
-  for (let page = 0; page < 4; page++) {
-    const url = `${HARUDLE}/api/v1/feeds?size=50${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
-    const res = await fetch(url, { headers: { accept: "application/json", "user-agent": "wooteco-metaverse/1.0" } });
-    if (!res.ok) throw new Error(`harudle ${res.status}`);
-    const json = await res.json();
-    items.push(...(json.items || []));
-    if (!json.hasNext || !json.nextCursor) break;
-    cursor = json.nextCursor;
+  let current = null, version = "dev", busy = false, stopping = false;
+  const bad = new Set();   // 검사나 기동에 실패한 커밋은 다시 시도하지 않는다
+  try { version = await git("rev-parse", "HEAD"); } catch { }
+
+  // 워커 하나를 띄우고 준비될 때까지 기다린다
+  function spawn(v) {
+    return new Promise((resolve, reject) => {
+      const w = cluster.fork({ APP_VERSION: v });
+      const timer = setTimeout(() => { w.removeListener("message", onMsg); w.kill(); reject(new Error("ready timeout")); }, READY_TIMEOUT);
+      const onMsg = (m) => { if (m && m.t === "ready") { clearTimeout(timer); w.removeListener("message", onMsg); resolve(w); } };
+      w.on("message", onMsg);
+      w.once("exit", (code) => { clearTimeout(timer); reject(new Error(`worker exited (${code})`)); });
+    });
   }
-  const byAuthor = new Map();
-  for (const f of items) {
-    const a = f.author || {};
-    const key = a.id || a.nickname || "anon";
-    if (!byAuthor.has(key)) byAuthor.set(key, { id: key, nick: a.nickname || "익명", avatar: a.profileImageUrl || null, total: 0, feeds: [] });
-    const p = byAuthor.get(key);
-    p.total++;
-    if (p.feeds.length < PER_AUTHOR) p.feeds.push({ id: f.id, cat: f.category?.name || "", at: f.publishedAt, likes: f.likeCount || 0, comments: f.commentCount || 0, share: f.shareUrl, img: f.imageUrl });
+  // 옛 워커 비우기
+  function retire(w) {
+    if (!w || w.isDead()) return;
+    w.intentional = true; w.send({ t: "drain" });
+    setTimeout(() => { if (!w.isDead()) w.kill("SIGKILL"); }, 15000).unref();
   }
-  return JSON.stringify([...byAuthor.values()].sort((a, b) => b.total - a.total));
-}
-async function feed() {
-  if (feedCache.body && Date.now() - feedCache.at < FEED_TTL) return feedCache.body;
-  if (!feedCache.pending) {
-    feedCache.pending = fetchFeed()
-      .then((body) => { feedCache = { at: Date.now(), body, pending: null }; return body; })
-      .catch((e) => { feedCache.pending = null; if (feedCache.body) return feedCache.body; throw e; });
-  }
-  return feedCache.pending;
-}
-
-/* ───────── HTTP ───────── */
-const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url, "http://x");
-  try {
-    if (url.pathname === "/healthz") { res.writeHead(200, { "content-type": "text/plain" }); return res.end("ok"); }
-    if (url.pathname === "/api/feed") {
-      const body = await feed();
-      res.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
-      return res.end(body);
-    }
-    let path = normalize(decodeURIComponent(url.pathname)).replace(/^(\.\.[/\\])+/, "");
-    if (path.endsWith("/")) path += "index.html";
-    const file = join(ROOT, path);
-    if (!file.startsWith(ROOT)) { res.writeHead(403); return res.end(); }
-    const s = await stat(file).catch(() => null);
-    if (!s || !s.isFile()) { res.writeHead(404, { "content-type": "text/plain; charset=utf-8" }); return res.end("없는 페이지예요"); }
-    res.writeHead(200, { "content-type": TYPES[extname(file)] || "application/octet-stream", "cache-control": extname(file) === ".html" ? "no-cache" : "max-age=3600" });
-    res.end(await readFile(file));
-  } catch (e) {
-    console.error(req.url, e.message);
-    res.writeHead(502, { "content-type": "application/json" });
-    res.end(JSON.stringify({ error: "feed_unavailable" }));
-  }
-});
-
-/* ───────── 실시간 접속 ───────── */
-const wss = new WebSocketServer({ server, path: "/ws", maxPayload: 4096 });
-const peers = new Map();   // id -> { ws, name, presence }
-let seq = 0, dirty = false;
-const clean = (s, n) => (typeof s === "string" ? s.replace(/[\u0000-\u001f]/g, "").slice(0, n) : "");
-function sanitize(p) {
-  if (!p || typeof p !== "object") return null;
-  const num = (v, a, b) => (typeof v === "number" && isFinite(v) ? Math.min(b, Math.max(a, v)) : 0);
-  return {
-    f: [11, 12, 13, 14].includes(p.f) ? p.f : 11, x: num(p.x, 0, 56), y: num(p.y, 0, 34), h: num(p.h, -7, 7),
-    m: p.m ? 1 : 0, r: p.r ? 1 : 0, look: Math.floor(num(p.look, 0, 99)), jc: Math.floor(num(p.jc, 0, 1e9)), ac: Math.floor(num(p.ac, 0, 1e9)),
-    l: p.l ? 1 : 0, ly: num(p.ly, -7, 7), st: p.st ? 1 : 0, an: ["draw", "wave", "heart"].includes(p.an) ? p.an : null, as: Math.floor(num(p.as, 0, 1e7)), say: clean(p.say, 40) || null,
-  };
-}
-wss.on("connection", (ws) => {
-  const id = `p${++seq}`;
-  peers.set(id, { ws, name: "크루", presence: null });
-  ws.send(JSON.stringify({ t: "hello", id }));
-  dirty = true;
-  ws.on("message", (raw) => {
-    let msg; try { msg = JSON.parse(raw); } catch { return; }
-    const me = peers.get(id); if (!me) return;
-    if (msg.t === "name") { me.name = clean(msg.name, 16) || "크루"; dirty = true; }
-    if (msg.t === "p") { me.presence = sanitize(msg.p); dirty = true; }
+  // 평소에 워커가 죽으면 바로 다시 띄운다
+  cluster.on("exit", (w, code, sig) => {
+    if (w !== current || w.intentional || stopping) return;
+    log(`worker died (${code ?? sig}), restarting`);
+    current = null; setTimeout(() => boot().catch((e) => log("restart failed", e.message)), 1000);
   });
-  ws.on("close", () => { peers.delete(id); dirty = true; });
-  ws.on("error", () => {});
-});
-setInterval(() => { // 초당 12번, 바뀐 게 있을 때만 모두에게 전체 상태를 보낸다
-  if (!dirty) return; dirty = false;
-  const list = [...peers].filter(([, p]) => p.presence).map(([peer, p]) => ({ peer, name: p.name, presence: p.presence }));
-  const msg = JSON.stringify({ t: "peers", peers: list });
-  for (const { ws } of peers.values()) if (ws.readyState === 1) ws.send(msg);
-}, 83);
-setInterval(() => { for (const { ws } of peers.values()) if (ws.readyState === 1) ws.ping(); }, 25000);
+  async function boot() { current = await spawn(version.slice(0, 12)); log(`serving ${version.slice(0, 7)}`); }
 
-server.listen(PORT, () => console.log(`wooteco-metaverse on :${PORT}`));
+  // 새 커밋을 임시 폴더에 풀어 검사
+  async function check(sha) {
+    const tmp = await mkdtemp(join(tmpdir(), "wm-check-"));
+    try {
+      await run("sh", ["-c", `git archive ${sha} | tar -x -C "${tmp}"`], { cwd: DIR, env });
+      await run(process.execPath, ["scripts/check.mjs"], { cwd: tmp, env, timeout: 60000 });
+      return true;
+    } catch (e) { log(`check failed for ${sha.slice(0, 7)}:`, (e.stdout || e.stderr || e.message || "").toString().slice(-600)); return false; }
+    finally { await rm(tmp, { recursive: true, force: true }); }
+  }
+
+  async function deploy() {
+    if (busy || stopping) return; busy = true;
+    try {
+      await git("fetch", "--depth", "1", "-q", "origin", "main");
+      const next = await git("rev-parse", "origin/main");
+      if (next === version || bad.has(next)) return;
+      log(`new commit ${next.slice(0, 7)} (now ${version.slice(0, 7)})`);
+      if (!(await check(next))) { bad.add(next); return; }
+      const prev = version;
+      const pkgChanged = await git("diff", "--name-only", prev, next, "--", "package.json", "package-lock.json").then(Boolean, () => true);
+      const selfChanged = await git("diff", "--name-only", prev, next, "--", "server.js").then(Boolean, () => false);
+      await git("reset", "--hard", "-q", next);
+      if (pkgChanged) await run("npm", ["install", "--omit=dev", "--no-audit", "--no-fund"], { cwd: DIR, env, timeout: 180000 });
+      const old = current;
+      try {
+        current = await spawn(next.slice(0, 12)); version = next;
+        retire(old);
+        log(`switched to ${next.slice(0, 7)} without downtime${selfChanged ? " (server.js 변경은 다음 재시작 때 반영)" : ""}`);
+      } catch (e) {
+        log(`new worker failed (${e.message}) — rolling back to ${prev.slice(0, 7)}`);
+        current = old; bad.add(next);
+        await git("reset", "--hard", "-q", prev);
+        if (pkgChanged) await run("npm", ["install", "--omit=dev", "--no-audit", "--no-fund"], { cwd: DIR, env, timeout: 180000 }).catch(() => { });
+      }
+    } catch (e) { log("deploy error:", e.message); }
+    finally { busy = false; }
+  }
+
+  // systemctl stop/restart: 워커를 비우고 끝낸다
+  for (const sig of ["SIGTERM", "SIGINT"]) process.on(sig, () => {
+    stopping = true; for (const w of Object.values(cluster.workers)) retire(w);
+    setTimeout(() => process.exit(0), 12000).unref();
+    cluster.on("exit", () => { if (!Object.keys(cluster.workers).length) process.exit(0); });
+  });
+
+  await boot();
+  if (AUTO) { log(`watching origin/main every ${POLL / 1000}s`); setInterval(deploy, POLL); setTimeout(deploy, 3000); }
+}

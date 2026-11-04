@@ -6,9 +6,12 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "PORT=8080 node server.js"
+    "dev": "PORT=8080 node server.js",
+    "check": "node scripts/check.mjs"
   },
-  "engines": { "node": ">=18" },
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "ws": "8.18.0"
   },

@@ -1,6 +1,7 @@
 #!/bin/bash
 # EC2 사용자 데이터 (Amazon Linux 2023, arm64)
-# 1) Node·git·Caddy 설치 → 2) 저장소 받기 → 3) 앱(3000) + Caddy(80/443, campus.harudle.com 자동 HTTPS) → 4) 10분마다 main 반영
+# 1) Node·git·Caddy 설치 → 2) 저장소 받기 → 3) 앱(3000) + Caddy(80/443, campus.harudle.com 자동 HTTPS)
+# 배포는 앱 감독(server.js)이 맡는다: 20초마다 main을 보고, 검사 → 새 워커 → 옛 워커 비우기 순서로 무중단 교체
 set -euxo pipefail
 REPO=https://github.com/Woowa-8th-BE-IQ/wooteco-metaverse.git
 APP=/opt/wooteco-metaverse
@@ -22,10 +23,13 @@ Wants=network-online.target
 [Service]
 User=app
 WorkingDirectory=/opt/wooteco-metaverse
-Environment=PORT=3000 NODE_ENV=production
+Environment=PORT=3000 NODE_ENV=production DEPLOY_POLL_MS=20000
 ExecStart=/usr/bin/node server.js
 Restart=always
-RestartSec=3
+RestartSec=2
+# 재시작할 때도 워커가 처리 중인 요청을 마치고 내려가도록
+KillMode=mixed
+TimeoutStopSec=20
 
 [Install]
 WantedBy=multi-user.target
@@ -62,33 +66,5 @@ Restart=always
 WantedBy=multi-user.target
 UNIT
 
-cat >/usr/local/bin/wooteco-update <<'SH'
-#!/bin/bash
-# main 브랜치가 바뀌었으면 받아서 다시 시작
-cd /opt/wooteco-metaverse || exit 0
-before=$(git rev-parse HEAD)
-sudo -u app git fetch --depth 1 origin main -q && sudo -u app git reset --hard origin/main -q
-after=$(git rev-parse HEAD)
-if [ "$before" != "$after" ]; then sudo -u app npm install --omit=dev --no-audit --no-fund -q; systemctl restart wooteco-metaverse; fi
-SH
-chmod +x /usr/local/bin/wooteco-update
-
-cat >/etc/systemd/system/wooteco-update.service <<'UNIT'
-[Unit]
-Description=Pull wooteco-metaverse main
-[Service]
-Type=oneshot
-ExecStart=/usr/local/bin/wooteco-update
-UNIT
-cat >/etc/systemd/system/wooteco-update.timer <<'UNIT'
-[Unit]
-Description=Pull wooteco-metaverse every 10 minutes
-[Timer]
-OnBootSec=5min
-OnUnitActiveSec=10min
-[Install]
-WantedBy=timers.target
-UNIT
-
 systemctl daemon-reload
-systemctl enable --now wooteco-metaverse.service caddy.service wooteco-update.timer
+systemctl enable --now wooteco-metaverse.service caddy.service

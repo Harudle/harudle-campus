@@ -78,6 +78,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--brand);outline-
 .gbox li{display:grid;grid-template-columns:112px 1fr;align-items:center;gap:8px;line-height:1.3}
 .gbox li p{margin:0}.gbox li b{margin-right:6px}.gbox li span{white-space:nowrap}
 .gbox .btn{width:100%}
+#updateChip{position:fixed;z-index:35;top:calc(64px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);font-family:var(--hand);font-size:16px;font-weight:700;background:#FFD43B;color:#0E1E46;border:2px solid var(--ink);border-radius:999px;padding:6px 16px;box-shadow:2px 2px 0 var(--ink);cursor:pointer}
 #hint{border:1.5px solid var(--ink);position:fixed;z-index:4;left:max(12px,env(safe-area-inset-left,0px));bottom:calc(116px + env(safe-area-inset-bottom,0px));font-size:12px;color:var(--muted);background:rgba(255,255,255,.88);padding:4px 8px;border-radius:8px;max-width:calc(100% - 90px)}
 #skills{left:max(12px,env(safe-area-inset-left,0px));bottom:calc(70px + env(safe-area-inset-bottom,0px));gap:6px;max-width:calc(100% - 80px)}
 .skill{font-family:var(--hand);font-size:16px;background:var(--paper);color:var(--ink);border:2px solid var(--ink);border-radius:12px;padding:4px 10px;cursor:pointer;box-shadow:1px 2px 0 var(--ink);display:flex;align-items:center;gap:5px}
@@ -1298,11 +1299,15 @@ function wsRoom() {
   const saveName = () => { const v = nameInput.value.trim().slice(0, 16); if (v) { myName = v; LS.set(nameKey, v); send({ t: "name", name: v }); } nameForm.hidden = true; nameBtn.hidden = false; nameBtn.textContent = `이름: ${myName}`; myTag.textContent = myName; };
   nameForm.addEventListener("submit", (e) => { e.preventDefault(); saveName(); }); nameInput.addEventListener("blur", saveName);
   const send = (m) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m)); };
-  let myId = null;
+  let myId = null, firstV = null;
+  // 서버가 새 버전으로 바뀌면 페이지는 그대로 두고, 새로고침을 권하는 버튼만 띄운다
+  const showUpdate = () => { if (document.getElementById("updateChip")) return; const b = document.createElement("button"); b.id = "updateChip"; b.type = "button"; b.textContent = "새 버전이 나왔어요 · 새로고침"; b.onclick = () => location.reload(); document.body.append(b); };
   const connect = () => {
     ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
     ws.onopen = () => { retry = 800; send({ t: "name", name: myName }); if (last) send({ t: "p", p: last }); };
-    ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch { return; } if (m.t === "hello") myId = m.id; if (m.t === "peers" && handler) handler({ peers: m.peers.map((p) => ({ ...p, kind: "viewer", sameTab: p.peer === myId })) }); };
+    ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch { return; }
+      if (m.t === "hello") { myId = m.id; if (m.v) { if (!firstV) firstV = m.v; else if (m.v !== firstV) showUpdate(); } }
+      if (m.t === "bye") retry = 150; /* 서버가 새 버전으로 바뀌는 중: 곧바로 다시 붙는다 */ if (m.t === "peers" && handler) handler({ peers: m.peers.map((p) => ({ ...p, kind: "viewer", sameTab: p.peer === myId })) }); };
     ws.onclose = () => { setTimeout(connect, retry); retry = Math.min(10000, retry * 1.6); };
   };
   connect();
