@@ -14,21 +14,39 @@
 
 ## 구조
 
+Vite + React + TypeScript + React Three Fiber. 캐릭터는 [하루들 월드](https://github.com/Harudle/harudle-world)의 컴포넌트를 그대로 씁니다.
+
 ```
-server.js          감독: 포트를 쥐고 워커를 띄우며, main을 지켜보다 무중단으로 교체
-app.js             워커: 정적 파일 + /api/feed + /ws + /healthz(버전)
-scripts/check.mjs  배포 전 검사 (문법 · 층 배치 · 끼임)
-public/index.html  페이지 전체 (층 데이터 → 재료 → 월드 → 캐릭터 → 스킬 → UI → 실시간)
-deploy/userdata.sh EC2 사용자 데이터 (설치, 서비스 등록)
+index.html             화면 틀(HUD·패널 마크업)
+src/
+├─ main.tsx · App.tsx  R3F 캔버스 위에 엔진과 캐릭터를 올린다
+├─ harudle/            하루들 월드에서 가져온 캐릭터 (Avatar, Characters, toon, avatar 데이터)
+│                      Avatar.tsx만 스킬·점프 자세(pose)를 받도록 늘렸다
+├─ scene/Dolls.tsx     엔진이 정한 자리·자세로 캐릭터를 그린다
+├─ engine/
+│  ├─ world.ts         층 격자·배치·길찾기·끼임 탈출 (three.js 없이 돈다)
+│  ├─ engine.ts        가구·카메라·이동·스킬·실시간·화면 UI
+│  └─ dolls.ts         엔진 ↔ 캐릭터 다리
+└─ styles.css
+server.js              감독: 포트를 쥐고 워커를 띄우며, main을 지켜보다 무중단으로 교체
+app.js                 워커: dist/ + /api/feed + /ws + /healthz(버전)
+scripts/check.mjs      배포 전 검사 (빌드 최신 여부 · 문법 · 층 배치 · 끼임)
+dist/ · dist-check/    빌드 결과. 서버에는 빌드 도구가 없어서 저장소에 함께 올린다
 ```
+
+하루들 월드 캐릭터가 바뀌면 `src/harudle/`의 파일을 다시 복사하고, `Avatar.tsx`의 pose 부분만 다시 붙이면 됩니다.
 
 ## 로컬 실행
 
 ```bash
 npm install
-npm run dev     # http://localhost:8080 (로컬에선 자동 배포가 꺼져 있다)
+npm run serve   # 다른 창에서: 피드·실시간 서버 (http://localhost:8080)
+npm run dev     # 화면 개발 (Vite)
+npm run build   # tsc → dist/ → dist-artifact/(아티팩트용 한 파일) → 지문
 npm run check   # 배포 전 검사
 ```
+
+**커밋 전에 꼭 `npm run build`.** 소스와 dist가 다르면 서버가 배포하지 않습니다.
 
 ## 배포 (무중단)
 

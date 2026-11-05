@@ -1,6 +1,6 @@
 // 하루들 우테코 캠퍼스 앱 (워커 프로세스)
 // server.js(감독)가 띄운다. 새 버전이 오면 감독이 새 워커를 먼저 띄우고, 준비되면 이 워커를 비운다.
-// - public/ 정적 파일
+// - dist/ 정적 파일 (npm run build 결과, 저장소에 함께 올린다)
 // - GET /api/feed : 하루들 공개 피드를 작성자별로 묶어 중계 (4분 캐시)
 // - WS  /ws       : 같은 캠퍼스에 있는 크루 위치·말풍선·스킬 공유
 import http from "node:http";
@@ -11,12 +11,12 @@ import { WebSocketServer } from "ws";
 
 const PORT = Number(process.env.PORT || 80);
 const VERSION = (process.env.APP_VERSION || "dev").slice(0, 12);
-const ROOT = join(fileURLToPath(new URL(".", import.meta.url)), "public");
+const ROOT = join(fileURLToPath(new URL(".", import.meta.url)), "dist");
 const HARUDLE = "https://www.harudle.com";
 const FEED_TTL = 4 * 60 * 1000;   // 하루들 이미지 주소는 15분 뒤 만료되므로 그보다 짧게
 const PER_AUTHOR = 6;
 
-const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".json": "application/json", ".png": "image/png", ".svg": "image/svg+xml", ".ico": "image/x-icon" };
+const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css; charset=utf-8", ".woff2": "font/woff2", ".json": "application/json", ".png": "image/png", ".svg": "image/svg+xml", ".ico": "image/x-icon" };
 
 /* ───────── 하루들 공개 피드 ───────── */
 let feedCache = { at: 0, body: null, pending: null };
@@ -69,7 +69,7 @@ const server = http.createServer(async (req, res) => {
     if (!file.startsWith(ROOT)) { res.writeHead(403); return res.end(); }
     const s = await stat(file).catch(() => null);
     if (!s || !s.isFile()) { res.writeHead(404, { "content-type": "text/plain; charset=utf-8" }); return res.end("없는 페이지예요"); }
-    res.writeHead(200, { "content-type": TYPES[extname(file)] || "application/octet-stream", "cache-control": extname(file) === ".html" ? "no-cache" : "max-age=3600" });
+    res.writeHead(200, { "content-type": TYPES[extname(file)] || "application/octet-stream", "cache-control": extname(file) === ".html" ? "no-cache" : path.startsWith("/assets/") ? "public, max-age=31536000, immutable" : "max-age=3600" });
     res.end(await readFile(file));
   } catch (e) {
     console.error(req.url, e.message);
@@ -89,7 +89,7 @@ function sanitize(p) {
   return {
     f: [11, 12, 13, 14].includes(p.f) ? p.f : 11, x: num(p.x, 0, 56), y: num(p.y, 0, 34), h: num(p.h, -7, 7),
     m: p.m ? 1 : 0, r: p.r ? 1 : 0, look: Math.floor(num(p.look, 0, 99)), jc: Math.floor(num(p.jc, 0, 1e9)), ac: Math.floor(num(p.ac, 0, 1e9)),
-    l: p.l ? 1 : 0, ly: num(p.ly, -7, 7), st: p.st ? 1 : 0, an: ["draw", "wave", "heart"].includes(p.an) ? p.an : null, as: Math.floor(num(p.as, 0, 1e7)), say: clean(p.say, 40) || null,
+    l: p.l ? 1 : 0, ly: num(p.ly, -7, 7), st: p.st ? 1 : 0, av: typeof p.av === "string" && /^[0-9a-z]{7}([0-9A-F]{6}){6}$/.test(p.av) ? p.av : null, an: ["draw", "wave", "heart"].includes(p.an) ? p.an : null, as: Math.floor(num(p.as, 0, 1e7)), say: clean(p.say, 40) || null,
   };
 }
 wss.on("connection", (ws) => {

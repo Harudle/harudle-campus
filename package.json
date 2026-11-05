@@ -6,8 +6,10 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "PORT=8080 node server.js",
-    "check": "node scripts/check.mjs"
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json && vite build && vite build --mode artifact && node scripts/build-info.mjs",
+    "check": "node scripts/check.mjs",
+    "serve": "PORT=8080 node server.js"
   },
   "engines": {
     "node": ">=18"
@@ -15,5 +17,20 @@
   "dependencies": {
     "ws": "8.18.0"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@react-three/drei": "10.7.9",
+    "@react-three/fiber": "9.8.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/three": "0.187.0",
+    "@vitejs/plugin-react": "^6.2.1",
+    "esbuild": "*",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "three": "0.187.0",
+    "typescript": "7.0.2",
+    "vite": "8.3.6",
+    "vite-plugin-singlefile": "2.3.4"
+  }
 }
