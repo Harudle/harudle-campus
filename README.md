@@ -77,4 +77,4 @@ AWS 서울 리전 EC2 (t4g.small, Amazon Linux 2023, Project=harudle).
 | 실행하자마자 죽는 코드 | 새 워커만 죽고 옛 워커 유지, 작업 폴더 되돌림 |
 | 엘리베이터 홀이 막히는 배치 | 검사에서 걸러져 배포 안 됨 |
 
-층 배치를 바꾸려면 `public/index.html`의 `makeFloor()`만 고치면 됩니다.
+층 배치를 바꾸려면 `src/engine/world.ts`의 `makeFloor()`만 고치면 됩니다. (`public/`은 예전 서버용 단일 HTML 버전이 남아 있는 자리이고, 사이트 정적 파일은 `static/`에 둡니다.)

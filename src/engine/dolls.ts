@@ -1,7 +1,7 @@
 // 엔진(three.js)과 캐릭터(React)를 잇는 다리
 // 엔진은 위치·방향·자세만 정하고, 모양은 하루들 월드의 <Avatar>·<Doodle>이 그린다.
 import * as THREE from 'three'
-import type { AvatarConfig } from '../harudle/avatar'
+import type { AvatarConfig } from '../harudle/avatarData'
 
 export type DollAnim = {
   moving: boolean

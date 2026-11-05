@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 
-const INPUTS = ['index.html', 'src', 'public', 'vite.config.ts', 'tsconfig.json', 'package-lock.json']
+const INPUTS = ['index.html', 'src', 'static', 'vite.config.ts', 'tsconfig.json', 'package-lock.json']
 
 function walk(p, out) {
   if (!existsSync(p)) return

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="30 90 452 452">
+<rect x="30" y="90" width="452" height="452" rx="100" fill="#0E1E46"/>
+  <defs>
+    <clipPath id="front"><rect x="-200" y="386" width="912" height="400" transform="rotate(-12 256 386)"/></clipPath>
+  </defs>
+  <g transform="rotate(-12 256 386)">
+    <ellipse cx="256" cy="386" rx="210" ry="54" fill="none" stroke="#111118" stroke-width="42"/>
+    <ellipse cx="256" cy="386" rx="210" ry="54" fill="none" stroke="#FFFFFF" stroke-width="22"/>
+  </g>
+  <circle cx="256" cy="304" r="126" fill="#FFFFFF" stroke="#111118" stroke-width="16"/>
+  <path d="M118 262 C 98 196, 172 146, 258 148 C 344 150, 414 176, 404 218 C 396 250, 330 240, 258 242 C 190 244, 150 272, 118 262 Z" fill="#FFD43B" stroke="#111118" stroke-width="16" stroke-linejoin="round"/>
+  <path d="M266 112 C 270 124, 264 138, 256 148" fill="none" stroke="#111118" stroke-width="16" stroke-linecap="round"/>
+  <ellipse cx="212" cy="314" rx="13" ry="17" fill="#111118"/>
+  <ellipse cx="300" cy="314" rx="13" ry="17" fill="#111118"/>
+  <path d="M222 352 Q 256 384 290 352" fill="none" stroke="#111118" stroke-width="14" stroke-linecap="round"/>
+  <g clip-path="url(#front)">
+    <g transform="rotate(-12 256 386)">
+      <ellipse cx="256" cy="386" rx="210" ry="54" fill="none" stroke="#111118" stroke-width="42"/>
+      <ellipse cx="256" cy="386" rx="210" ry="54" fill="none" stroke="#FFFFFF" stroke-width="22"/>
+    </g>
+  </g>
+</svg>

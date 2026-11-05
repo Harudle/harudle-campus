@@ -8,6 +8,8 @@ export default defineConfig(({ mode }) => {
   const artifact = mode === 'artifact'
   return {
     plugins: [react(), ...(artifact ? [viteSingleFile()] : [])],
+    // public/은 예전 서버(단일 HTML 버전)가 읽는 자리라 비워 두지 않는다. 사이트 정적 파일은 static/
+    publicDir: 'static',
     build: {
       outDir: artifact ? 'dist-artifact' : 'dist',
       emptyOutDir: true,

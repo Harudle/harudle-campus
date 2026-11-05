@@ -1,7 +1,7 @@
 // 우테코 캠퍼스 엔진: 층·가구·카메라·이동·스킬·실시간·화면 UI
 // 원래 public/index.html 한 파일에 있던 스크립트를 옮겼다. 캐릭터 모양만 React(하루들 월드 컴포넌트)가 그린다.
 import * as THREE from "three";
-import { AVATAR_COLOR_PARTS, AVATAR_COLORS, AVATAR_OPTIONS, AVATAR_PRESETS, sanitizeAvatar, type AvatarConfig } from "../harudle/avatar";
+import { AVATAR_COLOR_PARTS, AVATAR_COLORS, AVATAR_OPTIONS, AVATAR_PRESETS, sanitizeAvatar, type AvatarConfig } from "../harudle/avatarData";
 import { dropDoll, makeDoll } from "./dolls";
 import { W, H, S, FH, WALL, DOLL, CEIL, VIEW, inside, INK, BRAND, NAVY, WEAK, HAND, narrow, clamp, lerp, rng, hash, wx, wz, tX, tY, floorY, FLOOR_INFO, makeFloor, FLOORS, WALK_THROUGH, ELEV_SPAWN, solid, inRect, STEP, bleacherLevel, heightAt, R_ME, bagSpot, applyLie, fits, nearestFree } from "./world";
 
