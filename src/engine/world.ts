@@ -11,7 +11,7 @@ export const FH = 4.6;                // 층 높이
 export const WALL = 0.9;              // 벽 높이(인형의 집처럼 낮게)
 export const DOLL = 1.12;
 // 들어가서 볼 때 천장 높이. 12층은 13층과 계단·오픈 천장으로 이어져 13층 바닥 밑까지 탁 트여 있다
-export const CEIL = { 11: 3.5, 12: 4.4, 13: 4.4, 14: 3.8 };   // 13층도 스타트랙 큰 화면이 들어가게 높게
+export const CEIL = { 11: 4.4, 12: 4.4, 13: 4.4, 14: 3.8 };   // 11층 큰 강의실·13층 스타트랙 큰 화면이 들어가게 높게
 export const VIEW = { mode: "top" };            // top 위에서 · third 들어가서(뒤에서) · first 1인칭
 export const inside = () => VIEW.mode !== "top";             // 말풍선을 띄울 키
 export const INK = 0x111118, BRAND = "#FFD43B", NAVY = "#0E1E46", WEAK = "#FFF6C7";
@@ -58,6 +58,8 @@ export function makeFloor(f) {
   F("elevbank", 29, 13, 1, 12, { face: "e", raw: true }); F("elevbank", 36, 13, 1, 12, { face: "w", raw: true });
   for (const y of [15, 18, 21]) { F("elev", 29, y, 1, 2, { turn: Math.PI / 2, raw: true }); calls.push({ x: 30, y, w: 1, h: 2 }); }   // 서쪽 벽, 동쪽을 본다 — 이것만 탄다
   // 동쪽 벽 2대는 안 쓴다: 문 앞을 X배너 현수막이 막고 있다(돌려 세워 홀 쪽, 서쪽을 본다)
+  // 2026 신입생 모집 포스터: 엘리베이터 사이 벽마다 한 장씩(모든 층)
+  for (const y of [17, 20]) F("poster", 29, y, 1, 1, { face: "e", at: 30 - .07 / S, raw: true }); F("poster", 36, 18.5, 1, 1, { face: "w", at: 36 + .07 / S, raw: true });   // 엘리베이터 석재 벽 면에
   [16, 20].forEach((y, i) => { F("elev", 36, y, 1, 2, { turn: -Math.PI / 2, raw: true }); F("xbanner", 35, y, 1, 2, { style: i, turn: Math.PI, raw: true }); });   // 홀에서 동쪽 벽을 보면 왼쪽(북)이 검은 배너, 오른쪽이 흰 배너(사진 그대로)
 
   /* 오른쪽 기둥: 공조실 · 화장실(못 들어가는 방) */
@@ -80,7 +82,8 @@ export function makeFloor(f) {
     F("pillar", 7, 10, 1, 1); F("pillar", 7, 17, 1, 1);   // 천장까지 닿는 콘크리트 기둥
     // 옆 강의실 쪽(남쪽)으로 넓어진 가운데 띠까지 늘렸다(넓힌 뒤 좌표, raw). 창가(서쪽)에 큰 화면 둘, 책상·의자는 모두 화면을 본다
     Z(1, 1, 14, 28, "큰 강의실", "공통 수업과 외부 강연이 열리는 곳. 창가의 큰 화면 두 개를 보며 크루 전원이 한자리에 모여요.", { raw: true });
-    for (const y of [4, 18]) { F("screen", 2, y, 1, 7, { raw: true }); F("lectern", 2, y + 8, 1, 1, { raw: true }); }
+    for (const y of [4, 18]) { F("screen", 2, y, 1, 7, { raw: true, big: true });   // 스타트랙 화면과 같은 크기: 바닥 바로 위부터 천장 바로 아래까지
+      F("lectern", 2, y + 8, 1, 1, { raw: true }); }
     for (const x of [5, 8, 11]) for (const y of [2, 6, 10, 14, 18, 22, 26]) F("ltable", x, y, 1, 3, { turn: Math.PI / 2, raw: true });
     Z(16, 1, 17, 10, "코워킹 존", "바퀴 달린 테이블과 천장에서 내려오는 콘센트. 인원에 맞춰 붙였다 떼었다 해요.", { tint: "#FFF8DC" });
     for (const [x, y] of [[17, 3], [21, 3], [17, 7], [21, 7]]) F("wtable", x, y, 2, 2);
@@ -182,6 +185,7 @@ export function makeFloor(f) {
     F("arcplanter", 23, 14, 4, 4);
     // 스타트랙과 엘리베이터 홀 사이 복도(넓힌 뒤 좌표): 왼쪽은 붉은 벽돌 벽(점검문·소화전), 벽을 따라 걷는 길,
     // 스타트랙 쪽엔 가운데 화분이 있는 스테인리스 링 테이블, 북쪽엔 바 스툴 높은 원탁, 벽에 기댄 바퀴 달린 화이트보드
+    F("poster", 28, 22.5, 1, 1, { face: "w", at: 28.5 - .05 / S, raw: true });   // 스타트랙 쪽 벽돌 벽에도 모집 포스터
     F("walldeco", 27, 17, 1, 2, { item: "door", raw: true }); F("walldeco", 27, 21, 1, 1, { item: "hydrant", raw: true }); F("walldeco", 27, 24, 1, 2, { item: "door", raw: true });
     F("whiteboard", 26, 14, 1, 1, { raw: true });
     F("ringtable", 22, 19, 3, 3, { raw: true });
@@ -251,7 +255,14 @@ export function makeFloor(f) {
 export const FLOORS: Record<number, Floor> = {}; for (const f of [11, 12, 13, 14]) FLOORS[f] = makeFloor(f);
 
 /* 충돌 격자 · 단 높이 */
-export const WALK_THROUGH = new Set(["walldeco", "linelight", "bleacher", "arcbleacher", "flight", "brickdeck", "pebbles", "redsteps", "mirrorball", "trampoline", "ballpit"]);
+// 점프로 올라설 수 있는 가구의 윗면 높이(m). 점프는 0.7m쯤까지 닿는다. 여기 없는 가구(책장·냉장고·벽 같은 것)는 못 올라간다
+export const TOPS: Record<string, number> = {
+  table: .44, bigtable: .44, desk: .44, ltable: .44, mtable: .44, wtable: .42, duo: .44, pairrow: .44, pairdesk: .44, focusdesk: .44, solo: .44,
+  walltable: .47, round: .44, bistro: .47, boardgame: .44, coffee: .3, bench: .3, sofa: .48, winbench: .45, halfround: .5, ringtable: .48,
+  counter: .58, kitchenrow: .62, lowcounter: .62, island: .56, hightable: .66, mcdesk: .5, lectern: .66, pingpong: .66,
+  greenbox: .55, planter: .3, plant: .36, crates: .5,
+};
+export const WALK_THROUGH = new Set(["poster", "walldeco", "linelight", "bleacher", "arcbleacher", "flight", "brickdeck", "pebbles", "redsteps", "mirrorball", "trampoline", "ballpit"]);
 export const ELEV_SPAWN: [number, number] = [32.5, 15.5];   // 엘리베이터에서 내리는 자리(칸 한가운데)
 for (const fl of Object.values(FLOORS)) {
   const g = new Uint8Array(W * H); const set = (x, y) => { if (x >= 0 && y >= 0 && x < W && y < H) g[y * W + x] = 1; };
@@ -272,6 +283,12 @@ for (const fl of Object.values(FLOORS)) {
     if (o.kind === "stadium") { for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) if (stadiumWall(o, x + .5, y + .5)) set(x, y); continue; }
     if (WALK_THROUGH.has(o.kind)) continue; for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) set(x, y); }
   fl.grid = g;
+  // 점프해서 올라설 수 있는 가구: 칸마다 윗면 높이. 올라설 수 없는 것과 겹친 칸은 0(벽처럼 막힌다)
+  const top = new Float32Array(W * H);
+  for (const o of fl.furn) { const h = TOPS[o.kind]; if (!h || o.lift) continue; for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) if (x >= 0 && y >= 0 && x < W && y < H) top[y * W + x] = Math.max(top[y * W + x], h); }
+  for (const o of fl.furn) { if (TOPS[o.kind] || WALK_THROUGH.has(o.kind)) continue; for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) if (x >= 0 && y >= 0 && x < W && y < H && g[y * W + x]) top[y * W + x] = 0; }
+  for (let i = 0; i < W * H; i++) if (fl.wgrid[i]) top[i] = 0;
+  fl.top = top;
 }
 // 엘리베이터에서 걸어서 갈 수 있는 칸: 크루 배치와 끼임 탈출에 쓴다
 for (const fl of Object.values(FLOORS)) {
@@ -304,6 +321,17 @@ export const flightSteps = (o) => (o.h0 === o.h1 ? 1 : (o.dir === "e" ? o.w : o.
 export function flightHeight(o, x, y) {
   const n = flightSteps(o), t = o.dir === "e" ? (x - o.x) / o.w : (y - o.y) / o.h, i = Math.min(n - 1, Math.floor(t * n));
   return Math.max(.05, o.h0 + (o.h1 - o.h0) * (i + 1) / n);
+}
+// 가구 위에 올라선 높이(몸 한가운데 칸 기준). 0이면 바닥
+export const topAt = (fl, x, y) => { x = Math.floor(x); y = Math.floor(y); return x < 0 || y < 0 || x >= W || y >= H ? 0 : fl.top[y * W + x]; };
+// 내가 지금 발 높이(feet)에서 (x, y)로 갈 수 있는지: 벽·못 오르는 가구는 막고, 오를 수 있는 가구는 발이 윗면 가까이 닿아야 올라선다
+export const CLIMB = .26;   // 그냥 걸어서 넘는 턱(객석 한 단 정도)
+export function canStand(fl, x, y, feet) {
+  for (const [cx, cy] of [[x - R_ME, y - R_ME], [x + R_ME, y - R_ME], [x - R_ME, y + R_ME], [x + R_ME, y + R_ME]]) {
+    const tx = Math.floor(cx), ty = Math.floor(cy); if (tx < 0 || ty < 0 || tx >= W || ty >= H) return false;
+    const i = ty * W + tx; if (!fl.grid[i]) continue; const t = fl.top[i]; if (!t || t > feet + CLIMB) return false;
+  }
+  return true;
 }
 export function heightAt(fl, x, y) {
   for (const o of fl.furn) {

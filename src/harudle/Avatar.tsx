@@ -392,7 +392,7 @@ function BrushArm({ color, motion }: { color: string; motion?: RefObject<WalkMot
 }
 
 /** 우테코 캠퍼스 확장: 스킬과 점프 자세. 원본 Avatar의 모양은 그대로 두고 팔·소품만 바꾼다. */
-export type AvatarPose = { act: 'draw' | 'wave' | 'heart' | null; waving: boolean; air: boolean }
+export type AvatarPose = { act: 'draw' | 'wave' | 'heart' | 'laptop' | 'coffee' | null; waving: boolean; air: boolean }
 
 type AvatarProps = {
   config: AvatarConfig
@@ -411,19 +411,36 @@ export function Avatar({ config, motion, pose }: AvatarProps) {
   const armL = useRef<THREE.Group>(null)
   const armR = useRef<THREE.Group>(null)
   const restR = holdingSide ? 1 : 0.35
+  const actRef = useRef<{ act: string | null; t0: number }>({ act: null, t0: 0 })   // 동작이 시작된 시각(단계가 있는 동작용)
 
   // 네 컷 그리기는 그림판을 들고, 인사·하트·점프는 팔을 든다. 그림판을 원래 든 캐릭터는 팔을 들 때 잠깐 내려놓는다.
   useFrame(({ clock }) => {
     const p = pose?.current
     const armsUp = !!p && (p.act === 'wave' || p.act === 'heart' || p.waving || p.air)
-    const boardOn = p?.act === 'draw' || (holdingBoard && !armsUp)
+    const busy = p?.act === 'laptop' || p?.act === 'coffee'   // 노트북·커피를 쓰는 동안엔 원래 든 것을 내려놓는다
+    const boardOn = p?.act === 'draw' || (holdingBoard && !armsUp && !busy)
     if (boardSet.current) boardSet.current.visible = boardOn
     if (freeSet.current) freeSet.current.visible = !boardOn
-    if (heldItem.current) heldItem.current.visible = !armsUp
+    if (heldItem.current) heldItem.current.visible = !armsUp && !busy
     const l = armL.current
     const r = armR.current
     if (!l || !r) return
-    if (p?.act === 'heart') { l.rotation.z = -2.7; r.rotation.z = 2.7 }
+    l.rotation.x = 0; r.rotation.x = 0
+    if (p?.act !== 'coffee' && actRef.current.act) actRef.current = { act: null, t0: 0 }
+    if (p?.act === 'laptop') { // 두 손을 앞으로 뻗어 자판을 번갈아 톡톡
+      const tt = clock.elapsedTime * 14
+      l.rotation.z = -0.22; r.rotation.z = 0.22
+      l.rotation.x = -1.15 + Math.max(0, Math.sin(tt)) * 0.18; r.rotation.x = -1.15 + Math.max(0, Math.sin(tt + Math.PI)) * 0.18
+    }
+    else if (p?.act === 'coffee') { // 컵을 든 오른팔: 들어 올려 입에 대고(빨대 쪽쪽 따라 살짝 까딱), 다 마시면 내린다
+      if (actRef.current.act !== 'coffee') actRef.current = { act: 'coffee', t0: clock.elapsedTime }
+      const e = clock.elapsedTime - actRef.current.t0
+      const ease = (x: number) => 1 - (1 - x) ** 3
+      const k = e < 0.7 ? ease(e / 0.7) : e < 3.4 ? 1 : e < 4 ? 1 - ease((e - 3.4) / 0.6) : 0   // 엔진의 컵 위치와 같은 박자
+      const sip = e > 0.7 && e < 3.4 ? Math.sin((e - 0.7) * 9) * 0.04 : 0
+      l.rotation.z = -0.35; r.rotation.z = 0.35 - k * 0.55; r.rotation.x = -k * 2.25 + sip
+    }
+    else if (p?.act === 'heart') { l.rotation.z = -2.7; r.rotation.z = 2.7 }
     else if (p?.act === 'wave' || p?.waving) { l.rotation.z = -0.35; r.rotation.z = 2.5 + Math.sin(clock.elapsedTime * 12) * 0.35 }
     else if (p?.air) { l.rotation.z = -1.3; r.rotation.z = 1.3 }
     else { l.rotation.z = -0.35; r.rotation.z = restR }

@@ -31,9 +31,6 @@ body{background:var(--ground);color:var(--ink);font-family:var(--body);overflow:
 button.chip{cursor:pointer}
 #floorHud{top:calc(12px + env(safe-area-inset-top,0px));left:max(12px,env(safe-area-inset-left,0px));max-width:calc(100% - 24px)}
 #floorBadge b{font-size:24px;color:var(--brand-strong);margin-right:6px}
-.tabs{display:flex;gap:4px}
-.tabs button{font-family:var(--hand);font-size:17px;background:var(--paper);color:var(--ink);border:2px solid var(--ink);border-radius:10px;padding:2px 9px;cursor:pointer;box-shadow:1px 2px 0 var(--ink)}
-.tabs button[aria-current="true"]{background:var(--brand);color:var(--brand-strong)}
 button:focus-visible,input:focus-visible{outline:3px solid var(--brand);outline-offset:2px}
 #topRight{top:calc(12px + env(safe-area-inset-top,0px));right:max(12px,env(safe-area-inset-right,0px));justify-content:flex-end;max-width:calc(100% - 24px)}
 @media (max-width:640px){#topRight{top:calc(96px + env(safe-area-inset-top,0px))}}
@@ -116,3 +113,20 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--brand);outline-
 #loading small{display:block;font-family:var(--body);font-size:13px;color:#C9D2EA;text-align:center;margin-top:6px}
 @media (prefers-reduced-motion:reduce){#panel,#fade,#zoneToast,#loading{transition:none}}
 #scene{position:fixed;inset:0}
+
+/* 인벤토리(Tab): 칸 아홉 개 핫바(기능은 마인크래프트), 모양은 다른 HUD와 같은 종이 + 먹선 */
+#inv{position:fixed;z-index:24;left:50%;bottom:calc(150px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--paper);border:3px solid var(--ink);border-radius:18px;box-shadow:3px 4px 0 var(--ink);padding:10px 14px 12px;font-family:var(--hand)}
+#inv[hidden]{display:none!important}
+#inv h4{margin:0 0 8px;font-size:22px;display:flex;align-items:baseline;gap:8px}
+#inv h4 small{font-family:var(--body);font-size:12px;color:var(--muted)}
+#invGrid{display:grid;grid-template-columns:repeat(9,74px);gap:6px}
+#inv .slot{position:relative;width:74px;height:84px;background:var(--paper-2);border:2px solid var(--ink);border-radius:14px;box-shadow:1px 2px 0 var(--ink);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:8px 4px 4px;font:inherit;color:var(--ink);cursor:pointer;transition:transform .12s}
+#inv .slot svg{width:36px;height:36px;flex:none}
+#inv .slot .nm{font-size:13px;line-height:1.05;margin-top:2px;text-align:center;word-break:keep-all}
+#inv .slot .tip{font-family:var(--body);font-size:9.5px;color:var(--muted);margin-top:1px;text-align:center;line-height:1.1}
+#inv .slot kbd{position:absolute;left:5px;top:4px;font-family:var(--body);font-size:10px;background:var(--brand-weak);border:1px solid var(--line);border-radius:5px;padding:0 4px;color:var(--brand-strong)}
+#inv button.slot:hover,#inv button.slot:focus-visible{background:var(--brand);outline:none;transform:translateY(-2px)}
+#inv button.slot:hover .tip,#inv button.slot:focus-visible .tip{color:var(--brand-strong)}
+#inv .slot.vacant{background:transparent;border:2px dashed #D3D0DA;box-shadow:none;cursor:default}
+@media (max-width:640px){#invGrid{grid-template-columns:repeat(5,60px)}#inv .slot{width:60px;height:74px}#inv .slot .tip{display:none}}
+@media (prefers-reduced-motion:reduce){#inv .slot{transition:none}}
