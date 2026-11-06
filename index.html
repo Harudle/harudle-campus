@@ -56,7 +56,8 @@
     <li><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span>걷기</li>
     <li><span><kbd>Shift</kbd></span>달리기</li>
     <li><span><kbd>Space</kbd></span>점프 (두 번: 더블)</li>
-    <li><span><kbd>F</kbd></span>상호작용 · 폭죽</li>
+    <li><span><kbd>F</kbd></span>상호작용</li>
+    <li><span><kbd>C</kbd></span>폭죽</li>
     <li><span><kbd>Enter</kbd></span>채팅</li>
     <li><span><kbd>Tab</kbd></span>인벤토리</li>
     <li><span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></span>네 컷 · 인사 · 하트</li>
@@ -87,12 +88,35 @@
 </div>
 <div class="hud" id="camBtns"><button class="chip" id="viewBtn" aria-label="시점 바꾸기">들어가기</button><button class="chip" id="rotL" aria-label="왼쪽으로 돌리기">⟲</button><button class="chip" id="rotR" aria-label="오른쪽으로 돌리기">⟳</button></div>
 <button id="act" class="btn" hidden>대화하기</button>
-<div class="hud" id="bottom">
-  <form id="sayForm" autocomplete="off">
-    <input id="sayInput" maxlength="40" placeholder="Enter로 채팅 · 말풍선으로 한마디" aria-label="말풍선 메시지">
-    <button class="btn" type="submit">말하기</button>
-  </form>
-</div>
+<!-- 게더처럼 오른쪽에 모은 사이드: 아이콘 레일(채팅 · 사람) + 펼친 패널 -->
+<button type="button" id="sideShow" title="사이드바 펼치기 (\)" aria-label="사이드바 펼치기"><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><rect x="2.5" y="3.5" width="15" height="13" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12.5 3.5v13" stroke="currentColor" stroke-width="1.6"/><path d="M8.5 8l-2 2 2 2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span>채팅 · 크루</span><b id="sideShowBadge"></b></button>
+<aside id="side" aria-label="채팅과 크루">
+  <button type="button" id="sideTab" aria-label="사이드바 접기/펼치기" title="사이드바 접기 (\)"><span class="chev">›</span><b id="sideTabBadge"></b></button>
+  <div class="spanel">
+    <header class="shead"><nav class="srail" role="tablist">
+      <button type="button" data-view="chat" aria-label="채팅" title="채팅 (Enter)">💬 채팅<b id="railChatBadge"></b></button>
+      <button type="button" data-view="people" aria-label="같이 있는 크루" title="같이 있는 크루">👥 크루<b class="cnt" id="plistCnt">1</b></button>
+    </nav><button type="button" id="sideHide" title="사이드바 접기 (\)" aria-label="사이드바 접기"><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><rect x="2.5" y="3.5" width="15" height="13" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12.5 3.5v13" stroke="currentColor" stroke-width="1.6"/><path d="M6.5 8l2 2-2 2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button><h3 id="sideTitle" hidden>채팅</h3></header>
+    <section class="sview" data-view="chat" id="chat">
+      <div class="ctabs" role="tablist">
+        <button type="button" role="tab" data-tab="near" aria-selected="true">근처<b></b></button>
+        <button type="button" role="tab" data-tab="all" aria-selected="false">전체<b></b></button>
+        <button type="button" role="tab" data-tab="dm" aria-selected="false">개인<b></b></button>
+      </div>
+      <div class="cdm" id="chatDmBar" hidden><label>받는 사람 <select id="chatDmTo"></select></label></div>
+      <ol id="chatLog" aria-live="polite"></ol>
+      <form id="sayForm" autocomplete="off">
+        <input id="sayInput" maxlength="200" placeholder="Enter로 채팅" aria-label="채팅 메시지">
+        <button type="submit" aria-label="보내기">➤</button>
+      </form>
+    </section>
+    <section class="sview" data-view="people" id="people" hidden>
+      <label class="psearch"><span aria-hidden="true">⌕</span><input id="plistSearch" placeholder="이름으로 찾기" aria-label="크루 찾기"></label>
+      <p class="pcap" id="plistTitle">같이 있는 크루</p>
+      <ol id="plistBody"></ol>
+    </section>
+  </div>
+</aside>
 
 <aside id="panel" aria-label="크루 피드" aria-hidden="true">
   <div class="ph">
@@ -134,7 +158,7 @@
     <button class="btn ghost" type="button" id="menuGuide">조작법 보기</button>
     <button class="btn" type="button" id="menuClose">게임으로 돌아가기</button>
   </div>
-  <p class="mhint kb-only">Esc로 닫고 돌아가요</p>
+  <p class="mhint kb-only">Esc로 닫고 돌아가요 · 오른쪽 크루 목록에서 따라가기를 눌러도 돼요</p>
 </div></div>
 <div id="profile" class="modal" hidden><form class="box" id="profileForm" autocomplete="off">
   <h4>프로필 수정</h4>

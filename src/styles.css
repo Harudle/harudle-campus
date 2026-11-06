@@ -235,3 +235,103 @@ body.touch .gbox ul.glist.kb-only{display:none}
 .ezhint{margin:2px 0 0;font-size:12px;opacity:.6}
 .ezmode .btn[aria-pressed="true"]{background:#7B5BD6;color:#fff}
 .ezwrap.erasing #ezCursor{background:rgba(255,255,255,.6)!important;border:2px dashed #111118!important}
+
+body:has(#menu:not([hidden])) #side{z-index:31}   /* Esc 설정창이 떠 있어도 목록은 위에 떠서 따라가기를 누를 수 있다 */
+
+#plistBody button.dm{flex:0 0 auto;border:0;background:transparent;font-size:14px;cursor:pointer;padding:2px;opacity:.7}
+#plistBody button.dm:hover{opacity:1}
+
+/* ───── 크루 목록 줄: 아바타 · 이름 · 층 · 따라가기 ───── */
+#plistBody{list-style:none;margin:0;scrollbar-width:thin}
+#plistBody li{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:12px;transition:background .15s}
+#plistBody li:hover{background:rgba(123,91,214,.07)}
+#plistBody li.mine{background:linear-gradient(90deg,rgba(255,212,59,.22),rgba(255,212,59,.06))}
+#plistBody .av{flex:0 0 30px;height:30px;border-radius:50%;display:grid;place-items:center;font:700 12px var(--pf);color:#1B1A22;box-shadow:0 0 0 2px #fff,0 1px 4px rgba(0,0,0,.15)}
+#plistBody li.same .av{box-shadow:0 0 0 2px #fff,0 0 0 4px rgba(123,91,214,.45)}
+#plistBody .who{flex:1;min-width:0;display:grid;gap:1px}
+#plistBody .nm{font:600 13.5px/1.25 var(--pf);letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#plistBody .nm em{font-style:normal;font-weight:700;font-size:10px;color:#7B5BD6;background:rgba(123,91,214,.12);padding:1px 5px;border-radius:999px;margin-left:4px;vertical-align:1px}
+#plistBody .sub{font:500 11.5px/1.2 var(--pf);color:#7A7788;display:flex;gap:6px;align-items:center}
+#plistBody .fl{font:700 10.5px/1 var(--pf);padding:3px 6px;border-radius:999px;background:#EEECF4;color:#5B5670}
+#plistBody .fl.here{background:rgba(123,91,214,.14);color:#6A49D0}
+#plistBody button.fw{flex:0 0 auto;border:1px solid rgba(123,91,214,.35);border-radius:999px;background:#fff;color:#6A49D0;font:600 11.5px var(--pf);padding:5px 10px;cursor:pointer;transition:all .15s}
+#plistBody button.fw:hover{background:#7B5BD6;color:#fff;border-color:#7B5BD6}
+#plistBody button.fw[aria-pressed="true"]{background:#7B5BD6;color:#fff;border-color:#7B5BD6;box-shadow:0 2px 8px rgba(123,91,214,.4)}
+#plistBody .empty{justify-content:center;color:#7A7788;font:500 12px var(--pf);padding:10px 8px 6px}
+
+
+.tart.tkeys{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;padding:14px 16px;background:#FFFBEA;border:2px solid var(--ink);border-radius:14px;font:600 13px "Pretendard",sans-serif}
+.tart.tkeys span{display:flex;align-items:center;gap:7px;white-space:nowrap}
+.tart.tkeys kbd{min-width:24px;padding:1px 6px;border:1.5px solid var(--ink);border-radius:6px;background:#fff;font:700 11px "Pretendard",sans-serif;text-align:center}
+
+/* ───── 오른쪽 사이드: 화면 오른쪽 끝에 붙은 패널(위에 채팅 · 크루 전환) ───── */
+#online{display:none}
+body:not(.touch) #topRight{display:none}   /* 이름은 Esc → 프로필 수정에서 바꾼다 */
+#side{--pf:"Pretendard","Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;position:fixed;z-index:6;top:0;right:0;bottom:0;width:320px;display:flex;flex-direction:column;font-family:var(--pf);color:#1B1A22;
+  background:rgba(255,255,255,.92);-webkit-backdrop-filter:blur(18px) saturate(1.3);backdrop-filter:blur(18px) saturate(1.3);border-left:1px solid rgba(17,17,24,.08);box-shadow:-8px 0 24px rgba(40,24,90,.08);padding-top:env(safe-area-inset-top,0px)}
+.spanel{display:flex;flex-direction:column;flex:1;min-height:0}
+.shead{padding:12px 12px 10px}
+.srail{display:flex;gap:4px;padding:3px;background:#F2F0F7;border-radius:11px}
+.srail button{position:relative;flex:1;height:34px;border:0;border-radius:9px;background:transparent;font:600 13px var(--pf);color:#7A7788;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px}
+.srail button[aria-pressed="true"]{background:#fff;color:#1B1A22;box-shadow:0 1px 3px rgba(17,17,24,.12)}
+.srail button b{min-width:17px;padding:0 5px;border-radius:999px;background:#F15B5B;color:#fff;font:700 10.5px/1.5 var(--pf);display:none}
+.srail button b.on,.srail button b.cnt{display:inline-block}
+.srail button b.cnt{background:#E7E2F8;color:#6A49D0}
+.srail button[aria-pressed="true"] b.cnt{background:#7B5BD6;color:#fff}
+.sview{display:flex;flex-direction:column;min-height:0;flex:1}
+.sview[hidden]{display:none}
+#chat .ctabs{display:flex;gap:16px;padding:0 14px;border-bottom:1px solid rgba(17,17,24,.07)}
+#chat .ctabs button{border:0;background:transparent;padding:6px 0 9px;margin-bottom:-1px;border-bottom:2px solid transparent;font:600 13px var(--pf);color:#8A8799;cursor:pointer;display:flex;align-items:center;gap:5px}
+#chat .ctabs button[aria-selected="true"]{color:#1B1A22;border-bottom-color:#7B5BD6}
+#chat .ctabs b{min-width:16px;padding:1px 5px;border-radius:999px;background:#F15B5B;color:#fff;font:700 10px/1.4 var(--pf);display:none}
+#chat .ctabs b.on{display:inline-block}
+#chat .cdm{padding:8px 14px 0;font:500 12px var(--pf);color:#6B6880}
+#chat .cdm select{font:600 12.5px var(--pf);border:1px solid rgba(17,17,24,.15);border-radius:8px;padding:3px 6px;margin-left:4px;max-width:190px;background:#fff}
+#chatLog{list-style:none;margin:0;padding:10px 14px;flex:1 1 auto;min-height:0;height:auto;overflow:auto;display:flex;flex-direction:column;gap:8px;scrollbar-width:thin}
+#chatLog li{font:500 13.5px/1.45 var(--pf);word-break:break-word}
+#chatLog .who{display:block;font:700 12px var(--pf);color:#4A4560;cursor:pointer}
+#chatLog .who:hover{text-decoration:underline}
+#chatLog .meta{font:500 10.5px var(--pf);color:#A09DB0;margin-left:6px}
+#chatLog .mine .who{color:#7B5BD6}
+#chatLog .sys{color:#9A97A8;font-size:12px;text-align:center}
+#chatLog .empty{color:#9A97A8;font-size:12.5px;text-align:center;margin:auto;padding:20px 0}
+#side #sayForm{display:flex;flex:0 0 auto;gap:6px;padding:10px 12px 12px;border-top:1px solid rgba(17,17,24,.06)}
+#side #sayInput{flex:1;min-width:0;height:38px;font:500 13.5px var(--pf);border:1px solid rgba(17,17,24,.12);border-radius:10px;padding:0 12px;background:#fff;outline:none}
+#side #sayInput:focus{border-color:#7B5BD6;box-shadow:0 0 0 3px rgba(123,91,214,.16)}
+#side #sayForm button{flex:0 0 38px;height:38px;border:0;border-radius:10px;background:#7B5BD6;color:#fff;font-size:14px;cursor:pointer}
+.psearch{display:flex;align-items:center;gap:7px;margin:0 12px 8px;padding:0 10px;height:34px;border:1px solid rgba(17,17,24,.1);border-radius:10px;background:#fff;color:#9A97A8}
+.psearch:focus-within{border-color:#7B5BD6;box-shadow:0 0 0 3px rgba(123,91,214,.14)}
+.psearch input{flex:1;min-width:0;border:0;outline:0;background:transparent;font:500 13px var(--pf);color:#1B1A22}
+#people .pcap{margin:0;padding:0 14px 6px;font:600 11.5px var(--pf);color:#8A8799}
+#people #plistBody{flex:1;overflow:auto;padding:0 6px 10px}
+body.sideOpen:not(.touch) #camBtns{right:332px}
+body:not(.touch) #zoneToast{left:calc(50% - 160px)}
+body.touch #side{display:none}
+body.touch.chatting #side{display:flex;top:calc(110px + env(safe-area-inset-top,0px));bottom:auto;left:10px;right:10px;width:auto;height:48vh;border:1px solid rgba(17,17,24,.08);border-radius:16px;overflow:hidden}
+body.touch.chatting .spanel{width:auto;flex:1}
+body.touch.chatting #chatLog{height:26vh}
+@media (max-width:640px){#side{width:280px}}
+/* 사이드바 접기: 패널 왼쪽 가장자리의 손잡이. 접으면 손잡이만 화면 오른쪽 끝에 남는다 */
+#side{transition:transform .22s ease}
+#side.tucked{transform:translateX(100%)}
+#sideTab{position:absolute;left:-26px;top:50%;transform:translateY(-50%);width:26px;height:56px;border:1px solid rgba(17,17,24,.08);border-right:0;border-radius:10px 0 0 10px;background:rgba(255,255,255,.92);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);box-shadow:-4px 0 12px rgba(40,24,90,.08);cursor:pointer;display:grid;place-items:center;padding:0;color:#6B6880}
+#sideTab:hover{color:#1B1A22}
+#sideTab .chev{font-size:16px;line-height:1;transition:transform .22s}
+#side.tucked #sideTab .chev{transform:rotate(180deg)}
+#sideTab b{position:absolute;top:-6px;left:-6px;min-width:17px;padding:0 5px;border-radius:999px;background:#F15B5B;color:#fff;font:700 10px/1.6 var(--pf);display:none}
+#sideTab b.on{display:inline-block}
+body.touch #sideTab{display:none}
+body.sideOpen.sideTucked:not(.touch) #camBtns{right:max(12px,env(safe-area-inset-right,0px))}
+body.sideTucked:not(.touch) #zoneToast{left:50%}
+/* 사이드바 접기 버튼(헤더 오른쪽)과, 접었을 때 오른쪽 위에 뜨는 펼치기 버튼 */
+.shead{display:flex;align-items:center;gap:8px}
+.shead .srail{flex:1}
+#sideHide{flex:0 0 34px;height:34px;border:0;border-radius:9px;background:transparent;color:#6B6880;cursor:pointer;display:grid;place-items:center}
+#sideHide:hover{background:#F2F0F7;color:#1B1A22}
+#sideShow{position:fixed;z-index:6;top:calc(12px + env(safe-area-inset-top,0px));right:12px;height:38px;padding:0 12px;border:1px solid rgba(17,17,24,.08);border-radius:11px;background:rgba(255,255,255,.92);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);box-shadow:0 6px 18px rgba(40,24,90,.12);
+  display:none;align-items:center;gap:7px;font:600 13px "Pretendard","Apple SD Gothic Neo",sans-serif;color:#1B1A22;cursor:pointer}
+#sideShow:hover{background:#fff}
+#sideShow b{min-width:17px;padding:0 5px;border-radius:999px;background:#F15B5B;color:#fff;font:700 10.5px/1.6 "Pretendard",sans-serif;display:none}
+#sideShow b.on{display:inline-block}
+body.sideTucked:not(.touch) #sideShow{display:flex}
+#side.tucked #sideTab{display:none}

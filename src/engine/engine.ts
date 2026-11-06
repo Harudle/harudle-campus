@@ -1374,7 +1374,7 @@ const LS = { get(k) { try { return localStorage.getItem(k); } catch { return nul
 /* ════════════════ 하루들 부스: 함께 그리는 이젤 · 붓 ════════════════
    붓은 부스 안에서만 들 수 있다(붓 꽂이에서 F). 붓을 든 채 이젤을 누르면(F·클릭) 그림판이 열린다.
    획은 서버가 모아 모두에게 나눈다: 그리는 동안 조각(seg)을 보내 실시간으로 보이고, 뒤로/앞으로가기는 내 획만 */
-let netSend: (m: any) => void = () => { };
+let netSend: (m: any) => void = () => { }, netUp = false;
 const ezBoards: THREE.Mesh[] = [];
 function ezState() {
   const z: any = ezState as any; if (z.s) return z.s;
@@ -1527,7 +1527,7 @@ function tryEasel() {
 // 내 캐릭터: 하루들 월드와 같은 부위·색 조합. 이 브라우저에 저장
 let myAv = (() => { try { return avDecode(LS.get("ww.avatar")) || { ...DEFAULT_AV }; } catch { return { ...DEFAULT_AV }; } })();
 const lookOf = (i) => ({ hair: HAIRS[i % HAIRS.length], acc: ACC[Math.floor(i / HAIRS.length) % ACC.length], prop: "bag" });
-const me = { jumps: 0, prop: null, goal: null, lie: null, seat: null, f: 12, x: ELEV_SPAWN[0], y: ELEV_SPAWN[1], h: Math.PI / 2, brush: false, brushMesh: null, fc: 0, fh: 0, fk: 0, kickAt: -9, hc: 0, hd: 0, up: 0, jz: 0, jv: 0, jc: 0, ac: 0, an: null, as: 0, act: null, board: null, runHold: false, runToggle: false, moving: false, say: "", sayAt: 0, path: null };
+const me = { jumps: 0, prop: null, goal: null, lie: null, seat: null, f: 12, x: ELEV_SPAWN[0], y: ELEV_SPAWN[1], h: Math.PI / 2, follow: null as string | null, followAt: 0, rideAt: 0, brush: false, brushMesh: null, fc: 0, fh: 0, fk: 0, kickAt: -9, hc: 0, hd: 0, up: 0, jz: 0, jv: 0, jc: 0, ac: 0, an: null, as: 0, act: null, board: null, runHold: false, runToggle: false, moving: false, say: "", sayAt: 0, path: null };
 let floor = FLOORS[12];   // 처음 들어오면 12층 엘리베이터 앞
 let meDoll = makeChar(myAv); scene.add(meDoll.root);
 Object.defineProperty(me, "doll", { get: () => meDoll });
@@ -1600,6 +1600,8 @@ addEventListener("keydown", (e) => {
     return;
   }
   if (!lb.hidden) return;
+  if (c === "KeyC") { e.preventDefault(); if (!e.repeat) fireFirework(); return; }   // C: 앞으로 폭죽
+  if (c === "Backslash") { e.preventDefault(); if (!e.repeat) tuckSide(!sideTucked); return; }   // \: 사이드바 접기/펼치기
   if (c === "Tab") { e.preventDefault(); if (!e.repeat) toggleInv(); return; }
   if (!inv.hidden) { const k = { Digit1: 0, Digit2: 1, Digit3: 2, Numpad1: 0, Numpad2: 1, Numpad3: 2 }[c]; if (k !== undefined) { e.preventDefault(); useItem(ITEMS[k].id); return; } }   // 인벤토리를 연 채로도 걷기·점프는 그대로
   if (c === "Space") { e.preventDefault(); if (!e.repeat) jump(); return; }
@@ -1609,7 +1611,7 @@ addEventListener("keydown", (e) => {
   if (SKILL_KEY[c]) { if (!e.repeat) useSkill(SKILL_KEY[c]); return; }
   if (c === "KeyV") { if (!e.repeat) setView({ top: "third", third: "first", first: "top" }[VIEW.mode]); return; }
   if (c === "KeyQ") { cam.yawT += Math.PI / 4; return; } if (c === "KeyE") { cam.yawT -= Math.PI / 4; return; }
-  if (MOVE[c]) { keys.add(MOVE[c]); me.path = null; me.goal = null; e.preventDefault(); }
+  if (MOVE[c]) { keys.add(MOVE[c]); stopFollow(); me.path = null; me.goal = null; e.preventDefault(); }
 });
 addEventListener("keyup", (e) => { if (MOVE[e.code]) keys.delete(MOVE[e.code]); if (e.code === "ShiftLeft" || e.code === "ShiftRight" || e.key === "Shift") me.runHold = false; });
 $all(".skill[data-skill]").forEach((b) => (b.onclick = () => useSkill(b.dataset.skill)));
@@ -1650,7 +1652,7 @@ const joy = { on: false, x: 0, y: 0, id: -1, cx: 0, cy: 0 };
   const pad = document.getElementById("joy"), knob = document.getElementById("joyKnob"), R = 46;
   const move = (e) => { let dx = e.clientX - joy.cx, dy = e.clientY - joy.cy; const d = Math.hypot(dx, dy); if (d > R) { dx *= R / d; dy *= R / d; } joy.x = dx / R; joy.y = dy / R; knob.style.transform = `translate(${dx}px,${dy}px)`; };
   const end = (e) => { if (e.pointerId !== joy.id) return; joy.on = false; joy.x = joy.y = 0; joy.id = -1; pad.classList.remove("on"); knob.style.transform = ""; };
-  pad.addEventListener("pointerdown", (e) => { e.preventDefault(); pad.setPointerCapture(e.pointerId); const r = pad.getBoundingClientRect(); joy.cx = r.left + r.width / 2; joy.cy = r.top + r.height / 2; joy.on = true; joy.id = e.pointerId; me.path = null; me.goal = null; pad.classList.add("on"); move(e); });
+  pad.addEventListener("pointerdown", (e) => { e.preventDefault(); pad.setPointerCapture(e.pointerId); const r = pad.getBoundingClientRect(); joy.cx = r.left + r.width / 2; joy.cy = r.top + r.height / 2; joy.on = true; joy.id = e.pointerId; stopFollow(); me.path = null; me.goal = null; pad.classList.add("on"); move(e); });
   pad.addEventListener("pointermove", (e) => { if (e.pointerId === joy.id) move(e); });
   pad.addEventListener("pointerup", end); pad.addEventListener("pointercancel", end);
   mRun.onclick = () => runBtn.click();
@@ -1659,7 +1661,7 @@ const joy = { on: false, x: 0, y: 0, id: -1, cx: 0, cy: 0 };
   document.getElementById("mFire").onclick = () => fireFirework(me.act?.name === "gun");   // 모바일: 종이 총을 들었으면 총알, 아니면 폭죽
   $all("#mPad [data-skill]").forEach((b) => (b.onclick = () => useSkill(b.dataset.skill)));
   const chatBtn = document.getElementById("mChat"), sayIn = $<HTMLInputElement>("sayInput");
-  chatBtn.onclick = () => { if (document.body.classList.toggle("chatting")) sayIn.focus(); else sayIn.blur(); };
+  chatBtn.onclick = () => { if (document.body.classList.toggle("chatting")) { setSide("chat"); sayIn.focus(); } else sayIn.blur(); };
   sayIn.addEventListener("blur", () => { if (TOUCH) setTimeout(() => document.body.classList.remove("chatting"), 150); });
 }
 addEventListener("blur", () => { keys.clear(); me.runHold = false; if (me.moving) { me.moving = false; wasMoving = false; sendPresence(true); } pointers.clear(); drag = null; canvas.classList.remove("dragging"); });   // 알트탭: 떼지 못한 클릭이 남아 다음 클릭을 막지 않게
@@ -1734,6 +1736,7 @@ function boothHit(cx, cy) {   // 커서가 보일 때 바로가기·이젤을 �
   clickAt(cx, cy); return true;
 }
 function clickAt(cx, cy) {
+  stopFollow();
   ndc.set(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
   if (me.f === 12 && linkBoards.length) { const lh = ray.intersectObjects(linkBoards, false)[0]; if (lh) { openLink(lh.object.userData.link); return; } }   // 바로가기 장치를 눌렀다
   if (me.f === 12 && ezBoards.length) { const eh = ray.intersectObjects(ezBoards, false)[0]; if (eh && nearFurn("painteasel", 3.2)) { tryEasel(); return; } }   // 이젤을 눌렀다
@@ -1784,7 +1787,7 @@ const atCall = () => floor.calls.some((k) => inRect({ x: k.x - .2, y: k.y - .3, 
 function interact() {
   if (!me.lie && !me.seat && me.f === 12) { if (me.brush && nearFurn("painteasel", 2.1)) { tryEasel(); return; } if (nearFurn("brushcup", 1.7)) { toggleBrush(); return; } if (nearFurn("painteasel", 2.1)) { tryEasel(); return; } if (nearFurn("linkkiosk", 1.7)) { openLink("https://www.harudle.com/"); return; } if (nearFurn("instaboard", 1.7)) { openLink("https://www.instagram.com/harudle.official/"); return; } }   // 하루들 부스: 붓 꽂이 · 함께 그리는 이젤   // 붓을 들었으면 이젤이 먼저
   if (me.act?.name === "gun" && !me.lie && !me.seat && !atCall()) { fireFirework(true); return; }   // 종이 총을 들었으면 F도 발사(엘리베이터 앞만 예외)
-  if (me.lie || me.seat) { standUp(); return; } const st = nearSeat(); if (st && !(nearNPC() && Math.hypot(st.x - me.x, st.y - me.y) > .55)) { sitDown(st); return; } const n = nearNPC(); if (n) { n.say = "반가워!"; n.sayAt = performance.now(); NPCS.forEach((o) => (o.talk = o === n)); openPanel(n.p); return; } const bag = nearBag(); if (bag) { lieDown(bag); return; } if (atCall()) { openPicker(); return; } fireFirework(); }   // 주변에 아무것도 없으면 F는 앞으로 폭죽
+  if (me.lie || me.seat) { standUp(); return; } const st = nearSeat(); if (st && !(nearNPC() && Math.hypot(st.x - me.x, st.y - me.y) > .55)) { sitDown(st); return; } const n = nearNPC(); if (n) { n.say = "반가워!"; n.sayAt = performance.now(); NPCS.forEach((o) => (o.talk = o === n)); openPanel(n.p); return; } const bag = nearBag(); if (bag) { lieDown(bag); return; } if (atCall()) { openPicker(); return; } }   // 폭죽은 C
 let openP = null;
 function openPanel(p) {
   if (locked()) document.exitPointerLock();
@@ -1842,6 +1845,8 @@ const TOUR = [
     kb: "<kbd>V</kbd>를 누를 때마다 위에서 보기 → 들어가서 보기 → 1인칭으로 바뀌어요. 들어가서 볼 때는 마우스로 둘러보고, <kbd>Esc</kbd>로 커서를 꺼내요.", touch: "오른쪽 아래 시점 버튼으로 위에서·들어가서·1인칭을 오가요. 화면을 끌어서 둘러봐요." },
   { title: "Tab으로 가방 열기", art: `<div class="tart tart-tab"><div class="tbar"><span class="tslot"><i>1</i>${ICON.laptop}</span><span class="tslot"><i>2</i>${ICON.coffee}</span><span class="tslot vacant"></span><span class="tslot vacant"></span></div><kbd class="tkey wide">Tab</kbd></div>`,
     kb: "<kbd>Tab</kbd>을 누르면 인벤토리가 열려요. 칸을 누르거나 숫자키로 써요. 노트북은 의자에 앉아서 펼치고, 아이스 아메리카노는 언제든 한 모금!", touch: "🎒 버튼으로 인벤토리를 열고 칸을 눌러 써요. 노트북은 앉아서 펼치고, 아이스 아메리카노는 언제든 한 모금!" },
+  { title: "조작 한눈에 보기", art: `<div class="tart tkeys">${[["WASD", "걷기"], ["Shift", "달리기"], ["Space", "점프 · 두 번 더블"], ["F", "상호작용"], ["C", "폭죽"], ["Enter", "채팅"], ["Tab", "인벤토리"], ["1 2 3", "네 컷 · 인사 · 하트"], ["Z", "춤 켜고 끄기"], ["클릭", "종이 총 발사"], ["V", "시점 바꾸기"], ["\\", "사이드바 접기"], ["Esc", "설정"]].map(([k, t]) => `<span><kbd>${k}</kbd>${t}</span>`).join("")}</div>`,
+    kb: "왼쪽 아래 <b>조작법</b>이나 Esc 설정창에서 언제든 다시 볼 수 있어요. 채팅과 같이 있는 크루는 오른쪽 💬 👥 버튼으로 열어요.", touch: "왼쪽 조이스틱으로 걷고, 오른쪽 버튼으로 점프·표현·채팅을 해요. 화면을 끌면 둘러봐요." },
 ];
 let tourAt = 0;
 tourDots.innerHTML = TOUR.map(() => "<i></i>").join("");
@@ -1903,10 +1908,10 @@ $("profileForm").addEventListener("submit", (e) => { e.preventDefault(); const v
 profileName.addEventListener("keydown", (e) => { if (e.code === "Escape") { e.preventDefault(); e.stopPropagation(); closeProfile(); } });
 // 채팅: Enter로 들어가고, 쓰고 Enter면 보내고 나온다(빈 채로 Enter·Esc면 그냥 나온다). 나오면 다시 마우스를 고정한다
 const sayInput = $<HTMLInputElement>("sayInput");
-function openChat() { keys.clear(); me.runHold = false; sayInput.focus(); }
+function openChat() { keys.clear(); me.runHold = false; if (sideTucked) tuckSide(false); setSide("chat"); sayInput.focus(); }
 function closeChat() { sayInput.blur(); lockMouse(); }
-document.getElementById("sayForm").addEventListener("submit", (e) => { e.preventDefault(); const v = sayInput.value.trim(); if (v) { me.say = v.slice(0, 40); me.sayAt = Date.now(); sayInput.value = ""; sendPresence(true); } closeChat(); });
-sayInput.addEventListener("keydown", (e) => { if (e.code === "Escape") { e.preventDefault(); sayInput.value = ""; closeChat(); } });
+document.getElementById("sayForm").addEventListener("submit", (e) => { e.preventDefault(); const v = sayInput.value.trim(); if (v) { sendChat(v); sayInput.value = ""; } closeChat(); });
+sayInput.addEventListener("keydown", (e) => { if (e.code === "Escape") { e.preventDefault(); sayInput.value = ""; closeChat(); } else if (e.code === "Tab") { e.preventDefault(); setChatTab(CHAT_TABS[(CHAT_TABS.indexOf(chatTab) + (e.shiftKey ? 2 : 1)) % 3]); } });   // 입력 중 Tab: 근처 → 전체 → 개인
 let curZone = null, toastTimer = 0; const toast = document.getElementById("zoneToast");
 function showToast(h, p, ms = 3800) { toast.querySelector("h2").textContent = h; toast.querySelector("p").textContent = p; toast.style.opacity = "1"; clearTimeout(toastTimer); toastTimer = setTimeout(() => (toast.style.opacity = "0"), ms); }
 function checkZone() {
@@ -1936,13 +1941,36 @@ async function loadFeed() {
 
 /* ════════════════ 12. 같이 있는 크루 (room presence) ════════════════ */
 let room = null, user = null, peerList = [], names = {}, lastSent = 0;
+/* ───── 로컬 테스트용 가짜 크루(목록·따라가기 확인용) ─────
+   vite 개발 서버(npm run dev)에서는 저절로, localhost에서 빌드본을 볼 땐 ?mock 을 붙이면 나온다. ?nomock 이면 끈다. 배포 서버에서는 절대 안 나온다 */
+const MOCK = !new URLSearchParams(location.search).has("nomock") && (import.meta.env.DEV || (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && new URLSearchParams(location.search).has("mock")));
+const mockPeers = MOCK ? ([
+  ["mock-1", "이기적인 고양이", 12, 16, 22, { dn: 1, ac: 1, an: "dance" }],
+  ["mock-2", "포비", 12, 22, 21, { br: 1, bc: "#F15B5B" }],
+  ["mock-3", "브라운", 12, 10, 20, { walk: 1 }],
+  ["mock-4", "쿠다", 13, 12, 22, { walk: 1 }],
+  ["mock-5", "아이큐", 13, 40, 30, { st: 1, lp: 1 }],
+  ["mock-6", "새로운 에뮤", 11, 20, 8, { walk: 1 }],
+  ["mock-7", "초록", 14, 24, 32, { walk: 1, gn: 1 }],
+  ["mock-8", "용감한 쿠키", 14, 38, 30, { l: 1 }],
+] as [string, string, number, number, number, any][]).map(([peer, name, f, x, y, o]) => { const [fx, fy] = nearestFree(FLOORS[f], x + .5, y + .5); return { peer, name, kind: "viewer", walk: !!o.walk, home: [fx, fy], presence: { f, x: fx, y: fy, u: 0, h: 0, m: 0, r: 0, jc: 0, ac: o.ac || 0, an: o.an || null, as: 0, st: o.st || 0, l: o.l || 0, ly: 0, lp: o.lp || 0, dn: o.dn || 0, gn: o.gn || 0, br: o.br || 0, bc: o.bc || null, fc: 0, hc: 0 } }; }) : [];
+if (MOCK) { // 걷는 가짜 크루는 집 근처를 천천히 돌아다닌다
+  peerList = [...mockPeers];
+  const tgt = new Map();
+  setInterval(() => {
+    for (const m of mockPeers) { if (!m.walk) continue; const s3 = m.presence, fl = FLOORS[s3.f];
+      let g = tgt.get(m.peer); if (!g || Math.hypot(g[0] - s3.x, g[1] - s3.y) < .2) { g = nearestFree(fl, m.home[0] + (Math.random() - .5) * 8, m.home[1] + (Math.random() - .5) * 6); tgt.set(m.peer, g); }
+      const dx = g[0] - s3.x, dy = g[1] - s3.y, d = Math.hypot(dx, dy), st = Math.min(d, .16), nx = s3.x + dx / d * st, ny = s3.y + dy / d * st;
+      if (fits(fl, nx, ny)) m.presence = { ...s3, x: nx, y: ny, h: Math.atan2(dx, dy), m: 1 }; else tgt.delete(m.peer); }
+  }, 100);
+}
 const online = document.getElementById("online");
 let wasMoving = false;
 // 다른 탭으로 가면 그림이 멈춰 멈춤 신호를 못 보낸다: 숨기 전에 보낸다
 document.addEventListener("visibilitychange", () => { if (document.hidden && me.moving) { me.moving = false; wasMoving = false; sendPresence(true); } });
 function sendPresence(force) {
   if (!room) return; const now = performance.now(); if (!force && now - lastSent < 90) return; lastSent = now;
-  room.presence({ f: me.f, x: Math.round(me.x * 100) / 100, y: Math.round(me.y * 100) / 100, u: Math.round(me.up * 100) / 100, h: Math.round(me.h * 100) / 100, lp: me.act?.name === "laptop" ? 1 : 0, gn: me.act?.name === "gun" ? 1 : 0, br: me.brush ? 1 : 0, bc: ezPen.c, fk: me.fk, hc: me.hc, hd: Math.round(me.hd * 100) / 100, fc: me.fc, fh: Math.round(me.fh * 100) / 100, dn: me.act?.name === "dance" ? 1 : 0, m: me.moving ? 1 : 0, r: running() ? 1 : 0, l: me.lie ? 1 : 0, st: me.seat ? 1 : 0, ly: me.lie ? Math.round(me.lie.yaw * 100) / 100 : 0, jc: me.jc, ac: me.ac, an: me.an, as: me.as, look: 0, av: avEncode(myAv), say: me.say && Date.now() - me.sayAt < 6000 ? me.say : null }).catch(() => { });
+  room.presence({ f: me.f, x: Math.round(me.x * 100) / 100, y: Math.round(me.y * 100) / 100, u: Math.round(me.up * 100) / 100, h: Math.round(me.h * 100) / 100, lp: me.act?.name === "laptop" ? 1 : 0, gn: me.act?.name === "gun" ? 1 : 0, br: me.brush ? 1 : 0, bc: ezPen.c, fk: me.fk, hc: me.hc, hd: Math.round(me.hd * 100) / 100, fc: me.fc, fh: Math.round(me.fh * 100) / 100, dn: me.act?.name === "dance" ? 1 : 0, m: me.moving ? 1 : 0, r: running() ? 1 : 0, l: me.lie ? 1 : 0, st: me.seat ? 1 : 0, ly: me.lie ? Math.round(me.lie.yaw * 100) / 100 : 0, jc: me.jc, ac: me.ac, an: me.an, as: me.as, look: 0, av: avEncode(myAv), rm: roomKey() }).catch(() => { });
 }
 // EC2에서는 직접 만든 WebSocket 서버가 room 역할을 한다
 function wsRoom() {
@@ -1963,12 +1991,13 @@ function wsRoom() {
   const showUpdate = () => { if (document.getElementById("updateChip")) return; const b = document.createElement("button"); b.id = "updateChip"; b.type = "button"; b.textContent = "새 버전이 나왔어요 · 새로고침"; b.onclick = () => location.reload(); document.body.append(b); };
   const connect = () => {
     ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
-    ws.onopen = () => { retry = 800; send({ t: "name", name: myName }); if (last) send({ t: "p", p: last }); };
+    ws.onopen = () => { netUp = true; retry = 800; send({ t: "id", u: ezState().uid }); send({ t: "name", name: myName }); if (last) send({ t: "p", p: last }); };
     ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch { return; }
       if (m.t === "hello") { myId = m.id; if (m.v) { if (!firstV) firstV = m.v; else if (m.v !== firstV) showUpdate(); } }
       if (m.t === "ez") easelNet(m);
+      if (m.t === "chat") chatNet(m);
       if (m.t === "bye") retry = 150; /* 서버가 새 버전으로 바뀌는 중: 곧바로 다시 붙는다 */ if (m.t === "peers" && handler) handler({ peers: m.peers.map((p) => ({ ...p, kind: "viewer", sameTab: p.peer === myId })) }); };
-    ws.onclose = () => { setTimeout(connect, retry); retry = Math.min(10000, retry * 1.6); };
+    ws.onclose = () => { netUp = false; setTimeout(connect, retry); retry = Math.min(10000, retry * 1.6); };
   };
   connect();
   return { presence: async (p) => { last = p; send({ t: "p", p }); }, onPeers: (fn) => { handler = fn; } };
@@ -1978,7 +2007,7 @@ async function joinRoom() {
     if (STANDALONE) {
       room = wsRoom();
       room.onPeers((ch) => {
-        peerList = ch.peers.filter((p) => !p.sameTab);
+        peerList = [...ch.peers.filter((p) => !p.sameTab), ...mockPeers];
         for (const [k, v] of peers) if (!peerList.some((p) => p.peer === k)) { endAct(v); holdBrush(v, false); dropDoll(v.doll); v.tag.remove(); v.bub.remove(); peers.delete(k); }
         online.textContent = peerList.length ? `같이 있는 크루 ${peerList.length + 1}명` : "혼자 둘러보는 중";
       });
@@ -2035,13 +2064,141 @@ function syncPeers(dt, t) {
     v.tag.textContent = p.name || (p.by && names[p.by]) || "크루";
     const rp = v.doll.root.position;
     if (vis) project(v.tag, rp.x, rp.y - .05, rp.z, true); else v.tag.style.display = "none";
-    const say = typeof s.say === "string" ? s.say.slice(0, 40) : ""; v.bub.hidden = !(vis && say); if (!v.bub.hidden) { v.bub.textContent = say; project(v.bub, rp.x, rp.y + DOLL, rp.z); }
+    const say = v.chatSay && Date.now() - v.chatAt < 6000 ? v.chatSay : "";   // 받은 근처·전체 채팅만 말풍선으로 v.bub.hidden = !(vis && say); if (!v.bub.hidden) { v.bub.textContent = say; project(v.bub, rp.x, rp.y + DOLL, rp.z); }
   }
 }
 
 /* ════════════════ 13. 한 프레임 ════════════════ */
 let last = performance.now(), npcSkillTimer = 4;
+/* ───── 채팅: 근처 · 전체 · 개인 ─────
+   근처: 같은 층 6칸 안(회의실·강의실·페어룸·상담실 안이면 그 방 사람끼리만). 이 브라우저에 최근 100개를 남긴다
+   전체·개인: 서버가 남겨 두고, 들어오면 지난 대화를 보내 준다 */
+const CHAT_TABS = ["near", "all", "dm"] as const, CHAT_LABEL = { near: "근처", all: "전체", dm: "개인" };
+let chatTab: "near" | "all" | "dm" = "near", dmTo: string | null = null, dmToName = "";
+const chatLogs = { near: [] as any[], all: [] as any[], dm: [] as any[] }, unread = { near: 0, all: 0, dm: 0 };
+try { chatLogs.near = JSON.parse(LS.get("ww.chatNear") || "[]"); } catch { }
+const uidOf = (peer) => peerList.find((p) => p.peer === peer)?.u || null;
+// 지금 있는 방: 회의실·강의실 같은 닫힌 대화 공간이면 그 이름(층 포함), 아니면 ""
+function roomKey() {
+  let best = null; for (const z of floor.zones || []) if (/강의실|회의실|페어룸|상담실/.test(z.name) && inRect(z, me.x, me.y) && (!best || z.w * z.h < best.w * best.h)) best = z;
+  return best ? `${me.f}:${best.name}` : "";
+}
+function chatNet(m) {
+  const mine = m.from?.u === ezState().uid;
+  if (m.k === "history") { chatLogs.all = m.all || []; chatLogs.dm = (m.dm || []).sort((a, b) => a.at - b.at); renderChat(); return; }
+  if (m.k === "sys") { chatLogs[chatTab].push({ k: "sys", text: m.text, at: Date.now() }); renderChat(); return; }
+  const list = chatLogs[m.k]; if (!list) return; if (list.some((x) => x.id === m.id)) return;
+  list.push(m); if (list.length > (m.k === "dm" ? 400 : 200)) list.splice(0, list.length - (m.k === "dm" ? 400 : 200));
+  if (m.k === "near") LS.set("ww.chatNear", JSON.stringify(chatLogs.near.slice(-100)));
+  if (!mine && m.k !== "dm") { const v = peers.get(m.from.peer); if (v) { v.chatSay = m.text.slice(0, 40); v.chatAt = Date.now(); } }   // 머리 위 말풍선
+  if (!mine && (m.k !== chatTab || sideView !== "chat" || sideTucked)) unread[m.k]++;
+  if (!mine && m.k === "dm" && !dmTo) { dmTo = m.from.u; dmToName = m.from.name; }
+  renderChat();
+}
+function sendChat(text) {
+  if (chatTab === "dm" && !dmTo) { chatLogs.dm.push({ k: "sys", text: "받는 사람을 먼저 골라 주세요", at: Date.now() }); renderChat(); return; }
+  if (chatTab !== "dm") { me.say = text.slice(0, 40); me.sayAt = Date.now(); }   // 내 말풍선
+  netSend({ t: "chat", k: chatTab, text, to: chatTab === "dm" ? dmTo : undefined });
+  if (!netUp) chatNet({ id: "local" + Date.now(), k: chatTab, text, at: Date.now(), to: dmTo, from: { u: ezState().uid, name: myNameNow() || "나", f: me.f } });   // 서버 없이 볼 때
+}
+function setChatTab(t) { chatTab = t; unread[t] = 0; renderChat(); }
+function openDm(u, name) { dmTo = u; dmToName = name || "크루"; setChatTab("dm"); openChat(); }
+const hhmm = (ms) => { const d = new Date(ms); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+let chatKey = "";
+function renderChat() {
+  const uid = ezState().uid;
+  $all<HTMLButtonElement>("#chat .ctabs button").forEach((b2) => { const t = b2.dataset.tab; b2.setAttribute("aria-selected", String(t === chatTab)); const bd = b2.querySelector("b"); bd.textContent = String(unread[t]); bd.classList.toggle("on", unread[t] > 0 && t !== chatTab); });
+  $("chatDmBar").hidden = chatTab !== "dm";
+  { const tot = unread.near + unread.all + unread.dm, rb = $("railChatBadge"), tb = $("sideTab").querySelector("b"); rb.textContent = tb.textContent = $("sideShowBadge").textContent = String(tot); $("sideShowBadge").classList.toggle("on", tot > 0 && sideTucked); rb.classList.toggle("on", tot > 0 && sideView !== "chat"); tb.classList.toggle("on", tot > 0 && sideTucked); }
+  if (chatTab === "dm") { // 받는 사람: 지금 접속한 크루 + 대화했던 크루
+    const opts = new Map(); for (const p of peerList) if (p.u) opts.set(p.u, p.name || "크루");
+    for (const m of chatLogs.dm) { const other = m.from?.u === uid ? m.to : m.from?.u; if (other && !opts.has(other)) opts.set(other, m.from?.u === uid ? (dmToName && dmTo === other ? dmToName : "크루") : m.from.name); }
+    if (dmTo && !opts.has(dmTo)) opts.set(dmTo, dmToName);
+    const sel = $<HTMLSelectElement>("chatDmTo"), html2 = `<option value="">고르기</option>` + [...opts].map(([u, n]) => `<option value="${esc(u)}" ${u === dmTo ? "selected" : ""}>${esc(n)}</option>`).join("");
+    if (sel.innerHTML !== html2) sel.innerHTML = html2;
+  }
+  const rows = chatTab === "dm" ? chatLogs.dm.filter((m) => m.k === "sys" || (dmTo && (m.from?.u === dmTo && m.to === uid || m.from?.u === uid && m.to === dmTo))) : chatLogs[chatTab];
+  const html = rows.length ? rows.map((m) => m.k === "sys" ? `<li class="sys">${esc(m.text)}</li>` : `<li class="${m.from?.u === uid ? "mine" : ""}"><span class="who" data-u="${esc(m.from?.u || "")}" data-n="${esc(m.from?.name || "")}">${esc(m.from?.name || "크루")}</span>${esc(m.text)}<span class="meta">${hhmm(m.at)}${m.k !== "dm" && m.from?.f ? ` · ${m.from.f}F` : ""}</span></li>`).join("")
+    : `<li class="empty">${chatTab === "near" ? (roomKey() ? "이 방 사람끼리만 보여요" : "6칸 안에 있는 크루에게 보여요") : chatTab === "all" ? "캠퍼스의 모두에게 보여요" : dmTo ? `${esc(dmToName)}님과의 대화예요` : "받는 사람을 고르거나 크루 목록에서 💬를 눌러요"}</li>`;
+  const log = $("chatLog"); if (html !== chatKey) { const atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 30; chatKey = html; log.innerHTML = html; if (atEnd || true) log.scrollTop = log.scrollHeight; }
+  sayInput.placeholder = chatTab === "dm" ? (dmTo ? `${dmToName}님에게 · Tab 바꾸기` : "받는 사람을 골라요") : `${CHAT_LABEL[chatTab]}${chatTab === "near" && roomKey() ? "(이 방)" : ""}에 말하기 · Tab 바꾸기`;
+}
+$all<HTMLButtonElement>("#chat .ctabs button").forEach((b2) => (b2.onclick = () => setChatTab(b2.dataset.tab as any)));
+// 오른쪽 사이드: 레일 아이콘으로 채팅·사람을 고르고, 같은 아이콘을 다시 누르거나 ›로 접는다
+let sideView: "chat" | "people" = LS.get("ww.side") === "people" ? "people" : "chat";   // 채팅과 크루 중 하나는 늘 펼쳐 둔다
+function setSide(v) {
+  if (!v) v = sideView || "chat";   // 접기는 없다: 둘 중 하나는 늘 보인다
+  sideView = v; LS.set("ww.side", v || "");
+  const side = $("side"); side.classList.toggle("closed", !v); document.body.classList.toggle("sideOpen", !!v);
+  $all<HTMLButtonElement>(".srail button").forEach((b2) => b2.setAttribute("aria-pressed", String(b2.dataset.view === v)));
+  for (const sec of $all<HTMLElement>(".sview")) sec.hidden = sec.dataset.view !== v;
+  $("sideTitle").textContent = v === "people" ? "같이 있는 크루" : "채팅";
+  if (v === "chat") unread[chatTab] = 0;
+  renderChat();
+}
+$all<HTMLButtonElement>(".srail button").forEach((b2) => (b2.onclick = () => setSide(b2.dataset.view)));   // 누르면 그 화면으로 바뀐다(같은 걸 눌러도 접히지 않는다)
+
+// 접기: 손잡이(또는 \ 키)로 패널을 오른쪽으로 집어넣는다. 접혀 있어도 Enter로 채팅하면 다시 나온다
+let sideTucked = LS.get("ww.sideTucked") === "1";
+function tuckSide(on) { sideTucked = on; LS.set("ww.sideTucked", on ? "1" : ""); $("side").classList.toggle("tucked", on); document.body.classList.toggle("sideTucked", on); $("sideTab").setAttribute("aria-expanded", String(!on)); if (!on && sideView === "chat" && booted) { unread[chatTab] = 0; renderChat(); } }
+$("sideTab").onclick = () => tuckSide(!sideTucked);
+$("sideHide").onclick = () => tuckSide(true); $("sideShow").onclick = () => tuckSide(false);
+let booted = false; tuckSide(sideTucked); requestAnimationFrame(() => (booted = true));
+requestAnimationFrame(() => setSide(sideView));
+$("chatDmTo").addEventListener("change", () => { const sel = $<HTMLSelectElement>("chatDmTo"); dmTo = sel.value || null; dmToName = sel.selectedOptions[0]?.textContent || ""; renderChat(); });
+$("chatLog").addEventListener("click", (e) => { const w = (e.target as HTMLElement).closest(".who") as HTMLElement; if (w && w.dataset.u && w.dataset.u !== ezState().uid) openDm(w.dataset.u, w.dataset.n); });
+setInterval(() => { if (chatTab === "near") renderChat(); }, 1000);   // 방을 드나들면 안내 문구가 바뀐다
+/* ───── 같이 있는 크루 목록: 나 · 같은 층 · 다른 층 순, 이름 옆에 층, 따라가기 ───── */
+const plistBody = document.getElementById("plistBody");
+function esc(v) { return String(v).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch])); }   // 함수 선언: 위쪽 채팅 코드가 먼저 불러도 된다
+const actIcon = (s2) => (s2.br ? "🖌️ 그리는 중" : s2.dn ? "💃 춤추는 중" : s2.lp ? "💻 코딩 중" : s2.gn ? "🎉 종이 총" : s2.l ? "💤 쉬는 중" : s2.st ? "🪑 앉아 있음" : s2.m ? "🚶 걷는 중" : "");
+const dotColor = (av, seed) => { const c = avDecode(av); return c?.headColor || ["#B39DDB", "#FFD43B", "#7DB3F0", "#7FCFAE", "#F7A6A0"][hash(seed) % 5]; };
+let plistKey = "";
+function renderPlist() {
+  const q = ($<HTMLInputElement>("plistSearch").value || "").trim().toLowerCase();
+  const all = peerList.filter((p) => p.presence && FLOORS[p.presence.f]).map((p) => ({ id: p.peer, name: p.name || "크루", s: p.presence }));
+  const rows = q ? all.filter((r) => r.name.toLowerCase().includes(q)) : all;
+  rows.sort((a, b) => (b.s.f === me.f ? 1 : 0) - (a.s.f === me.f ? 1 : 0) || b.s.f - a.s.f || a.name.localeCompare(b.name, "ko"));
+  $("plistTitle").textContent = all.length ? `캠퍼스에 ${all.length + 1}명` : "아직 혼자 둘러보는 중이에요"; $("plistCnt").textContent = String(all.length + 1);
+  const ini = (n) => esc([...String(n).trim()][0] || "?");
+  const line = (id, name, f, col, icon, mine) => `<li class="${mine ? "mine" : f === me.f ? "same" : ""}"><span class="av" style="background:${col}">${ini(name)}</span><span class="who"><span class="nm">${esc(name)}${mine ? "<em>나</em>" : ""}</span><span class="sub"><span class="fl ${f === me.f ? "here" : ""}">${f}F</span>${icon ? `<span>${icon}</span>` : ""}</span></span>${mine ? "" : `${uidOf(id) ? `<button type="button" class="dm" data-id="${esc(id)}" title="개인 메시지">💬</button>` : ""}<button type="button" class="fw" data-id="${esc(id)}" aria-pressed="${me.follow === id}">${me.follow === id ? "따라가는 중" : "따라가기"}</button>`}</li>`;
+  const html = line("", myNameNow() || "나", me.f, myAv.headColor || "#B39DDB", actIcon({ br: me.brush, dn: me.act?.name === "dance", lp: me.act?.name === "laptop", gn: me.act?.name === "gun", l: me.lie, st: me.seat }), true)
+    + (rows.length ? rows.map((r) => line(r.id, r.name, r.s.f, dotColor(r.s.av, r.id), actIcon(r.s), false)).join("") : `<li class="empty">다른 크루가 들어오면 여기에 보여요</li>`);
+  if (html === plistKey) return; plistKey = html; plistBody.innerHTML = html;
+}
+$("plistSearch").addEventListener("input", () => renderPlist());
+plistBody.addEventListener("click", (e) => { const dmb = (e.target as HTMLElement).closest("button.dm") as HTMLButtonElement; if (dmb) { const p = peerList.find((q) => q.peer === dmb.dataset.id); if (p?.u) { openDm(p.u, p.name); if (!menu.hidden) closeMenu(); } return; } const b = (e.target as HTMLElement).closest("button.fw") as HTMLButtonElement; if (!b) return; const id = b.dataset.id; if (me.follow === id) stopFollow(); else { startFollow(id); if (!menu.hidden) closeMenu(); } renderPlist(); });   // 설정창에서 눌렀으면 닫고 바로 게임으로
+setInterval(renderPlist, 400);
+// 따라가기: 그 크루 곁으로 길을 찾아 걸어가고, 다른 층에 있으면 그 층으로 옮겨 간다. 내가 직접 움직이면 멈춘다
+function startFollow(id) { me.follow = id; me.followAt = 0; const p = peerList.find((q) => q.peer === id); showToast("따라가는 중", `${p?.name || "크루"} 곁으로 가요. 직접 움직이면 멈춰요.`, 2200); }
+function stopFollow() { if (!me.follow) return; me.follow = null; me.path = null; }
+function tickFollow(t) {
+  if (!me.follow) return;
+  const p = peerList.find((q) => q.peer === me.follow), s2 = p?.presence;
+  if (!s2 || !FLOORS[s2.f]) { stopFollow(); showToast("따라가기를 멈췄어요", "그 크루가 나갔어요.", 2000); return; }
+  if (me.lie || me.seat) standUp();
+  if (s2.f !== me.f) { // 다른 층: 가장 가까운 엘리베이터까지 걸어가서, 잠깐 기다렸다 타고, 그 층 엘리베이터에서 다시 걸어간다
+    if (atCall()) {
+      me.path = null;
+      if (!me.rideAt) { me.rideAt = t; showToast("엘리베이터를 기다려요", `${s2.f}층으로 올라가요`.replace("올라가요", s2.f > me.f ? "올라가요" : "내려가요"), 1400); }
+      else if (t - me.rideAt > 1.1) { me.rideAt = 0; me.followAt = t; goFloor(s2.f, ELEV_SPAWN); }
+      return;
+    }
+    me.rideAt = 0;
+    if (t - (me.followAt || 0) > 1 || !me.path || !me.path.length) {
+      me.followAt = t; let best = null, bd = Infinity;
+      for (const c of floor.calls) { const cx = c.x + c.w / 2, cy = c.y + c.h / 2, d = Math.hypot(cx - me.x, cy - me.y); if (d < bd) { bd = d; best = [Math.floor(cx), Math.floor(cy)]; } }
+      if (best) me.path = findPath(Math.floor(me.x), Math.floor(me.y), best[0], best[1]) || [];
+    }
+    return;
+  }
+  me.rideAt = 0;
+  const d = Math.hypot(s2.x - me.x, s2.y - me.y);
+  if (d < 1.4) { me.path = null; return; }
+  if (t - (me.followAt || 0) > .5 || !me.path || !me.path.length) { me.followAt = t; const [gx, gy] = nearestFree(floor, s2.x, s2.y); me.path = findPath(Math.floor(me.x), Math.floor(me.y), Math.floor(gx), Math.floor(gy)) || []; if (me.path.length) me.path.pop(); }
+}
 function step(dt, t) {
+  tickFollow(t);
   let ix = 0, iy = 0, amag = 1;
   if (joy.on) { const m = Math.hypot(joy.x, joy.y); if (m > .18) { ix = joy.x; iy = joy.y; amag = clamp(m, .45, 1); } }   // 조이스틱: 민 만큼 빠르게
   if (keys.has("arrowleft") || keys.has("a")) ix -= 1; if (keys.has("arrowright") || keys.has("d")) ix += 1;

@@ -91,7 +91,7 @@ function sanitize(p) {
   return {
     f: [11, 12, 13, 14].includes(p.f) ? p.f : 11, x: num(p.x, 0, 56), y: num(p.y, 0, 40), u: num(p.u, 0, 2), h: num(p.h, -7, 7),
     m: p.m ? 1 : 0, r: p.r ? 1 : 0, look: Math.floor(num(p.look, 0, 99)), jc: Math.floor(num(p.jc, 0, 1e9)), ac: Math.floor(num(p.ac, 0, 1e9)),
-    br: p.br ? 1 : 0, bc: typeof p.bc === "string" && /^#[0-9a-f]{6}$/i.test(p.bc) ? p.bc : null, l: p.l ? 1 : 0, ly: num(p.ly, -7, 7), st: p.st ? 1 : 0, av: typeof p.av === "string" && /^[0-9a-z]{7}([0-9A-F]{6}){6}$/.test(p.av) ? p.av : null, an: ["draw", "wave", "heart", "laptop", "coffee", "dance", "gun"].includes(p.an) ? p.an : null, lp: p.lp ? 1 : 0, gn: p.gn ? 1 : 0, fk: p.fk ? 1 : 0, hc: Math.floor(num(p.hc, 0, 1e9)), hd: num(p.hd, -50, 50), dn: p.dn ? 1 : 0, fc: Math.floor(num(p.fc, 0, 1e9)), fh: num(p.fh, -50, 50), as: Math.floor(num(p.as, 0, 1e7)), say: clean(p.say, 40) || null,
+    br: p.br ? 1 : 0, bc: typeof p.bc === "string" && /^#[0-9a-f]{6}$/i.test(p.bc) ? p.bc : null, l: p.l ? 1 : 0, ly: num(p.ly, -7, 7), st: p.st ? 1 : 0, av: typeof p.av === "string" && /^[0-9a-z]{7}([0-9A-F]{6}){6}$/.test(p.av) ? p.av : null, an: ["draw", "wave", "heart", "laptop", "coffee", "dance", "gun"].includes(p.an) ? p.an : null, lp: p.lp ? 1 : 0, gn: p.gn ? 1 : 0, fk: p.fk ? 1 : 0, hc: Math.floor(num(p.hc, 0, 1e9)), hd: num(p.hd, -50, 50), dn: p.dn ? 1 : 0, fc: Math.floor(num(p.fc, 0, 1e9)), fh: num(p.fh, -50, 50), as: Math.floor(num(p.as, 0, 1e7)), rm: clean(p.rm, 40), 
   };
 }
 /* ───────── 하루들 부스 공유 이젤: 획(stroke)을 모아 두고 모두에게 나눈다 ─────────
@@ -122,6 +122,33 @@ function ezMessage(pid, m) {
     if (st) { st.h = 0; ezDirty = true; ezAll({ t: "ez", k: "vis", id, h: 0 }, pid); }
   }
 }
+/* ───────── 채팅: 근처 · 전체 · 개인 ─────────
+   근처: 보낸 순간 같은 층, 같은 방(회의실·강의실이면 그 방 사람만), 열린 곳이면 6칸 안. 남기지 않는다(받은 사람 브라우저에만)
+   전체: 최근 200개를 남긴다. 개인: 두 사람(브라우저 uid) 사이 최근 50개를 남긴다. 둘 다 임시 폴더에 저장 */
+const CHAT_FILE = join(tmpdir(), "harudle-chat.json"), NEAR = 6;
+let chatAll = [], chatDm = {};
+try { const d = JSON.parse(readFileSync(CHAT_FILE, "utf8")); if (Array.isArray(d.all)) chatAll = d.all; if (d.dm && typeof d.dm === "object") chatDm = d.dm; } catch { }
+let chatDirty = false, chatSeq = Date.now();
+setInterval(() => { if (!chatDirty) return; chatDirty = false; writeFile(CHAT_FILE, JSON.stringify({ all: chatAll, dm: chatDm })).catch(() => { }); }, 4000).unref();
+const dmKey = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+function chatMessage(pid, m) {
+  const me = peers.get(pid); if (!me || !me.uid) return;
+  const now = Date.now(); me.chatT = (me.chatT || []).filter((x) => now - x < 5000); if (me.chatT.length >= 6) return void me.ws.send(JSON.stringify({ t: "chat", k: "sys", text: "조금 천천히 보내 주세요" })); me.chatT.push(now);
+  const text = clean(m.text, 200).trim(); if (!text) return;
+  const p = me.presence || { f: 11, x: 0, y: 0 }, msg = { id: (++chatSeq).toString(36), k: m.k, text, at: now, from: { u: me.uid, peer: pid, name: me.name, f: p.f } };
+  const sendTo = (pp) => { if (pp.ws.readyState === 1) pp.ws.send(JSON.stringify({ t: "chat", ...msg })); };
+  if (m.k === "all") { chatAll.push(msg); if (chatAll.length > 200) chatAll.splice(0, chatAll.length - 200); chatDirty = true; for (const pp of peers.values()) sendTo(pp); }
+  else if (m.k === "near") {
+    const rm = me.presence?.rm || ""; let n = 0;
+    for (const [qid, pp] of peers) { const q = pp.presence; if (!q || q.f !== p.f || (q.rm || "") !== rm) continue; if (!rm && Math.hypot(q.x - p.x, q.y - p.y) > NEAR) continue; if (qid !== pid) n++; sendTo(pp); }
+    if (!me.presence) sendTo(me);
+    if (!n) me.ws.send(JSON.stringify({ t: "chat", k: "sys", text: rm ? "이 방에는 아직 아무도 없어요" : "근처(6칸 안)에 아무도 없어요" }));
+  } else if (m.k === "dm") {
+    const to = clean(m.to, 24); if (!to || to === me.uid) return; msg.to = to;
+    const key = dmKey(me.uid, to); (chatDm[key] ||= []).push(msg); if (chatDm[key].length > 50) chatDm[key].splice(0, chatDm[key].length - 50); chatDirty = true;
+    for (const pp of peers.values()) if (pp.uid === to || pp.uid === me.uid) sendTo(pp);
+  }
+}
 wss.on("connection", (ws) => {
   const id = `p${++seq}`;
   peers.set(id, { ws, name: "크루", presence: null });
@@ -134,13 +161,19 @@ wss.on("connection", (ws) => {
     if (msg.t === "name") { me.name = clean(msg.name, 16) || "크루"; dirty = true; }
     if (msg.t === "p") { me.presence = sanitize(msg.p); dirty = true; }
     if (msg.t === "ez") ezMessage(id, msg);
+    if (msg.t === "id" && !me.uid) { // 브라우저마다 고정된 uid: 개인 메시지 주소. 받자마자 지난 대화를 보낸다
+      me.uid = clean(msg.u, 24); dirty = true; if (!me.uid) return;
+      const dms = Object.entries(chatDm).filter(([k]) => k.split("|").includes(me.uid)).flatMap(([, v]) => v);
+      ws.send(JSON.stringify({ t: "chat", k: "history", all: chatAll, dm: dms }));
+    }
+    if (msg.t === "chat" && ["near", "all", "dm"].includes(msg.k)) chatMessage(id, msg);
   });
   ws.on("close", () => { peers.delete(id); dirty = true; });
   ws.on("error", () => {});
 });
 setInterval(() => { // 초당 12번, 바뀐 게 있을 때만 모두에게 전체 상태를 보낸다
   if (!dirty) return; dirty = false;
-  const list = [...peers].filter(([, p]) => p.presence).map(([peer, p]) => ({ peer, name: p.name, presence: p.presence }));
+  const list = [...peers].filter(([, p]) => p.presence).map(([peer, p]) => ({ peer, name: p.name, u: p.uid || null, presence: p.presence }));
   const msg = JSON.stringify({ t: "peers", peers: list });
   for (const { ws } of peers.values()) if (ws.readyState === 1) ws.send(msg);
 }, 83);
