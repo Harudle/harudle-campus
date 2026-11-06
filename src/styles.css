@@ -55,7 +55,7 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--brand);outline-
 #updateChip{position:fixed;z-index:35;top:calc(64px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);font-family:var(--hand);font-size:16px;font-weight:700;background:#FFD43B;color:#0E1E46;border:2px solid var(--ink);border-radius:999px;padding:6px 16px;box-shadow:2px 2px 0 var(--ink);cursor:pointer}
 #cross{position:fixed;z-index:3;left:50%;top:50%;width:10px;height:10px;margin:-5px 0 0 -5px;border:2px solid #fff;border-radius:50%;box-shadow:0 0 0 1.5px var(--ink);pointer-events:none}
 #cross[hidden]{display:none}
-#hint{border:1.5px solid var(--ink);position:fixed;z-index:4;left:max(12px,env(safe-area-inset-left,0px));bottom:calc(116px + env(safe-area-inset-bottom,0px));font-size:12px;color:var(--muted);background:rgba(255,255,255,.88);padding:4px 8px;border-radius:8px;max-width:calc(100% - 90px)}
+#hint{border:1.5px solid var(--ink);position:fixed;z-index:4;left:max(12px,env(safe-area-inset-left,0px));bottom:calc(116px + env(safe-area-inset-bottom,0px));font-size:12px;color:var(--muted);background:rgba(255,255,255,.88);padding:4px 8px;border-radius:8px;max-width:calc(50% - 90px)}/* 가운데 「앉기」 버튼과 겹치지 않게: 화면 왼쪽 절반 안에서만, 좁으면 줄바꿈 */
 #skills{left:max(12px,env(safe-area-inset-left,0px));bottom:calc(70px + env(safe-area-inset-bottom,0px));gap:6px;max-width:calc(100% - 80px)}
 .skill{font-family:var(--hand);font-size:16px;background:var(--paper);color:var(--ink);border:2px solid var(--ink);border-radius:12px;padding:4px 10px;cursor:pointer;box-shadow:1px 2px 0 var(--ink);display:flex;align-items:center;gap:5px}
 .skill kbd{font-family:var(--body);font-size:11px;background:var(--brand-weak);border:1px solid var(--line);border-radius:5px;padding:0 4px;color:var(--brand-strong)}
@@ -130,3 +130,61 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--brand);outline-
 #inv .slot.vacant{background:transparent;border:2px dashed #D3D0DA;box-shadow:none;cursor:default}
 @media (max-width:640px){#invGrid{grid-template-columns:repeat(5,60px)}#inv .slot{width:60px;height:74px}#inv .slot .tip{display:none}}
 @media (prefers-reduced-motion:reduce){#inv .slot{transition:none}}
+
+/* ───── 모바일 전용(터치 기기) ───── */
+.touch-only{display:none}
+body.touch .touch-only{display:revert}
+body.touch .kb-only,body.touch #hint,body.touch #skills,body.touch .pick-hint,body.touch #inv h4 small{display:none}
+body.touch #joy{display:block;position:fixed;z-index:6;left:calc(22px + env(safe-area-inset-left,0px));bottom:calc(22px + env(safe-area-inset-bottom,0px));width:128px;height:128px;border-radius:50%;
+  background:rgba(255,255,255,.55);border:3px solid var(--ink);box-shadow:3px 3px 0 var(--ink);touch-action:none;-webkit-user-select:none;user-select:none}
+#joyKnob{position:absolute;left:50%;top:50%;width:56px;height:56px;margin:-28px 0 0 -28px;border-radius:50%;background:var(--yellow,#FFD43B);border:3px solid var(--ink);transition:transform .08s}
+#joy.on #joyKnob{transition:none}
+body.touch #mPad{display:flex;flex-direction:column;align-items:flex-end;gap:10px;right:calc(16px + env(safe-area-inset-right,0px));bottom:calc(22px + env(safe-area-inset-bottom,0px));pointer-events:none}
+#mPad .mRow{display:flex;gap:8px;align-items:center;pointer-events:auto}
+.mBtn{border:3px solid var(--ink);border-radius:50%;background:#fff;box-shadow:2px 2px 0 var(--ink);font:700 14px/1 inherit;color:var(--ink);touch-action:manipulation;-webkit-user-select:none;user-select:none;padding:0}
+.mBtn:active{transform:translate(2px,2px);box-shadow:none}
+.mBtn.sm{width:42px;height:42px;font-size:19px}
+.mBtn.md{width:64px;height:64px;font-size:14px}
+.mBtn.lg{width:84px;height:84px;font-size:17px;background:var(--yellow,#FFD43B)}
+.mBtn[aria-pressed="true"]{background:var(--ink);color:#FFD43B}
+.mBtn.on{background:#FFF6C7}
+/* 상호작용 버튼은 점프 위에 크게 */
+body.touch #act{left:auto;transform:none;right:calc(18px + env(safe-area-inset-right,0px));bottom:calc(190px + env(safe-area-inset-bottom,0px));font-size:16px;padding:12px 18px}
+/* 시점 버튼은 오른쪽 가운데 */
+body.touch #camBtns{bottom:auto;top:50%;transform:translateY(-50%)}
+/* 채팅은 💬로 열 때만 위쪽에 */
+body.touch #bottom{display:none}
+body.touch.chatting #bottom{display:flex;bottom:auto;top:calc(64px + env(safe-area-inset-top,0px))}
+body.touch #zoneToast{max-width:calc(100% - 40px)}
+body.touch .gbox ul.touch-only li{grid-template-columns:64px 1fr;font-size:14px}
+body.touch .gbox ul.touch-only li b{display:block;margin:0 0 2px}
+body.touch.chatting #topRight{display:none}
+
+/* 첫 방문 안내(세 장): 가운데 종이 카드, 그림 + 큰 키 + 한 줄 설명, 아래 점과 이전·다음 */
+#tour{position:fixed;inset:0;z-index:41;display:grid;place-items:center;background:rgba(14,30,70,.55);padding:16px}
+#tour[hidden]{display:none!important}
+.tbox{background:var(--paper);border:3px solid var(--ink);border-radius:22px;box-shadow:4px 6px 0 var(--ink);width:min(380px,100%);padding:18px 20px 16px;font-family:var(--hand)}
+.tstep.in{animation:tourIn .28s ease-out}
+@keyframes tourIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.tcount{margin:0 0 6px;font-size:14px;color:var(--muted)}
+.tart{position:relative;height:150px;border:2px solid var(--ink);border-radius:16px;background:var(--brand-weak);display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:12px;overflow:hidden}
+.tart-f svg{width:170px;height:128px}
+.tkey{position:absolute;right:12px;bottom:10px;min-width:44px;height:44px;display:grid;place-items:center;font-family:var(--body);font-size:22px;font-weight:700;background:var(--paper);color:var(--brand-strong);border:2px solid var(--ink);border-radius:10px;box-shadow:0 4px 0 var(--ink);animation:keyTap 1.4s ease-in-out infinite}
+.tkey.wide{min-width:64px;font-size:18px}
+@keyframes keyTap{0%,55%,100%{transform:none;box-shadow:0 4px 0 var(--ink)}65%,80%{transform:translateY(3px);box-shadow:0 1px 0 var(--ink);background:var(--brand)}}
+.tview{display:grid;justify-items:center;gap:2px;font-size:13px}.tview svg{width:56px;height:42px}.tview b{font-weight:700}
+.tarrow{font-size:18px;color:var(--muted);margin-top:14px}
+.tart-v{padding-right:48px}
+.tbar{display:flex;gap:5px;padding:7px;background:var(--paper);border:2px solid var(--ink);border-radius:14px;box-shadow:1px 2px 0 var(--ink);margin-right:52px}
+.tslot{position:relative;width:46px;height:46px;border:2px solid var(--ink);border-radius:10px;background:var(--paper-2);display:grid;place-items:center}
+.tslot svg{width:32px;height:32px}.tslot i{position:absolute;left:3px;top:1px;font-style:normal;font-family:var(--body);font-size:9px;color:var(--brand-strong)}
+.tslot.vacant{border:2px dashed #D3D0DA;background:transparent}
+.tbox h4{margin:0 0 6px;font-size:26px}
+.tdesc{margin:0 0 14px;font-family:var(--body);font-size:14px;line-height:1.55;color:#33313C;word-break:keep-all}
+.tdesc kbd{font-family:var(--body);font-size:12px;background:var(--brand-weak);border:1px solid var(--ink);border-radius:5px;padding:0 5px;color:var(--brand-strong)}
+.tfoot{display:flex;align-items:center;gap:8px}
+.tdots{display:flex;gap:6px;margin-right:auto}.tdots i{width:8px;height:8px;border-radius:50%;background:#D3D0DA;border:1.5px solid var(--ink)}.tdots i.on{background:var(--brand);width:20px;border-radius:6px}
+.tskip{font-family:var(--body);font-size:13px;background:none;border:0;color:var(--muted);text-decoration:underline;cursor:pointer;padding:4px}
+.tfoot .btn{width:auto;padding-left:16px;padding-right:16px}
+.tfoot .btn[hidden]{display:none}
+@media (prefers-reduced-motion:reduce){.tkey,.tstep.in{animation:none}}

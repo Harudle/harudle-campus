@@ -18,6 +18,9 @@ export type R3FContext = { gl: THREE.WebGLRenderer; scene: THREE.Scene; camera: 
 
 export function bootEngine(R3F: R3FContext) {
 let ready = false;
+// 터치 기기(휴대폰·태블릿): 조이스틱과 버튼으로 조작한다
+const TOUCH = typeof matchMedia !== "undefined" && (matchMedia("(pointer: coarse)").matches || (navigator.maxTouchPoints > 0 && !matchMedia("(pointer: fine)").matches));
+if (TOUCH) { document.body.classList.add("touch"); const si = document.getElementById("sayInput") as HTMLInputElement; if (si) si.placeholder = "말풍선으로 한마디"; }
 
 
 /* ════════════════ 3. 재료 (덕후감 3D 서고 방식: 툰 3단 + 먹선 + 종이결) ════════════════ */
@@ -1202,6 +1205,11 @@ const SKILL_KEY = { Digit1: "draw", Digit2: "wave", Digit3: "heart", Numpad1: "d
 addEventListener("keydown", (e) => {
   if ((e.target as HTMLElement).tagName === "INPUT") return;
   const c = e.code;
+  if (!tour.hidden) { // 안내 중: ←→로 넘기고 Enter·Space·F로 다음, Esc로 건너뛰기
+    e.preventDefault();
+    if (c === "Escape") closeTour(); else if (c === "ArrowLeft" || c === "KeyA") showTourStep(tourAt - 1); else if (c === "ArrowRight" || c === "KeyD" || c === "Enter" || c === "Space" || c === "KeyF") tourNext.click();
+    return;
+  }
   if (!guide.hidden) { if (c === "Escape" || c === "Enter" || c === "Space" || c === "KeyF") { e.preventDefault(); closeGuide(); } return; }
   if (c === "Escape") { const was = uiOpen(); closePanel(); picker.hidden = true; inv.hidden = true; closeAvPanel(); lb.hidden = true; if (was) syncCursor(); return; }   // 창이 없을 때 Esc는 그냥 커서 꺼내기
   if (!picker.hidden) { // 층 고르기 창: 숫자키로 바로, W/S로 옮기고 F·Space로 고른다(Enter는 버튼이 직접 받는다)
@@ -1249,8 +1257,26 @@ function useItem(id) {
   inv.hidden = true; syncCursor();
 }
 document.getElementById("jumpBtn").onclick = jump;
-const runBtn = document.getElementById("runBtn"); runBtn.onclick = () => { me.runToggle = !me.runToggle; runBtn.setAttribute("aria-pressed", String(me.runToggle)); };
-addEventListener("blur", () => { keys.clear(); me.runHold = false; pointers.clear(); drag = null; canvas.classList.remove("dragging"); });   // 알트탭: 떼지 못한 클릭이 남아 다음 클릭을 막지 않게
+const runBtn = document.getElementById("runBtn"); runBtn.onclick = () => { me.runToggle = !me.runToggle; runBtn.setAttribute("aria-pressed", String(me.runToggle)); mRun.setAttribute("aria-pressed", String(me.runToggle)); };
+/* ───── 모바일: 조이스틱 · 버튼 묶음 ───── */
+const mRun = document.getElementById("mRun");
+const joy = { on: false, x: 0, y: 0, id: -1, cx: 0, cy: 0 };
+{
+  const pad = document.getElementById("joy"), knob = document.getElementById("joyKnob"), R = 46;
+  const move = (e) => { let dx = e.clientX - joy.cx, dy = e.clientY - joy.cy; const d = Math.hypot(dx, dy); if (d > R) { dx *= R / d; dy *= R / d; } joy.x = dx / R; joy.y = dy / R; knob.style.transform = `translate(${dx}px,${dy}px)`; };
+  const end = (e) => { if (e.pointerId !== joy.id) return; joy.on = false; joy.x = joy.y = 0; joy.id = -1; pad.classList.remove("on"); knob.style.transform = ""; };
+  pad.addEventListener("pointerdown", (e) => { e.preventDefault(); pad.setPointerCapture(e.pointerId); const r = pad.getBoundingClientRect(); joy.cx = r.left + r.width / 2; joy.cy = r.top + r.height / 2; joy.on = true; joy.id = e.pointerId; me.path = null; me.goal = null; pad.classList.add("on"); move(e); });
+  pad.addEventListener("pointermove", (e) => { if (e.pointerId === joy.id) move(e); });
+  pad.addEventListener("pointerup", end); pad.addEventListener("pointercancel", end);
+  mRun.onclick = () => runBtn.click();
+  document.getElementById("mJump").addEventListener("pointerdown", (e) => { e.preventDefault(); jump(); });
+  document.getElementById("mInv").onclick = () => toggleInv();
+  $all("#mPad [data-skill]").forEach((b) => (b.onclick = () => useSkill(b.dataset.skill)));
+  const chatBtn = document.getElementById("mChat"), sayIn = $<HTMLInputElement>("sayInput");
+  chatBtn.onclick = () => { if (document.body.classList.toggle("chatting")) sayIn.focus(); else sayIn.blur(); };
+  sayIn.addEventListener("blur", () => { if (TOUCH) setTimeout(() => document.body.classList.remove("chatting"), 150); });
+}
+addEventListener("blur", () => { keys.clear(); me.runHold = false; if (me.moving) { me.moving = false; wasMoving = false; sendPresence(true); } pointers.clear(); drag = null; canvas.classList.remove("dragging"); });   // 알트탭: 떼지 못한 클릭이 남아 다음 클릭을 막지 않게
 document.getElementById("viewBtn").onclick = () => setView({ top: "third", third: "first", first: "top" }[VIEW.mode]);
 document.getElementById("rotL").onclick = () => (cam.yawT += Math.PI / 4);
 document.getElementById("rotR").onclick = () => (cam.yawT -= Math.PI / 4);
@@ -1279,9 +1305,10 @@ let lockFailed = false;
 const locked = () => document.pointerLockElement === canvas;
 // 경계: 창(층 고르기·크루 피드·사진·캐릭터 꾸미기·조작법)이 떠 있는 동안은 커서를 꺼내 두고, 다 닫히면 게임으로 돌아와 다시 고정한다.
 // 채팅은 게임 안의 일이라 고정을 유지한다
-const uiOpen = () => !inv.hidden || !picker.hidden || panel.classList.contains("open") || !avPanel.hidden || !guide.hidden || !lb.hidden;
+const uiOpen = () => !tour.hidden || !inv.hidden || !picker.hidden || panel.classList.contains("open") || !avPanel.hidden || !guide.hidden || !lb.hidden;
 function syncCursor() { if (uiOpen()) { if (locked()) document.exitPointerLock(); } else lockMouse(); }
 function lockMouse() {
+  if (TOUCH) return;   // 터치 기기는 고정하지 않는다(화면을 끌어서 둘러본다)
   if (lockFailed || locked() || !canvas.requestPointerLock || !inside() || uiOpen()) return;
   // 가속 없는 원본 움직임을 먼저 청하고, 안 되는 브라우저면 보통 고정으로. 사용자 조작 없이 불려 거절되면 조용히 넘긴다(다음 클릭에 다시)
   const plain = () => { try { (canvas.requestPointerLock() as any)?.catch?.(() => {}); } catch { lockFailed = true; } };
@@ -1399,6 +1426,31 @@ function goFloor(f, spawn) {
 }
 // 층 바로가기 버튼은 없다: 다른 층은 엘리베이터나 계단으로만 간다
 function updateFloorHud() { document.querySelector("#floorBadge b").textContent = me.f + "F"; document.querySelector("#floorBadge span").textContent = FLOOR_INFO[me.f]; }
+// 처음 온 사람에게 세 장짜리 안내: F 상호작용 → V 시점 → Tab 인벤토리
+const tour = document.getElementById("tour"), tourStep = document.getElementById("tourStep"), tourDots = document.getElementById("tourDots");
+const tourNext = document.getElementById("tourNext") as HTMLButtonElement, tourPrev = document.getElementById("tourPrev") as HTMLButtonElement;
+const TOUR = [
+  { title: "가까이 가서 F", art: `<div class="tart tart-f"><svg viewBox="0 0 120 90" aria-hidden="true"><rect x="8" y="10" width="44" height="66" rx="3" fill="#9C9A95" stroke="#111118" stroke-width="2.5"/><rect x="16" y="20" width="28" height="56" fill="#2B2A28" stroke="#111118" stroke-width="2"/><path d="M30 20v56" stroke="#5E5C58" stroke-width="2"/><rect x="22" y="13" width="16" height="5" rx="1" fill="#16161A"/><path d="M27 16l3-2 3 2" stroke="#FFB547" stroke-width="1.5" fill="none"/><path d="M78 40h28v8H78z" fill="#fff" stroke="#111118" stroke-width="2.5" stroke-linejoin="round"/><path d="M80 48v26M104 48v26M100 22v18" stroke="#111118" stroke-width="2.5" stroke-linecap="round"/><path d="M84 22h20" stroke="#111118" stroke-width="2.5" stroke-linecap="round"/></svg><kbd class="tkey">F</kbd></div>`,
+    kb: "엘리베이터 앞이나 의자 가까이에서 <kbd>F</kbd>를 누르면 다른 층으로 가거나 앉아요. 크루 옆에서 누르면 말을 걸고, 빈백에서는 누워요.", touch: "엘리베이터·의자·크루 가까이 가면 버튼이 떠요. 눌러서 층을 옮기고, 앉고, 말을 걸어요." },
+  { title: "V로 시점 바꾸기", art: `<div class="tart tart-v"><div class="tview"><b>위에서</b><svg viewBox="0 0 40 30"><rect x="4" y="6" width="32" height="20" fill="#F2F4E2" stroke="#111118" stroke-width="2"/><circle cx="20" cy="16" r="3" fill="#B6A6E8" stroke="#111118" stroke-width="1.5"/></svg></div><span class="tarrow">→</span><div class="tview"><b>들어가서</b><svg viewBox="0 0 40 30"><path d="M4 26L14 8h12l10 18z" fill="#F2F4E2" stroke="#111118" stroke-width="2" stroke-linejoin="round"/><circle cx="20" cy="20" r="4" fill="#B6A6E8" stroke="#111118" stroke-width="1.5"/></svg></div><span class="tarrow">→</span><div class="tview"><b>1인칭</b><svg viewBox="0 0 40 30"><rect x="4" y="4" width="32" height="22" rx="2" fill="#1C2B55" stroke="#111118" stroke-width="2"/><circle cx="20" cy="15" r="2.5" fill="#fff" stroke="#111118" stroke-width="1.5"/></svg></div><kbd class="tkey">V</kbd></div>`,
+    kb: "<kbd>V</kbd>를 누를 때마다 위에서 보기 → 들어가서 보기 → 1인칭으로 바뀌어요. 들어가서 볼 때는 마우스로 둘러보고, <kbd>Esc</kbd>로 커서를 꺼내요.", touch: "오른쪽 아래 시점 버튼으로 위에서·들어가서·1인칭을 오가요. 화면을 끌어서 둘러봐요." },
+  { title: "Tab으로 가방 열기", art: `<div class="tart tart-tab"><div class="tbar"><span class="tslot"><i>1</i>${ICON.laptop}</span><span class="tslot"><i>2</i>${ICON.coffee}</span><span class="tslot vacant"></span><span class="tslot vacant"></span></div><kbd class="tkey wide">Tab</kbd></div>`,
+    kb: "<kbd>Tab</kbd>을 누르면 인벤토리가 열려요. 칸을 누르거나 숫자키로 써요. 노트북은 의자에 앉아서 펼치고, 아이스 아메리카노는 언제든 한 모금!", touch: "🎒 버튼으로 인벤토리를 열고 칸을 눌러 써요. 노트북은 앉아서 펼치고, 아이스 아메리카노는 언제든 한 모금!" },
+];
+let tourAt = 0;
+tourDots.innerHTML = TOUR.map(() => "<i></i>").join("");
+function showTourStep(i) {
+  tourAt = clamp(i, 0, TOUR.length - 1); const st = TOUR[tourAt];
+  tourStep.innerHTML = `<p class="tcount">${tourAt + 1} / ${TOUR.length}</p>${st.art}<h4 id="tourTitle">${st.title}</h4><p class="tdesc kb-only">${st.kb}</p><p class="tdesc touch-only">${st.touch}</p>`;
+  tourStep.classList.remove("in"); void tourStep.offsetWidth; tourStep.classList.add("in");   // 장이 넘어갈 때 살짝 올라온다
+  [...tourDots.children].forEach((d, k) => d.classList.toggle("on", k === tourAt));
+  tourPrev.hidden = tourAt === 0; tourNext.textContent = tourAt === TOUR.length - 1 ? "시작하기" : "다음"; tourNext.focus();
+}
+function openTour() { tour.hidden = false; if (locked()) document.exitPointerLock(); showTourStep(0); }
+function closeTour() { tour.hidden = true; LS.set("ww.tour", "1"); syncCursor(); }
+tourNext.onclick = () => (tourAt === TOUR.length - 1 ? closeTour() : showTourStep(tourAt + 1));
+tourPrev.onclick = () => showTourStep(tourAt - 1);
+document.getElementById("tourSkip").onclick = closeTour;
 const guide = document.getElementById("guide");
 function openGuide() { guide.hidden = false; if (locked()) document.exitPointerLock(); document.getElementById("guideOk").focus(); }
 function closeGuide() { guide.hidden = true; LS.set("ww.guide", "1"); syncCursor(); }
@@ -1466,6 +1518,9 @@ async function loadFeed() {
 /* ════════════════ 12. 같이 있는 크루 (room presence) ════════════════ */
 let room = null, user = null, peerList = [], names = {}, lastSent = 0;
 const online = document.getElementById("online");
+let wasMoving = false;
+// 다른 탭으로 가면 그림이 멈춰 멈춤 신호를 못 보낸다: 숨기 전에 보낸다
+document.addEventListener("visibilitychange", () => { if (document.hidden && me.moving) { me.moving = false; wasMoving = false; sendPresence(true); } });
 function sendPresence(force) {
   if (!room) return; const now = performance.now(); if (!force && now - lastSent < 90) return; lastSent = now;
   room.presence({ f: me.f, x: Math.round(me.x * 100) / 100, y: Math.round(me.y * 100) / 100, u: Math.round(me.up * 100) / 100, h: Math.round(me.h * 100) / 100, m: me.moving ? 1 : 0, r: running() ? 1 : 0, l: me.lie ? 1 : 0, st: me.seat ? 1 : 0, ly: me.lie ? Math.round(me.lie.yaw * 100) / 100 : 0, jc: me.jc, ac: me.ac, an: me.an, as: me.as, look: 0, av: avEncode(myAv), say: me.say && Date.now() - me.sayAt < 6000 ? me.say : null }).catch(() => { });
@@ -1530,7 +1585,10 @@ function syncPeers(dt, t) {
     if ((s.m || (!s.st && v.act?.name === "laptop")) && v.act) endAct(v);
     v.jz = v.jz || 0; v.jv = v.jv || 0; if (v.jz > 0 || v.jv > 0) { v.jv -= 15 * dt; v.jz += v.jv * dt; if (v.jz <= 0) { v.jz = 0; v.jv = 0; } }
     const vis = s.f === me.f; v.doll.root.visible = vis; setPos(v.doll, s.f, v.x, v.y); v.doll.root.position.y += (+s.u || 0) + v.jz; v.doll.blob.position.y = .012 - v.jz; applyLie(v.doll, s.l ? { yaw: +s.ly || 0 } : null); v.doll.setSeated(s.st);
-    v.doll.update(dt, t, !!s.m, typeof s.h === "number" ? s.h : null, 0, false, tickAct(v, dt), v.jz > .01, !!s.r);
+    // 받는 쪽 안전장치: "걷는 중"이라고 와도 위치가 0.5초 넘게 그대로면 멈춘 것으로 본다(멈춤 신호가 빠졌거나 그 사람이 다른 탭으로 갔을 때)
+    if (s.x !== v.sx || s.y !== v.sy) { v.sx = s.x; v.sy = s.y; v.movedAt = t; }
+    const walking = (v.walking = !!s.m && t - (v.movedAt ?? -9) < .5);
+    v.doll.update(dt, t, walking, typeof s.h === "number" ? s.h : null, 0, false, tickAct(v, dt), v.jz > .01, walking && !!s.r);
     v.tag.textContent = p.name || (p.by && names[p.by]) || "크루";
     const rp = v.doll.root.position;
     if (vis) project(v.tag, rp.x, rp.y - .05, rp.z, true); else v.tag.style.display = "none";
@@ -1541,7 +1599,8 @@ function syncPeers(dt, t) {
 /* ════════════════ 13. 한 프레임 ════════════════ */
 let last = performance.now(), npcSkillTimer = 4;
 function step(dt, t) {
-  let ix = 0, iy = 0;
+  let ix = 0, iy = 0, amag = 1;
+  if (joy.on) { const m = Math.hypot(joy.x, joy.y); if (m > .18) { ix = joy.x; iy = joy.y; amag = clamp(m, .45, 1); } }   // 조이스틱: 민 만큼 빠르게
   if (keys.has("arrowleft") || keys.has("a")) ix -= 1; if (keys.has("arrowright") || keys.has("d")) ix += 1;
   if (keys.has("arrowup") || keys.has("w")) iy -= 1; if (keys.has("arrowdown") || keys.has("s")) iy += 1;
   let vx = 0, vy = 0;
@@ -1555,7 +1614,7 @@ function step(dt, t) {
     if (gl.bag && !gl.bag.taken && Math.hypot(gl.x - me.x, gl.y - me.y) < 2.2) lieDown(gl.bag);
     else if (gl.seat && !gl.seat.taken && Math.hypot(gl.x - me.x, gl.y - me.y) < 1.4) sitDown(gl.seat);
   }
-  const sp = running() ? 7.3 : 3.2, len = Math.hypot(vx, vy) || 1; vx = vx / len * sp * dt; vy = vy / len * sp * dt;
+  const sp = (running() ? 7.3 : 3.2) * amag, len = Math.hypot(vx, vy) || 1; vx = vx / len * sp * dt; vy = vy / len * sp * dt;
   // 걷기: 발 높이(올라선 가구 + 점프)에서 갈 수 있는지 본다. 책상·화분 같은 건 점프해서 올라서고, 가장자리를 넘으면 떨어진다
   const feet = me.up + me.jz, free = (x, y) => (me.lie || me.seat ? fits(floor, x, y) : canStand(floor, x, y, feet));
   // 끼임 방지: 몸이 벽·가구와 겹친 채 시작하면(예전 에스컬레이터 도착 자리) 어떤 방향으로도 못 움직였다 → 가장 가까운 빈 칸으로 옮긴다
@@ -1566,11 +1625,13 @@ function step(dt, t) {
   me.moving = !!(vx || vy);
   if (!runTipShown) { if (me.moving && running()) runTipShown = true; else if (me.moving) { walkFor += dt; if (walkFor > 5) { runTipShown = true; showToast("더 빨리 가고 싶다면", "Shift를 누른 채로 걸으면 달리고, Space를 누르면 점프해요.", 4200); } } }
   if (me.moving) { me.h = Math.atan2(vx, vy); if (me.act) endAct(me); sendPresence(false); }
+  else if (wasMoving) sendPresence(true);   // 멈춘 순간은 꼭 보낸다(안 보내면 남들 화면에서 제자리걸음이 남는다)
+  wasMoving = me.moving;
   // 시야는 몸 방향을 따라가지 않는다: 마우스로만 돈다
   if (me.jz > 0 || me.jv > 0) { me.jv -= 15 * dt; me.jz += me.jv * dt; if (me.jz <= 0) { me.jz = 0; me.jv = 0; me.jumps = 0; } }
   // 트램펄린 위에서는 저절로 통통
   if (me.jz <= 0 && me.jv <= 0 && floor.furn.some((o) => o.kind === "trampoline" && inRect(o, me.x, me.y))) { me.jv = 6.4; me.jc++; sendPresence(true); }
-  $all(".skill[data-skill]").forEach((b) => b.classList.toggle("on", me.act?.name === b.dataset.skill));
+  $all(".skill[data-skill], .mBtn[data-skill]").forEach((b) => b.classList.toggle("on", me.act?.name === b.dataset.skill));
   npcSkillTimer -= dt; if (npcSkillTimer <= 0) { npcSkillTimer = 8 + Math.random() * 12; const idle = NPCS.filter((n) => n.f === me.f && !n.moving && !n.act && !n.talk && !n.lie); const n = idle[Math.floor(Math.random() * idle.length)]; if (n) startAct(n, ["draw", "draw", "wave", "heart"][Math.floor(Math.random() * 4)]); }
   if (t * 1000 - lastPortal > 1400) for (const p of floor.portals) if (inRect(p, me.x, me.y)) { lastPortal = t * 1000; goFloor(p.to, p.spawn); break; }
   // 강아지는 내 옆을 졸졸
@@ -1640,11 +1701,11 @@ fontsReady.then(() => {
   cam.target.set(wx(me.x), 0, wz(me.y)); placeCamera();
   const ld = document.getElementById("loading"); ld.style.opacity = "0"; setTimeout(() => ld.remove(), 450);
   showToast("11층에 도착했어요", "1번을 눌러 네 컷을 그려 보세요. 캐릭터를 누르면 그 크루의 하루들 피드가 열려요.", 5000);
-  if (!LS.get("ww.guide")) openGuide();
+  if (!LS.get("ww.tour")) openTour();   // 처음 오면 세 장짜리 안내(전체 조작법은 「조작법」 버튼)
   loadFeed(); joinRoom();
   ready = true;
   // 화면 점검용 손잡이: 주소 끝에 ?debug를 붙였을 때만
-  if (new URLSearchParams(location.search).has("debug")) (window as any).__t = { gl: renderer, Q, me, NPCS, cam, goFloor, setView, setMyAv, useSkill, jump, lieDown, sitDown, nearSeat, AVATAR_PRESETS, get floor() { return floor; } };
+  if (new URLSearchParams(location.search).has("debug")) (window as any).__t = { peers, gl: renderer, Q, me, NPCS, cam, goFloor, setView, setMyAv, useSkill, jump, lieDown, sitDown, nearSeat, AVATAR_PRESETS, get floor() { return floor; } };
 });
 
 return { frame(dt: number) { if (!ready) return; const t = performance.now() / 1000; step(Math.min(.05, dt), t); render(Math.min(.05, dt), t); } };

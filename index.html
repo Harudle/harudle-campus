@@ -41,10 +41,19 @@
 </div>
 <input type="file" id="feedFile" accept=".json,application/json" hidden>
 <div id="zoneToast" class="chip" style="opacity:0"><h2></h2><p></p></div>
-<div id="hint"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 걷기 · <kbd>Shift</kbd> 누른 채 달리기 · <kbd>Space</kbd> 점프 · <kbd>F</kbd> 대화·앉기·눕기 · <kbd>Enter</kbd> 채팅 · <kbd>Tab</kbd> 인벤토리 · <kbd>V</kbd> 시점 · <button type="button" id="guideBtn">조작법</button></div>
+<div id="hint"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 걷기 · <kbd>F</kbd> 상호작용 · <kbd>Enter</kbd> 채팅 · <kbd>Tab</kbd> 인벤토리 · <kbd>V</kbd> 시점 · <button type="button" id="guideBtn">조작법</button></div>
+<div id="tour" hidden><div class="tbox" role="dialog" aria-modal="true" aria-labelledby="tourTitle">
+  <div class="tstep" id="tourStep" aria-live="polite"></div>
+  <div class="tfoot">
+    <div class="tdots" id="tourDots" aria-hidden="true"></div>
+    <button type="button" class="tskip" id="tourSkip">건너뛰기</button>
+    <button type="button" class="btn ghost" id="tourPrev">이전</button>
+    <button type="button" class="btn" id="tourNext">다음</button>
+  </div>
+</div></div>
 <div id="guide" hidden><div class="gbox" role="dialog" aria-labelledby="guideTitle">
   <h4 id="guideTitle">이렇게 움직여요</h4>
-  <ul>
+  <ul class="kb-only">
     <li><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><p><b>걷기</b></p></li>
     <li><span><kbd>Shift</kbd></span><p><b>달리기</b></p></li>
     <li><span><kbd>Space</kbd></span><p><b>점프</b> 공중에서 한 번 더 누르면 더블 점프</p></li>
@@ -54,6 +63,14 @@
     <li><span><kbd>Enter</kbd></span><p><b>채팅 열기 · 보내기</b></p></li>
     <li><span><kbd>Esc</kbd></span><p><b>마우스 커서 꺼내기</b></p></li>
     <li><span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></span><p><b>네 컷 · 인사 · 하트</b></p></li>
+  </ul>
+  <ul class="touch-only">
+    <li><span>🕹️</span><p><b>왼쪽 조이스틱으로 걷기</b> 살짝 밀면 천천히, 끝까지 밀면 빠르게</p></li>
+    <li><span>👆</span><p><b>화면을 끌어서 둘러보기</b> 두 손가락으로 벌리고 좁혀 가까이·멀리</p></li>
+    <li><span>달리기</span><p><b>한 번 누르면 켜지고, 다시 누르면 꺼져요</b></p></li>
+    <li><span>점프</span><p><b>공중에서 한 번 더 누르면 더블 점프</b> 책상·화분 위에도 올라가요</p></li>
+    <li><span>💬</span><p><b>채팅</b> · 🎒 인벤토리 · 🖍️👋💗 네 컷·인사·하트</p></li>
+    <li><span>대화하기</span><p><b>크루·의자·엘리베이터 가까이 가면 버튼이 떠요</b></p></li>
   </ul>
   <button class="btn" type="button" id="guideOk">시작하기</button>
 </div></div>
@@ -87,6 +104,21 @@
 <section id="inv" hidden aria-label="인벤토리"><h4>인벤토리 <small>Tab으로 닫기 · 숫자로 바로 쓰기</small></h4><div id="invGrid"></div></section>
 <div id="picker" hidden><div class="box"><h4>몇 층으로 갈까요?</h4><p class="pick-hint" style="margin:-4px 0 8px;font-size:12px;opacity:.7">숫자 1~4 · W/S로 고르고 F</p><div class="fl" id="pickList"></div><button class="btn ghost" id="pickClose" style="margin-top:10px;width:100%">그냥 있을게요</button></div></div>
 
+<!-- 모바일 전용: 왼쪽 조이스틱, 오른쪽 버튼 묶음 (터치 기기에서만 보인다) -->
+<div id="joy" class="touch-only" aria-label="이동 조이스틱"><div id="joyKnob"></div></div>
+<div class="hud touch-only" id="mPad" role="group" aria-label="모바일 조작">
+  <div class="mRow">
+    <button class="mBtn sm" data-skill="draw" aria-label="네 컷 그리기">🖍️</button>
+    <button class="mBtn sm" data-skill="wave" aria-label="인사">👋</button>
+    <button class="mBtn sm" data-skill="heart" aria-label="하트">💗</button>
+    <button class="mBtn sm" id="mInv" aria-label="인벤토리">🎒</button>
+    <button class="mBtn sm" id="mChat" aria-label="채팅">💬</button>
+  </div>
+  <div class="mRow">
+    <button class="mBtn md" id="mRun" aria-pressed="false">달리기</button>
+    <button class="mBtn lg" id="mJump">점프</button>
+  </div>
+</div>
 <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>
