@@ -328,9 +328,12 @@ body.sideTucked:not(.touch) #zoneToast{left:50%}
 .shead .srail{flex:1}
 #sideHide{flex:0 0 34px;height:34px;border:0;border-radius:9px;background:transparent;color:#6B6880;cursor:pointer;display:grid;place-items:center}
 #sideHide:hover{background:#F2F0F7;color:#1B1A22}
-#sideShow{position:fixed;z-index:6;top:calc(12px + env(safe-area-inset-top,0px));right:12px;height:38px;padding:0 12px;border:1px solid rgba(17,17,24,.08);border-radius:11px;background:rgba(255,255,255,.92);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);box-shadow:0 6px 18px rgba(40,24,90,.12);
-  display:none;align-items:center;gap:7px;font:600 13px "Pretendard","Apple SD Gothic Neo",sans-serif;color:#1B1A22;cursor:pointer}
-#sideShow:hover{background:#fff}
+#sideShow{position:fixed;z-index:6;top:calc(12px + env(safe-area-inset-top,0px));right:12px;display:none;gap:6px}
+#sideShow button{height:36px;padding:0 12px;border:1px solid rgba(17,17,24,.08);border-radius:11px;background:rgba(255,255,255,.92);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);box-shadow:0 6px 18px rgba(40,24,90,.12);
+  display:flex;align-items:center;gap:6px;font:600 13px "Pretendard","Apple SD Gothic Neo",sans-serif;color:#1B1A22;cursor:pointer}
+#sideShow button:hover{background:#fff}
+#sideShow .dot{width:7px;height:7px;border-radius:50%;background:#20B486;box-shadow:0 0 0 3px rgba(32,180,134,.16)}
+#sideShow em{font-style:normal;font-weight:800}
 #sideShow b{min-width:17px;padding:0 5px;border-radius:999px;background:#F15B5B;color:#fff;font:700 10.5px/1.6 "Pretendard",sans-serif;display:none}
 #sideShow b.on{display:inline-block}
 body.sideTucked:not(.touch) #sideShow{display:flex}

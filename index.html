@@ -89,7 +89,10 @@
 <div class="hud" id="camBtns"><button class="chip" id="viewBtn" aria-label="시점 바꾸기">들어가기</button><button class="chip" id="rotL" aria-label="왼쪽으로 돌리기">⟲</button><button class="chip" id="rotR" aria-label="오른쪽으로 돌리기">⟳</button></div>
 <button id="act" class="btn" hidden>대화하기</button>
 <!-- 게더처럼 오른쪽에 모은 사이드: 아이콘 레일(채팅 · 사람) + 펼친 패널 -->
-<button type="button" id="sideShow" title="사이드바 펼치기 (\)" aria-label="사이드바 펼치기"><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><rect x="2.5" y="3.5" width="15" height="13" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12.5 3.5v13" stroke="currentColor" stroke-width="1.6"/><path d="M8.5 8l-2 2 2 2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span>채팅 · 크루</span><b id="sideShowBadge"></b></button>
+<div id="sideShow">
+  <button type="button" id="showPeople" title="같이 있는 크루 보기" aria-label="같이 있는 크루 보기"><i class="dot"></i><em id="sideShowCnt">1</em>명</button>
+  <button type="button" id="showChat" title="채팅 열기 (Enter)" aria-label="채팅 열기">💬 채팅<b id="sideShowBadge"></b></button>
+</div>
 <aside id="side" aria-label="채팅과 크루">
   <button type="button" id="sideTab" aria-label="사이드바 접기/펼치기" title="사이드바 접기 (\)"><span class="chev">›</span><b id="sideTabBadge"></b></button>
   <div class="spanel">
