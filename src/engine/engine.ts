@@ -1589,6 +1589,7 @@ addEventListener("keydown", (e) => {
     if (!menu.hidden) { if (performance.now() - menuAt > 300) closeMenu(); return; }   // 설정창이 떠 있으면 닫고 돌아간다(막 열린 직후 같은 Esc는 무시)
     if (!profile.hidden) { closeProfile(); return; }
     const was = uiOpen(); closePanel(); picker.hidden = true; inv.hidden = true; closeAvPanel(); lb.hidden = true; if (was) { syncCursor(); return; }
+    if (!TOUCH && !sideTucked) { tuckSide(true); return; }   // 사이드바가 열려 있으면 먼저 접는다
     openMenu(); return;   // 창이 없으면 설정창
   }
   if (!picker.hidden) { // 층 고르기 창: 숫자키로 바로, W/S로 옮기고 F·Space로 고른다(Enter는 버튼이 직접 받는다)
@@ -1716,7 +1717,7 @@ document.addEventListener("mousedown", (e) => { if (e.button === 0 && locked() &
 document.addEventListener("pointerlockerror", () => {});
 document.addEventListener("pointerlockchange", () => {
   document.getElementById("cross").hidden = !(VIEW.mode === "first" || locked());
-  if (!locked() && inside() && !uiOpen() && performance.now() > menuQuietUntil) { if (document.hasFocus()) openMenu(); else showToast("커서가 나왔어요", "화면을 한 번 누르면 다시 둘러봐요.", 2600); }   // Esc로 풀리면 설정창, 알트탭이면 안내만
+  if (!locked() && inside() && !uiOpen() && performance.now() > menuQuietUntil) { if (document.hasFocus()) { if (!TOUCH && !sideTucked) tuckSide(true); else openMenu(); } else showToast("커서가 나왔어요", "화면을 한 번 누르면 다시 둘러봐요.", 2600); }   // Esc로 풀리면 설정창, 알트탭이면 안내만
 });
 canvas.addEventListener("pointerup", endDrag); canvas.addEventListener("pointercancel", endDrag);
 canvas.addEventListener("wheel", (e) => {
