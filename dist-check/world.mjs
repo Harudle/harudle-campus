@@ -8,7 +8,7 @@ var S = 1.25;
 var FH = 4.6;
 var WALL = 0.9;
 var DOLL = 1.12;
-var CEIL = { 11: 3.5, 12: 4.4, 13: 4.4, 14: 3.8 };
+var CEIL = { 11: 4.4, 12: 4.4, 13: 4.4, 14: 3.8 };
 var VIEW = { mode: "top" };
 var inside = () => VIEW.mode !== "top";
 var INK = 1118488;
@@ -67,6 +67,8 @@ function makeFloor(f) {
     F("elev", 29, y, 1, 2, { turn: Math.PI / 2, raw: true });
     calls.push({ x: 30, y, w: 1, h: 2 });
   }
+  for (const y of [17, 20]) F("poster", 29, y, 1, 1, { face: "e", at: 30 - 0.07 / S, raw: true });
+  F("poster", 36, 18.5, 1, 1, { face: "w", at: 36 + 0.07 / S, raw: true });
   [16, 20].forEach((y, i) => {
     F("elev", 36, y, 1, 2, { turn: -Math.PI / 2, raw: true });
     F("xbanner", 35, y, 1, 2, { style: i, turn: Math.PI, raw: true });
@@ -93,7 +95,7 @@ function makeFloor(f) {
     F("pillar", 7, 17, 1, 1);
     Z(1, 1, 14, 28, "\uD070 \uAC15\uC758\uC2E4", "\uACF5\uD1B5 \uC218\uC5C5\uACFC \uC678\uBD80 \uAC15\uC5F0\uC774 \uC5F4\uB9AC\uB294 \uACF3. \uCC3D\uAC00\uC758 \uD070 \uD654\uBA74 \uB450 \uAC1C\uB97C \uBCF4\uBA70 \uD06C\uB8E8 \uC804\uC6D0\uC774 \uD55C\uC790\uB9AC\uC5D0 \uBAA8\uC5EC\uC694.", { raw: true });
     for (const y of [4, 18]) {
-      F("screen", 2, y, 1, 7, { raw: true });
+      F("screen", 2, y, 1, 7, { raw: true, big: true });
       F("lectern", 2, y + 8, 1, 1, { raw: true });
     }
     for (const x of [5, 8, 11]) for (const y of [2, 6, 10, 14, 18, 22, 26]) F("ltable", x, y, 1, 3, { turn: Math.PI / 2, raw: true });
@@ -208,6 +210,7 @@ function makeFloor(f) {
     Z(1, 11, 30, 1, "\uC2A4\uD0C0\uD2B8\uB799 \uAC00\uB294 \uAE38", "", { npc: false, tint: "#E4E3E0" });
     F("pillar", 9, 12, 1, 1);
     F("arcplanter", 23, 14, 4, 4);
+    F("poster", 28, 22.5, 1, 1, { face: "w", at: 28.5 - 0.05 / S, raw: true });
     F("walldeco", 27, 17, 1, 2, { item: "door", raw: true });
     F("walldeco", 27, 21, 1, 1, { item: "hydrant", raw: true });
     F("walldeco", 27, 24, 1, 2, { item: "door", raw: true });
@@ -300,7 +303,42 @@ function makeFloor(f) {
 }
 var FLOORS = {};
 for (const f of [11, 12, 13, 14]) FLOORS[f] = makeFloor(f);
-var WALK_THROUGH = /* @__PURE__ */ new Set(["walldeco", "linelight", "bleacher", "arcbleacher", "flight", "brickdeck", "pebbles", "redsteps", "mirrorball", "trampoline", "ballpit"]);
+var TOPS = {
+  table: 0.44,
+  bigtable: 0.44,
+  desk: 0.44,
+  ltable: 0.44,
+  mtable: 0.44,
+  wtable: 0.42,
+  duo: 0.44,
+  pairrow: 0.44,
+  pairdesk: 0.44,
+  focusdesk: 0.44,
+  solo: 0.44,
+  walltable: 0.47,
+  round: 0.44,
+  bistro: 0.47,
+  boardgame: 0.44,
+  coffee: 0.3,
+  bench: 0.3,
+  sofa: 0.48,
+  winbench: 0.45,
+  halfround: 0.5,
+  ringtable: 0.48,
+  counter: 0.58,
+  kitchenrow: 0.62,
+  lowcounter: 0.62,
+  island: 0.56,
+  hightable: 0.66,
+  mcdesk: 0.5,
+  lectern: 0.66,
+  pingpong: 0.66,
+  greenbox: 0.55,
+  planter: 0.3,
+  plant: 0.36,
+  crates: 0.5
+};
+var WALK_THROUGH = /* @__PURE__ */ new Set(["poster", "walldeco", "linelight", "bleacher", "arcbleacher", "flight", "brickdeck", "pebbles", "redsteps", "mirrorball", "trampoline", "ballpit"]);
 var ELEV_SPAWN = [32.5, 15.5];
 for (const fl of Object.values(FLOORS)) {
   const g = new Uint8Array(W * H);
@@ -355,6 +393,18 @@ for (const fl of Object.values(FLOORS)) {
     for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) set(x, y);
   }
   fl.grid = g;
+  const top = new Float32Array(W * H);
+  for (const o of fl.furn) {
+    const h = TOPS[o.kind];
+    if (!h || o.lift) continue;
+    for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) if (x >= 0 && y >= 0 && x < W && y < H) top[y * W + x] = Math.max(top[y * W + x], h);
+  }
+  for (const o of fl.furn) {
+    if (TOPS[o.kind] || WALK_THROUGH.has(o.kind)) continue;
+    for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) if (x >= 0 && y >= 0 && x < W && y < H && g[y * W + x]) top[y * W + x] = 0;
+  }
+  for (let i = 0; i < W * H; i++) if (fl.wgrid[i]) top[i] = 0;
+  fl.top = top;
 }
 for (const fl of Object.values(FLOORS)) {
   const reach = new Uint8Array(W * H), q = [Math.floor(ELEV_SPAWN[1]) * W + Math.floor(ELEV_SPAWN[0])];
@@ -396,6 +446,23 @@ var flightSteps = (o) => o.h0 === o.h1 ? 1 : (o.dir === "e" ? o.w : o.h) * 3;
 function flightHeight(o, x, y) {
   const n = flightSteps(o), t = o.dir === "e" ? (x - o.x) / o.w : (y - o.y) / o.h, i = Math.min(n - 1, Math.floor(t * n));
   return Math.max(0.05, o.h0 + (o.h1 - o.h0) * (i + 1) / n);
+}
+var topAt = (fl, x, y) => {
+  x = Math.floor(x);
+  y = Math.floor(y);
+  return x < 0 || y < 0 || x >= W || y >= H ? 0 : fl.top[y * W + x];
+};
+var CLIMB = 0.26;
+function canStand(fl, x, y, feet) {
+  for (const [cx, cy] of [[x - R_ME, y - R_ME], [x + R_ME, y - R_ME], [x - R_ME, y + R_ME], [x + R_ME, y + R_ME]]) {
+    const tx = Math.floor(cx), ty = Math.floor(cy);
+    if (tx < 0 || ty < 0 || tx >= W || ty >= H) return false;
+    const i = ty * W + tx;
+    if (!fl.grid[i]) continue;
+    const t = fl.top[i];
+    if (!t || t > feet + CLIMB) return false;
+  }
+  return true;
 }
 function heightAt(fl, x, y) {
   for (const o of fl.furn) {
@@ -444,6 +511,7 @@ export {
   ARC_STEP,
   BRAND,
   CEIL,
+  CLIMB,
   DECK_H,
   DOLL,
   ELEV_SPAWN,
@@ -459,6 +527,7 @@ export {
   R_ME,
   S,
   STEP,
+  TOPS,
   VIEW,
   W,
   WALK_THROUGH,
@@ -468,6 +537,7 @@ export {
   arcLevel,
   bagSpot,
   bleacherLevel,
+  canStand,
   clamp,
   fits,
   flightHeight,
@@ -487,6 +557,7 @@ export {
   stadiumWall,
   tX,
   tY,
+  topAt,
   wx,
   wz
 };

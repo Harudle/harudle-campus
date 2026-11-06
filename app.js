@@ -87,7 +87,7 @@ function sanitize(p) {
   if (!p || typeof p !== "object") return null;
   const num = (v, a, b) => (typeof v === "number" && isFinite(v) ? Math.min(b, Math.max(a, v)) : 0);
   return {
-    f: [11, 12, 13, 14].includes(p.f) ? p.f : 11, x: num(p.x, 0, 56), y: num(p.y, 0, 34), h: num(p.h, -7, 7),
+    f: [11, 12, 13, 14].includes(p.f) ? p.f : 11, x: num(p.x, 0, 56), y: num(p.y, 0, 40), u: num(p.u, 0, 2), h: num(p.h, -7, 7),
     m: p.m ? 1 : 0, r: p.r ? 1 : 0, look: Math.floor(num(p.look, 0, 99)), jc: Math.floor(num(p.jc, 0, 1e9)), ac: Math.floor(num(p.ac, 0, 1e9)),
     l: p.l ? 1 : 0, ly: num(p.ly, -7, 7), st: p.st ? 1 : 0, av: typeof p.av === "string" && /^[0-9a-z]{7}([0-9A-F]{6}){6}$/.test(p.av) ? p.av : null, an: ["draw", "wave", "heart"].includes(p.an) ? p.an : null, as: Math.floor(num(p.as, 0, 1e7)), say: clean(p.say, 40) || null,
   };

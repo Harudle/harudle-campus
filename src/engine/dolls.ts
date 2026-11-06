@@ -8,7 +8,7 @@ export type DollAnim = {
   run: boolean
   air: boolean
   seated: boolean
-  act: 'draw' | 'wave' | 'heart' | null
+  act: 'draw' | 'wave' | 'heart' | 'laptop' | 'coffee' | null
   waving: boolean
 }
 

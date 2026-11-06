@@ -6,12 +6,12 @@ import { bootEngine } from './engine/engine'
 import { Dolls } from './scene/Dolls'
 
 function Engine() {
-  const { gl, scene, camera } = useThree()
+  const { gl, scene, camera, setDpr } = useThree()
   const engine = useRef<ReturnType<typeof bootEngine> | null>(null)
   useEffect(() => {
     if (engine.current) return   // StrictMode에서 두 번 불려도 한 번만 띄운다
-    engine.current = bootEngine({ gl, scene, camera: camera as THREE.PerspectiveCamera })
-  }, [gl, scene, camera])
+    engine.current = bootEngine({ gl, scene, camera: camera as THREE.PerspectiveCamera, setDpr })
+  }, [gl, scene, camera, setDpr])
   useFrame((_, dt) => engine.current?.frame(dt))
   return null
 }
