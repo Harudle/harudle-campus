@@ -2142,7 +2142,7 @@ $all<HTMLButtonElement>(".srail button").forEach((b2) => (b2.onclick = () => set
 let sideTucked = LS.get("ww.sideTucked") === "1";
 function tuckSide(on) { sideTucked = on; LS.set("ww.sideTucked", on ? "1" : ""); $("side").classList.toggle("tucked", on); document.body.classList.toggle("sideTucked", on); $("sideTab").setAttribute("aria-expanded", String(!on)); if (!on && sideView === "chat" && booted) { unread[chatTab] = 0; renderChat(); } }
 $("sideTab").onclick = () => tuckSide(!sideTucked);
-$("sideHide").onclick = () => tuckSide(true); $("sideShow").onclick = () => tuckSide(false);
+$("sideHide").onclick = () => tuckSide(true); $("showPeople").onclick = () => { tuckSide(false); setSide("people"); }; $("showChat").onclick = () => { tuckSide(false); setSide("chat"); };
 let booted = false; tuckSide(sideTucked); requestAnimationFrame(() => (booted = true));
 requestAnimationFrame(() => setSide(sideView));
 $("chatDmTo").addEventListener("change", () => { const sel = $<HTMLSelectElement>("chatDmTo"); dmTo = sel.value || null; dmToName = sel.selectedOptions[0]?.textContent || ""; renderChat(); });
@@ -2159,7 +2159,7 @@ function renderPlist() {
   const all = peerList.filter((p) => p.presence && FLOORS[p.presence.f]).map((p) => ({ id: p.peer, name: p.name || "크루", s: p.presence }));
   const rows = q ? all.filter((r) => r.name.toLowerCase().includes(q)) : all;
   rows.sort((a, b) => (b.s.f === me.f ? 1 : 0) - (a.s.f === me.f ? 1 : 0) || b.s.f - a.s.f || a.name.localeCompare(b.name, "ko"));
-  $("plistTitle").textContent = all.length ? `캠퍼스에 ${all.length + 1}명` : "아직 혼자 둘러보는 중이에요"; $("plistCnt").textContent = String(all.length + 1);
+  $("plistTitle").textContent = all.length ? `캠퍼스에 ${all.length + 1}명` : "아직 혼자 둘러보는 중이에요"; $("plistCnt").textContent = $("sideShowCnt").textContent = String(all.length + 1);   // 사이드바를 접어도 오른쪽 위에 접속 인원
   const ini = (n) => esc([...String(n).trim()][0] || "?");
   const line = (id, name, f, col, icon, mine) => `<li class="${mine ? "mine" : f === me.f ? "same" : ""}"><span class="av" style="background:${col}">${ini(name)}</span><span class="who"><span class="nm">${esc(name)}${mine ? "<em>나</em>" : ""}</span><span class="sub"><span class="fl ${f === me.f ? "here" : ""}">${f}F</span>${icon ? `<span>${icon}</span>` : ""}</span></span>${mine ? "" : `${uidOf(id) ? `<button type="button" class="dm" data-id="${esc(id)}" title="개인 메시지">💬</button>` : ""}<button type="button" class="fw" data-id="${esc(id)}" aria-pressed="${me.follow === id}">${me.follow === id ? "따라가는 중" : "따라가기"}</button>`}</li>`;
   const html = line("", myNameNow() || "나", me.f, myAv.headColor || "#B39DDB", actIcon({ br: me.brush, dn: me.act?.name === "dance", lp: me.act?.name === "laptop", gn: me.act?.name === "gun", l: me.lie, st: me.seat }), true)
