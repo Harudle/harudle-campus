@@ -20,7 +20,7 @@ export function bootEngine(R3F: R3FContext) {
 let ready = false;
 // 터치 기기(휴대폰·태블릿): 조이스틱과 버튼으로 조작한다
 const TOUCH = typeof matchMedia !== "undefined" && (matchMedia("(pointer: coarse)").matches || (navigator.maxTouchPoints > 0 && !matchMedia("(pointer: fine)").matches));
-if (TOUCH) { document.body.classList.add("touch"); const si = document.getElementById("sayInput") as HTMLInputElement; if (si) si.placeholder = "말풍선으로 한마디"; }
+if (TOUCH) { document.body.classList.add("touch"); const vb = document.getElementById("viewBtn"); if (vb) vb.textContent = "시점 변환"; const si = document.getElementById("sayInput") as HTMLInputElement; if (si) si.placeholder = "말풍선으로 한마디"; }
 
 
 /* ════════════════ 3. 재료 (덕후감 3D 서고 방식: 툰 3단 + 먹선 + 종이결) ════════════════ */
@@ -1075,7 +1075,7 @@ function placeInside() {
 }
 function setView(mode) {
   VIEW.mode = mode;
-  document.getElementById("viewBtn").textContent = { top: "들어가기", third: "1인칭", first: "위에서 보기" }[mode];
+  document.getElementById("viewBtn").textContent = TOUCH ? "시점 변환" : { top: "들어가기", third: "1인칭", first: "위에서 보기" }[mode];   // 모바일은 이름을 고정해 헷갈리지 않게
   if (mode === "third") { cam.ipT = cam.ip = .3; cam.idT = cam.id = 3.2; }
   if (mode === "first") { cam.lookT = cam.look = 0; }
   if (mode !== "top") { cam.yawT = cam.yaw = me.h + Math.PI; lockMouse(); }    // 내가 바라보는 쪽이 정면, 바로 마우스 고정
