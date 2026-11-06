@@ -172,6 +172,22 @@ function makeFloor(f) {
     for (const y of [16, 19, 22, 25]) F("walltable", 9, y, 1, 2, { turn: Math.PI / 2, raw: true });
     F("carrel", 7, 16, 1, 12, { turn: -Math.PI / 2, raw: true });
     F("bigtable", 15, 16, 2, 12, { raw: true });
+    Z(21, 18, 5, 7, "\uD558\uB8E8\uB4E4 \uBD80\uC2A4", "\uC6B0\uB9AC\uB07C\uB9AC \uD1B5\uD558\uB294 \uB124\uCEF7\uB9CC\uD654, \uD558\uB8E8\uB4E4. \uBD93 \uAF42\uC774\uC5D0\uC11C \uBD93\uC744 \uB4E4\uACE0(F) \uAC00\uC6B4\uB370 \uC774\uC824\uC744 \uB204\uB974\uBA74 \uB2E4 \uAC19\uC774 \uB124\uCEF7\uC744 \uADF8\uB824\uC694.", { tint: "#EFE7FB", raw: true });
+    F("hbmat", 21, 18, 5, 7, { raw: true });
+    F("hbwall", 25, 18, 1, 7, { raw: true });
+    F("hbcounter", 23, 20, 1, 3, { raw: true });
+    F("hbballoon", 24, 18, 1, 1, { raw: true });
+    F("hbballoon", 24, 24, 1, 1, { raw: true });
+    F("hbbunting", 25, 18, 1, 7, { raw: true });
+    F("rollup", 24, 19, 1, 1, { seed: 0, raw: true });
+    F("rollup", 24, 23, 1, 1, { seed: 1, raw: true });
+    F("hbgifts", 24, 22, 1, 1, { raw: true });
+    F("photoframe", 21, 24, 1, 1, { raw: true });
+    F("brushcup", 21, 18, 1, 1, { raw: true });
+    F("painteasel", 22, 19, 1, 1, { raw: true, tilt: 0.45 });
+    F("easel", 22, 23, 1, 1, { seed: 2, raw: true, tilt: -0.45 });
+    F("linkkiosk", 20, 17, 1, 1, { raw: true, tilt: 0.35 });
+    F("instaboard", 20, 25, 1, 1, { raw: true, tilt: -0.35 });
     for (const y of [16, 20, 24]) F("table", 12, y, 2, 2, { raw: true });
     R(1, 24, 17, 9, "\uC791\uC740 \uAC15\uC758\uC2E4", { doors: [{ s: "n", from: 13, len: 2 }], sign: "Small Classroom" });
     Z(2, 25, 15, 7, "\uC791\uC740 \uAC15\uC758\uC2E4", "\uC791\uC740 \uADDC\uBAA8 \uC218\uC5C5\uACFC \uC2A4\uD130\uB514\uAC00 \uC5F4\uB9AC\uB294 \uAC15\uC758\uC2E4\uC774\uC5D0\uC694.");
@@ -338,7 +354,7 @@ var TOPS = {
   plant: 0.36,
   crates: 0.5
 };
-var WALK_THROUGH = /* @__PURE__ */ new Set(["poster", "walldeco", "linelight", "bleacher", "arcbleacher", "flight", "brickdeck", "pebbles", "redsteps", "mirrorball", "trampoline", "ballpit"]);
+var WALK_THROUGH = /* @__PURE__ */ new Set(["hbmat", "poster", "walldeco", "linelight", "bleacher", "arcbleacher", "flight", "brickdeck", "pebbles", "redsteps", "mirrorball", "trampoline", "ballpit"]);
 var ELEV_SPAWN = [32.5, 15.5];
 for (const fl of Object.values(FLOORS)) {
   const g = new Uint8Array(W * H);

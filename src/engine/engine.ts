@@ -5,6 +5,11 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import { AVATAR_COLOR_PARTS, AVATAR_COLORS, AVATAR_OPTIONS, AVATAR_PRESETS, sanitizeAvatar, type AvatarConfig } from "../harudle/avatarData";
 import { dropDoll, makeDoll } from "./dolls";
 import recruitPosterUrl from "../assets/recruit-poster-2026.png";
+import comicWinterUrl from "../assets/booth/comic-winter.jpg";
+import comicCastellaUrl from "../assets/booth/comic-castella.jpg";
+import comicDanceUrl from "../assets/booth/comic-dance.jpg";
+import comicPassUrl from "../assets/booth/comic-pass.jpg";
+import boothBannerUrl from "../assets/booth/banner.jpg";
 import { W, H, S, FH, WALL, DOLL, CEIL, VIEW, inside, INK, BRAND, NAVY, WEAK, HAND, narrow, clamp, lerp, rng, hash, wx, wz, tX, tY, floorY, FLOOR_INFO, makeFloor, FLOORS, WALK_THROUGH, ELEV_SPAWN, solid, inRect, STEP, ARC_STEP, bleacherLevel, flightSteps, DECK_H, heightAt, topAt, canStand, R_ME, bagSpot, applyLie, fits, nearestFree } from "./world";
 
 // 아티팩트 런타임(window.claude)과 가벼운 DOM 도우미
@@ -298,6 +303,37 @@ function screen169(G, len, maxH, bottom, tex, cx, cz, rot, wide = 1) {   // wide
   box(g, w + .08, h + .08, .06, C.dark, 0, bottom - .04, -.03, { line: .01 }); board(g, w, h, tex, 0, bottom + h / 2, .005);
   if (bottom > .1) box(g, .12, bottom - .04, .08, C.dark, 0, 0, -.05, { line: 0 });
 }
+// 하루들 부스: 완성된 네 컷 만화(시드별로 한 번만 그려 둔다)와 뒷벽 현수막
+// 부스에 거는 하루들 네 컷(@harudle.official): 갑자기 찾아온 겨울 · 카스테라의 비밀 · 우사기의 우냐냐 댄스 · 날아갈 것 같은 날
+// 원본 해상도(960px) 그대로 + 비스듬히 봐도 흐려지지 않게 이방성 필터를 기기 최대로
+const MAX_ANISO = Math.max(8, R3F.gl.capabilities.getMaxAnisotropy());
+const sharpTex = (u) => { const t = new THREE.TextureLoader().load(u); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = MAX_ANISO; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true; return t; };
+const BOOTH_COMICS = [comicWinterUrl, comicCastellaUrl, comicDanceUrl, comicPassUrl].map(sharpTex);
+const comicTex = (i) => BOOTH_COMICS[((i % 4) + 4) % 4];
+const BOOTH_FONT = '"Pretendard","Apple SD Gothic Neo","Noto Sans KR",sans-serif';
+// 카운터 앞판: 넓은 고해상도 캔버스에 굵은 글씨(흐리지 않게), 양옆에 별
+const counterSignTex = (w, h) => canvasTex(2048, Math.round(2048 * h / w), (g, cw, ch) => {
+  const gr = g.createLinearGradient(0, 0, cw, 0); gr.addColorStop(0, "#B39DDB"); gr.addColorStop(1, "#9B7FE0"); g.fillStyle = gr; g.fillRect(0, 0, cw, ch);
+  g.strokeStyle = "#111118"; g.lineWidth = 16; g.strokeRect(8, 8, cw - 16, ch - 16);
+  g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = "#FFFFFF"; g.font = `800 ${Math.round(ch * .44)}px ${BOOTH_FONT}`; g.fillText("우리끼리 통하는 네컷만화", cw / 2, ch * .5);
+  g.fillStyle = "#FFD43B"; for (const sx of [.06, .94]) { g.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, r = (i % 2 ? .45 : 1) * ch * .2; g.lineTo(cw * sx + Math.cos(a) * r, ch * .5 + Math.sin(a) * r); } g.fill(); }
+});
+// 롤업 배너: 보라 바탕에 Harudle·태그라인, 가운데 네 컷 한 장
+const rollupTex = (i) => canvasTex(600, 1950, (g, cw, ch) => {
+  const gr = g.createLinearGradient(0, 0, 0, ch); gr.addColorStop(0, "#EFE7FB"); gr.addColorStop(1, "#B39DDB"); g.fillStyle = gr; g.fillRect(0, 0, cw, ch);
+  g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = "#111118"; g.font = `800 96px ${BOOTH_FONT}`; g.fillText("Harudle", cw / 2, 170);
+  g.font = `800 64px ${BOOTH_FONT}`; g.fillText("우리끼리 통하는", cw / 2, 330); g.fillStyle = "#7B5BD6"; g.font = `900 100px ${BOOTH_FONT}`; g.fillText("네컷만화", cw / 2, 450);
+  g.fillStyle = "#FFFFFF"; g.fillRect(50, 560, cw - 100, cw - 100); g.fillStyle = "#111118"; g.font = `700 40px ${BOOTH_FONT}`; g.fillText(i ? "#친구와" : "#동료와", cw / 2, 1110);
+  g.fillStyle = "#4A3A80"; g.font = `600 44px ${BOOTH_FONT}`; g.fillText("함께 있었던 순간을 적으면", cw / 2, 1300); g.fillText("네컷만화로 만들어 드려요", cw / 2, 1370);
+  g.fillStyle = "#111118"; g.font = `800 48px ${BOOTH_FONT}`; g.fillText("harudle.com", cw / 2, 1800);
+});
+const photoFrameTex = canvasTex(900, 700, (g, cw, ch) => {   // 가운데가 뚫린 보라 틀: 위에 "하루들 네컷", 아래 #오늘의한컷
+  g.fillStyle = "#8E6FD8"; g.fillRect(0, 0, cw, ch); g.clearRect(70, 110, cw - 140, ch - 220);
+  g.strokeStyle = "#111118"; g.lineWidth = 10; g.strokeRect(5, 5, cw - 10, ch - 10); g.strokeRect(70, 110, cw - 140, ch - 220);
+  g.fillStyle = "#FFFFFF"; g.textAlign = "center"; g.textBaseline = "middle"; g.font = `800 64px ${BOOTH_FONT}`; g.fillText("하루들 네컷 📸", cw / 2, 58);
+  g.fillStyle = "#FFD43B"; g.font = `800 50px ${BOOTH_FONT}`; g.fillText("#오늘의한컷", cw / 2, ch - 55);
+});
+const boothBannerTex = sharpTex(boothBannerUrl);
 function buildFurn(G, o, fl) {
   if (o.turn && !o.turned) {   // turn: 가로로 만든 모양을 제자리에서 돌려 세운다(앞면이 +z → turn만큼 회전)
     const cx = o.x + o.w / 2, cy = o.y + o.h / 2, g = new THREE.Group(), inner = new THREE.Group();
@@ -689,6 +725,72 @@ function buildFurn(G, o, fl) {
       box(body, tw, .04, len - r, 0xD6D9DE, 0, hh, r / 2, { line: .006 }); const cap2 = solidMesh(new THREE.CylinderGeometry(r, r, .04, 24, 1, false, Math.PI / 2, Math.PI), 0xD6D9DE, { line: .006 }); cap2.position.set(0, hh + .02, -len / 2 + r); body.add(cap2);
       for (let i = 0; i < 3; i++) { const sz = wz(o.y) + (i + .8) * d / 3.4, sx = x + tw / 2 + .32; cyl(G, .02, .02, .5, C.dark, sx, 0, sz, { line: 0 }); box(G, .3, .04, .28, C.dark, sx, .5, sz, { line: .006 }); box(G, .04, .28, .26, C.dark, sx + .14, .54, sz, { line: .006 }); }
       break; }
+    case "hbmat": { // 하루들 부스 바닥: 보라 매트 + 가장자리 노란 줄
+      box(G, w - .1, .02, d - .1, 0xC9B8F0, x, 0, z, { line: .006, cast: false });
+      box(G, w - .3, .022, .06, 0xFFD43B, x, 0, wz(o.y) + .2, { line: 0, cast: false }); box(G, w - .3, .022, .06, 0xFFD43B, x, 0, wz(o.y + o.h) - .2, { line: 0, cast: false }); break; }
+    case "hbwall": { // 뒷벽 현수막(서쪽을 본다): 하루들 배너 이미지(2048×878)를 비율 그대로, 카운터 위로 보이게 높이 단다
+      const px = wx(o.x) + .2, bh = 2.6, bw = Math.min(d - .4, bh * 2048 / 878), bottom = .8;
+      box(G, .14, bottom + bh + .15, bw + .3, 0xEFE7FB, px + .07, 0, z, { line: .012 });
+      board(G, bw, bh, boothBannerTex, px - .01, bottom + bh / 2, z, -Math.PI / 2); break; }
+    case "hbcounter": { // 카운터(서쪽을 본다): 앞면 보라 판에 "하루들", 위에 네 컷 만화 세 장을 세워 둔다
+      box(G, w - .15, .74, d - .1, 0xFFFFFF, x, 0, z, { line: .01 }); board(G, d - .3, .5, counterSignTex(d - .3, .5), wx(o.x) + .06, .4, z, -Math.PI / 2);
+      // 카운터 위 소품: 스티커 시트, 엽서 더미, 사탕 병, 선물 쇼핑백(액자 사이사이)
+      const top = .74, sx = x + .05, z0 = wz(o.y);
+      for (let k = 0; k < 3; k++) { const st = box(G, .16, .006, .22, [0xFFD43B, 0xF7A6A0, 0x7DB3F0][k], sx - .15 + k * .03, top + k * .006, z0 + d * .33 + .02 * k, { line: .003, cast: false }); st.rotation.y = .2 * k - .2; }
+      for (let k = 0; k < 6; k++) box(G, .2, .006, .14, k % 2 ? 0xFFFFFF : 0xEFE7FB, sx - .12, top + k * .006, z0 + d * .66, { line: .002, cast: false });
+      cyl(G, .07, .07, .16, 0xF4FAFF, sx + .1, top, z0 + d * .16, { mat: toon(0xF4FAFF, { opacity: .45 }), line: .006, cast: false }); for (let k = 0; k < 6; k++) ball(G, .025, BALLS[k], sx + .1 + Math.sin(k) * .03, top + .03 + (k % 3) * .035, z0 + d * .16 + Math.cos(k) * .03, { line: 0 });
+      for (const [bz, c] of [[d * .84, 0xB39DDB], [d * .5, 0xFFD43B]] as [number, number][]) { box(G, .14, .18, .2, c, sx + .12, top, z0 + bz, { line: .006 }); cyl(G, .006, .006, .08, C.dark, sx + .12, top + .18, z0 + bz - .05, { line: 0 }); cyl(G, .006, .006, .08, C.dark, sx + .12, top + .18, z0 + bz + .05, { line: 0 }); }
+      for (let i = 0; i < 3; i++) { const cz = wz(o.y) + (i + .5) * d / 3, g2 = new THREE.Group(); g2.position.set(x, .74, cz); g2.rotation.y = -Math.PI / 2; G.add(g2);
+        const fr = new THREE.Group(); fr.position.set(0, .02, -.04); fr.rotation.x = -.15; g2.add(fr);   // 액자를 통째로 살짝 뒤로 기울인다(그림이 틀 앞에 그대로 보이게)
+        box(fr, .46, .46, .03, C.dark, 0, 0, -.02, { line: 0 }); board(fr, .42, .42, comicTex(i === 1 ? 3 : i), 0, .23, .002); box(g2, .05, .2, .05, C.woodD, 0, 0, -.14, { line: 0 }); }
+      break; }
+    case "easel": { // 나무 이젤(서쪽을 본다): 세 다리 위 캔버스에 완성된 네 컷
+      const g2 = new THREE.Group(); g2.position.set(x, 0, z); g2.rotation.y = -Math.PI / 2 + (o.tilt || 0); G.add(g2);
+      for (const [lx, lz, rx2] of [[-.28, .12, .12], [.28, .12, -.12], [0, -.32, 0]] as [number, number, number][]) { const l = box(g2, .05, 1.55, .05, C.woodD, lx, 0, lz, { line: .006 }); l.rotation.z = rx2; if (lz < 0) l.rotation.x = .3; }
+      box(g2, .74, .05, .1, C.wood, 0, .68, .16, { line: .006 });
+      box(g2, .74, .74, .04, 0xFFFFFF, 0, .7, .14, { line: .01 }); board(g2, .68, .68, comicTex(o.seed || 1), 0, 1.07, .165); break; }
+    case "linkkiosk": case "instaboard": { // 바로가기 장치(서쪽을 본다): 은색 기둥 위 기울어진 화면. 누르면 새 탭으로 연다
+      const insta = o.kind === "instaboard", g2 = new THREE.Group(); g2.position.set(x, 0, z); g2.rotation.y = -Math.PI / 2 + (o.tilt || 0); G.add(g2);
+      box(g2, .5, .06, .4, 0xC3C7CD, 0, 0, 0, { line: .006 }); box(g2, .08, 1.05, .08, 0x9EA3AA, 0, .06, 0, { line: .004 });
+      const head = new THREE.Group(); head.position.set(0, 1.2, .02); head.rotation.x = -.35; g2.add(head);
+      box(head, .78, .78, .06, insta ? 0xE1306C : 0x7B5BD6, 0, -.39, -.04, { line: .01 });
+      const m = board(head, .72, .72, insta ? instaTex : siteTex, 0, 0, .001); m.userData.noMerge = true; m.userData.link = insta ? "https://www.instagram.com/harudle.official/" : "https://www.harudle.com/"; linkBoards.push(m);
+      break; }
+    case "painteasel": { // 함께 그리는 이젤(서쪽을 본다): 큰 나무 이젤에 네컷 틀 캔버스. 붓을 든 채 누르면 그린다
+      const g2 = new THREE.Group(); g2.position.set(x, 0, z); g2.rotation.y = -Math.PI / 2 + (o.tilt || 0); G.add(g2);
+      for (const [lx, lz, rx2] of [[-.4, .14, .1], [.4, .14, -.1], [0, -.4, 0]] as [number, number, number][]) { const l = box(g2, .06, 1.9, .06, C.woodD, lx, 0, lz, { line: .006 }); l.rotation.z = rx2; if (lz < 0) l.rotation.x = .28; }
+      box(g2, 1.12, .06, .12, C.wood, 0, .62, .17, { line: .006 });
+      box(g2, 1.1, 1.1, .05, 0xFFFFFF, 0, .66, .15, { line: .012 });
+      const m = board(g2, 1.04, 1.04, ezTexture(), 0, .66 + .55, .18); m.userData.noMerge = true; m.userData.easel = true; ezBoards.push(m);
+      const tag = board(g2, .9, .16, signTex("붓을 들고 눌러서 함께 그려요", { bg: "#EFE7FB", fg: "#4A3A80", size: 40, w: 640, h: 112 }), 0, .5, .2); tag.userData.noMerge = true;
+      break; }
+    case "brushcup": { // 붓 꽂이: 작은 흰 스툴 위 보라 컵에 붓 다섯 자루(색이 다른 붓끝)
+      cyl(G, .2, .22, .62, 0xFFFFFF, x, 0, z, { line: .008 }); cyl(G, .09, .08, .2, 0xB39DDB, x, .62, z, { line: .008 });
+      [0xF15B5B, 0xFFD43B, 0x7DB3F0, 0x7FCFAE, 0x111118].forEach((c, k) => { const a = k / 5 * Math.PI * 2, s2 = solidMesh(new THREE.CylinderGeometry(.012, .012, .34, 6), C.woodD, { line: 0, cast: false }); s2.position.set(x + Math.sin(a) * .04, .78, z + Math.cos(a) * .04); s2.rotation.set(Math.cos(a) * .25, 0, -Math.sin(a) * .25); G.add(s2); ball(G, .025, c, x + Math.sin(a) * .085, .96, z + Math.cos(a) * .085, { line: .003 }); });
+      const tag = board(G, .5, .12, signTex("붓 · F", { bg: "#FFD43B", fg: "#111118", size: 64, w: 320, h: 80 }), x - .23, .45, z, -Math.PI / 2); tag.userData.noMerge = true;
+      break; }
+    case "hbbunting": { // 배너 위로 늘어진 삼각 깃발 가랜드(보라·노랑·흰색)
+      const px = wx(o.x) + .1, n = 18, len = d - .4, top = 3.55;
+      for (let i = 0; i < n; i++) { const t = (i + .5) / n, cz = wz(o.y) + .2 + t * len, sag = Math.sin(t * Math.PI * 3 % Math.PI) * .18;
+        const tri = new THREE.Mesh(new THREE.ConeGeometry(.11, .22, 3), toon([0xB39DDB, 0xFFD43B, 0xFFFFFF, 0x8E6FD8][i % 4])); tri.rotation.set(Math.PI, 0, 0); tri.scale.z = .15; tri.position.set(px - .03, top - .14 - sag, cz); G.add(tri); }
+      cyl(G, .006, .006, len, C.dark, px, top - .03, z, { line: 0, cast: false }).rotation.x = Math.PI / 2; break; }
+    case "rollup": { // 롤업 배너(서쪽을 본다): 은색 받침 + 세로로 긴 보라 배너에 하루들·태그라인·네 컷
+      const g2 = new THREE.Group(); g2.position.set(x, 0, z); g2.rotation.y = -Math.PI / 2; G.add(g2);
+      box(g2, .66, .08, .22, 0xC3C7CD, 0, 0, 0, { line: .006 }); box(g2, .02, 2.05, .02, 0x9EA3AA, .3, .08, -.06, { line: 0 });
+      board(g2, .6, 1.95, rollupTex(o.seed || 0), 0, 1.08, .02); board(g2, .5, .5, comicTex(o.seed ? 2 : 0), 0, 1.08 + 1.95 * (.5 - 836 / 1950), .025); break; }
+    case "hbgifts": { // 선물 상자 더미(리본 묶음)
+      for (const [dx, dz, s3, c, dy] of [[0, 0, .34, 0xB39DDB, 0], [.06, .04, .24, 0xFFD43B, .34], [-.12, .2, .2, 0xF7A6A0, 0], [.16, -.18, .18, 0x7DB3F0, 0]] as [number, number, number, number, number][]) {
+        box(G, s3, s3, s3, c, x + dx, dy, z + dz, { line: .008 }); box(G, s3 + .01, s3 + .01, .04, 0xFFFFFF, x + dx, dy - .005, z + dz, { line: 0 }); box(G, .04, s3 + .01, s3 + .01, 0xFFFFFF, x + dx, dy - .005, z + dz, { line: 0 });
+        ball(G, .04, 0xFFFFFF, x + dx, dy + s3 + .02, z + dz, { line: .004 }); }
+      break; }
+    case "photoframe": { // 포토 프레임: 들고 사진 찍는 네 컷 모양 보라 틀, 받침대에 세워 둔다(서쪽을 본다)
+      const g2 = new THREE.Group(); g2.position.set(x, 0, z); g2.rotation.y = -Math.PI / 2 + .35; G.add(g2);
+      box(g2, .04, 1.0, .04, C.woodD, 0, 0, -.04, { line: 0 }); box(g2, .3, .03, .3, C.woodD, 0, 0, -.04, { line: 0 });
+      const fr = new THREE.Mesh(new THREE.PlaneGeometry(.9, .7), new THREE.MeshBasicMaterial({ map: photoFrameTex, transparent: true, side: THREE.DoubleSide })); fr.position.set(0, 1.25, 0); g2.add(fr); break; }
+    case "hbballoon": { // 부스 모서리 풍선 다발(보라·노랑)
+      for (const [dx, dz, c, hh] of [[0, 0, 0xB39DDB, 1.9], [.16, .1, 0xFFD43B, 1.75], [-.12, .14, 0xC9B8F0, 1.65]] as [number, number, number, number][]) {
+        cyl(G, .004, .004, hh - .2, C.grayD, x + dx * .3, 0, z + dz * .3, { line: 0, cast: false }); const b2 = ball(G, .18, c, x + dx, hh, z + dz, { line: .008 }); b2.scale.y = 1.15; }
+      box(G, .12, .08, .12, C.dark, x, 0, z, { line: 0 }); break; }
     case "duo": // 1인용 흰 책상에 의자 둘이 마주 붙어 있다
       box(G, w - .4, .44, d - .4, C.white, x, 0, z); for (const s of [-1, 1]) chair(G, x, z + s * (d / 2 - .1), s < 0 ? 0 : Math.PI); break;
     case "pairrow": // 띄엄띄엄 놓은 페어 책상: 남북 양쪽에 둘씩 앉아 한 모니터를 같이 본다(모니터는 등을 맞대고 둘)
@@ -869,9 +971,11 @@ function spawnFx(tex, at, n = 1, spread = .4, up = 1.1) {
 const FW_COLORS = [0xFFC300, 0xFF5A5F, 0x2F80ED, 0x20B486, 0x8E5CF7, 0xFF8C1A, 0xE83E8C].map((c) => new THREE.Color(c));
 const fireworks = []; let fwReady = 0;
 const fwDot = canvasTex(32, 32, (g) => { const r = g.createRadialGradient(16, 16, 0, 16, 16, 16); r.addColorStop(0, "rgba(255,255,255,1)"); r.addColorStop(.45, "rgba(255,255,255,.9)"); r.addColorStop(1, "rgba(255,255,255,0)"); g.fillStyle = r; g.fillRect(0, 0, 32, 32); });
-function fireFirework() {
-  const now = performance.now(); if (now < fwReady) return; fwReady = now + (me.act?.name === "gun" ? 250 : 600);
-  me.fh = inside() ? cam.yaw + Math.PI : me.h; me.fc++; me.fk = me.act?.name === "gun" ? 1 : 0;
+// F: 폭죽 / 좌클릭: 종이 총(꺼내 들었을 때). aim은 위에서 볼 때 누른 곳 쪽 방향
+function fireFirework(paper = false, aim: number | null = null) {
+  if (paper && me.act?.name !== "gun") return;
+  const now = performance.now(); if (now < fwReady) return; fwReady = now + (paper ? 250 : 600);
+  me.fh = aim ?? (inside() ? cam.yaw + Math.PI : me.h); me.fc++; me.fk = paper ? 1 : 0;
   if (me.fk) { me.h = me.fh; me.kickAt = now / 1000; shootPaper(me.f, me.x, me.y, me.fh, me.up + me.jz, me); } else launchFirework(me.f, me.x, me.y, me.fh, me.up + me.jz);
   sendPresence(true);
 }
@@ -1266,10 +1370,164 @@ function showFloors() {
 
 /* ════════════════ 8. 나 · 강아지 · 다른 크루 ════════════════ */
 const LS = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch { } } };
+
+/* ════════════════ 하루들 부스: 함께 그리는 이젤 · 붓 ════════════════
+   붓은 부스 안에서만 들 수 있다(붓 꽂이에서 F). 붓을 든 채 이젤을 누르면(F·클릭) 그림판이 열린다.
+   획은 서버가 모아 모두에게 나눈다: 그리는 동안 조각(seg)을 보내 실시간으로 보이고, 뒤로/앞으로가기는 내 획만 */
+let netSend: (m: any) => void = () => { };
+const ezBoards: THREE.Mesh[] = [];
+function ezState() {
+  const z: any = ezState as any; if (z.s) return z.s;
+  const mk = () => { const c = document.createElement("canvas"); c.width = c.height = 1024; return c; };
+  const base = mk(), show = mk(); show.id = "ezCanvas";
+  const uid = LS.get("ww.uid") || (() => { const v = Math.random().toString(36).slice(2, 12); LS.set("ww.uid", v); return v; })();
+  z.s = { base, show, bg: base.getContext("2d"), sg: show.getContext("2d"), tex: null, strokes: [] as any[], live: new Map(), redo: [] as string[], uid, n: 0, cur: null, need: 2 };
+  return z.s;
+}
+function ezTexture() { const S = ezState(); if (!S.tex) { S.tex = new THREE.CanvasTexture(S.show); S.tex.colorSpace = THREE.SRGBColorSpace; S.tex.anisotropy = 8; ezRedraw(true); } return S.tex; }
+// 네컷 틀: 흰 종이에 네 칸, 위에 제목, 아래에 @harudle.official (획 위에 다시 그려 틀이 늘 보인다)
+const EZ_M = 44, EZ_TOP = 96, EZ_BOT = 70, EZ_GAP = 26;
+function ezFrame(g, onlyLines = false) {
+  if (!onlyLines) { g.fillStyle = "#FFFFFF"; g.fillRect(0, 0, 1024, 1024); }
+  g.strokeStyle = "#111118"; g.lineWidth = 8; g.lineJoin = "round";
+  const pw = (1024 - EZ_M * 2 - EZ_GAP) / 2, ph = (1024 - EZ_TOP - EZ_BOT - EZ_GAP) / 2;
+  for (let i = 0; i < 4; i++) g.strokeRect(EZ_M + (i % 2) * (pw + EZ_GAP), EZ_TOP + Math.floor(i / 2) * (ph + EZ_GAP), pw, ph);
+  g.fillStyle = "#111118"; g.textBaseline = "middle"; g.font = `800 44px "Pretendard","Apple SD Gothic Neo",sans-serif`; g.textAlign = "left"; g.fillText("함께 그리는 네컷", EZ_M, 52);
+  g.font = `700 26px "Pretendard","Apple SD Gothic Neo",sans-serif`; g.textAlign = "right"; g.fillText("@harudle.official", 1024 - EZ_M, 1024 - 34); g.fillStyle = "#7B5BD6"; g.textAlign = "left"; g.fillText("# 하루들 부스", EZ_M, 1024 - 34);
+}
+function ezStroke(g, st) {
+  const p = st.p, k = 1.024; if (p.length < 2) return;
+  g.strokeStyle = g.fillStyle = st.c; g.lineWidth = st.w; g.lineCap = "round"; g.lineJoin = "round";
+  if (p.length === 2) { g.beginPath(); g.arc(p[0] * k, p[1] * k, st.w / 2, 0, 7); g.fill(); return; }
+  g.beginPath(); g.moveTo(p[0] * k, p[1] * k); for (let i = 2; i < p.length; i += 2) g.lineTo(p[i] * k, p[i + 1] * k); g.stroke();
+}
+// need: 2 = 바탕부터 다시, 1 = 진행 중인 획만 다시
+function ezRedraw(full = false) {
+  const S = ezState(); if (full) S.need = 2; else S.need = Math.max(S.need, 1);
+  if (S.raf) return; S.raf = requestAnimationFrame(() => {
+    S.raf = 0;
+    if (S.need === 2) { ezFrame(S.bg); for (const st of S.strokes) if (!st.h) ezStroke(S.bg, st); ezFrame(S.bg, true); }
+    S.sg.drawImage(S.base, 0, 0); for (const st of S.live.values()) ezStroke(S.sg, st); if (S.cur) ezStroke(S.sg, S.cur); if (S.live.size || S.cur) ezFrame(S.sg, true);
+    S.need = 0; if (S.tex) S.tex.needsUpdate = true;
+  });
+}
+function ezCommit(st) { const S = ezState(); S.strokes.push(st); if (S.strokes.length > 2500) S.strokes.splice(0, S.strokes.length - 2500); ezStroke(S.bg, st); ezFrame(S.bg, true); ezRedraw(); }
+// 서버에서 온 이젤 소식
+function easelNet(m) {
+  const S = ezState();
+  if (m.k === "all") { S.strokes = (m.strokes || []).filter((x) => x && Array.isArray(x.p)); S.live.clear(); ezRedraw(true); }
+  else if (m.k === "seg") { let st = S.live.get(m.id); if (!st) S.live.set(m.id, (st = { id: m.id, u: m.u, c: m.c, w: m.w, p: [], h: 0 })); st.p.push(...m.p); ezRedraw(); }
+  else if (m.k === "end") { const st = S.live.get(m.id); if (st) { S.live.delete(m.id); ezCommit(st); } }
+  else if (m.k === "vis") { const st = S.strokes.find((x) => x.id === m.id); if (st) { st.h = m.h; ezRedraw(true); } }
+}
+// 그리기(내 획): 누르면 시작, 움직이면 점을 더하고 0.05초마다 조각으로 보낸다, 떼면 끝
+function ezBegin(x, y, c, w) { const S = ezState(); S.cur = { id: `${S.uid}-${Date.now().toString(36)}-${S.n++}`, u: S.uid, c, w, p: [x, y], h: 0 }; S.sent = 0; S.lastSend = 0; S.redo = []; ezRedraw(); }
+function ezMove(x, y) { const S = ezState(), st = S.cur; if (!st) return; const n = st.p.length; if (Math.hypot(st.p[n - 2] - x, st.p[n - 1] - y) < 1.5) return; st.p.push(x, y); ezRedraw(); const now = performance.now(); if (now - S.lastSend > 50) ezFlush(); }
+function ezFlush() { const S = ezState(), st = S.cur; if (!st || st.p.length <= S.sent) return; const from = Math.max(0, S.sent), chunk = st.p.slice(from, from + 400); if (chunk.length < 2) return; netSend({ t: "ez", k: "seg", u: S.uid, id: st.id, c: st.c, w: st.w, p: chunk }); S.sent = from + chunk.length; S.lastSend = performance.now(); if (S.sent < st.p.length) ezFlush(); }
+function ezEnd() { const S = ezState(), st = S.cur; if (!st) return; ezFlush(); netSend({ t: "ez", k: "end", u: S.uid, id: st.id }); S.cur = null; ezCommit(st); }
+function ezUndo() { const S = ezState(); for (let i = S.strokes.length - 1; i >= 0; i--) { const st = S.strokes[i]; if (st.u === S.uid && !st.h) { st.h = 1; S.redo.push(st.id); netSend({ t: "ez", k: "undo", u: S.uid }); ezRedraw(true); return; } } }
+function ezRedoOne() { const S = ezState(), id = S.redo.pop(), st = id && S.strokes.find((x) => x.id === id); if (st) { st.h = 0; netSend({ t: "ez", k: "redo", u: S.uid }); ezRedraw(true); } }
+// 바로가기: harudle.com · 인스타그램. 누르거나(클릭·탭) 앞에서 F → 새 탭
+const linkBoards: THREE.Mesh[] = [];
+function openLink(url) { if (locked()) document.exitPointerLock(); window.open(url, "_blank", "noopener"); showToast("새 탭으로 열었어요", url.replace(/^https:\/\/(www\.)?/, "").replace(/\/$/, ""), 2000); }
+const siteTex = canvasTex(512, 512, (g, w, h) => {
+  const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, "#EFE7FB"); gr.addColorStop(1, "#C9B8F0"); g.fillStyle = gr; g.fillRect(0, 0, w, h);
+  g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = "#111118"; g.font = `800 92px "Pretendard","Apple SD Gothic Neo",sans-serif`; g.fillText("Harudle", w / 2, 150);
+  g.fillStyle = "#7B5BD6"; g.font = `800 52px "Pretendard","Apple SD Gothic Neo",sans-serif`; g.fillText("네컷만화 만들러 가기", w / 2, 255);
+  g.fillStyle = "#7B5BD6"; g.beginPath(); g.roundRect(76, 330, w - 152, 108, 54); g.fill();
+  g.fillStyle = "#FFFFFF"; g.font = `800 50px "Pretendard","Apple SD Gothic Neo",sans-serif`; g.fillText("harudle.com ↗", w / 2, 386);
+  g.fillStyle = "#4A3A80"; g.font = `600 30px "Pretendard","Apple SD Gothic Neo",sans-serif`; g.fillText("눌러서 바로가기", w / 2, 475);
+});
+const instaTex = canvasTex(512, 512, (g, w, h) => {
+  g.fillStyle = "#FFFFFF"; g.fillRect(0, 0, w, h);
+  const gr = g.createLinearGradient(140, 300, 372, 60); gr.addColorStop(0, "#FEDA75"); gr.addColorStop(.35, "#FA7E1E"); gr.addColorStop(.6, "#D62976"); gr.addColorStop(.85, "#962FBF"); gr.addColorStop(1, "#4F5BD5");
+  g.fillStyle = gr; g.beginPath(); g.roundRect(146, 50, 220, 220, 60); g.fill();   // 인스타그램 아이콘: 둥근 사각 + 동그라미 + 점
+  g.strokeStyle = "#FFFFFF"; g.lineWidth = 17; g.beginPath(); g.roundRect(184, 88, 144, 144, 40); g.stroke(); g.beginPath(); g.arc(256, 160, 34, 0, 7); g.stroke();
+  g.fillStyle = "#FFFFFF"; g.beginPath(); g.arc(301, 116, 10, 0, 7); g.fill();
+  g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = "#111118"; g.font = `800 44px "Pretendard","Apple SD Gothic Neo",sans-serif`; g.fillText("@harudle.official", w / 2, 335);
+  g.fillStyle = "#D62976"; g.beginPath(); g.roundRect(106, 386, w - 212, 84, 42); g.fill();
+  g.fillStyle = "#FFFFFF"; g.font = `800 38px "Pretendard","Apple SD Gothic Neo",sans-serif`; g.fillText("인스타 바로가기 ↗", w / 2, 429);
+});
+// 그림판 창: 미리 고른 색 16개 + RGB 막대 + 색 고르기, 굵기 막대와 미리보기 점, 캔버스 위 굵기 크기의 동그란 커서
+const easelEd = document.getElementById("easelEd");
+const EZ_SW = ["#111118", "#FFFFFF", "#9A97A3", "#F15B5B", "#FF8C1A", "#FFD43B", "#7FCFAE", "#20B486", "#7DB3F0", "#2F80ED", "#B39DDB", "#7B5BD6", "#F7A6A0", "#E83E8C", "#8B5A2B", "#EBD3AE"];
+const ezPen = { c: LS.get("ww.ezc") || "#111118", w: +(LS.get("ww.ezw") || 8), erase: false };   // erase: 지우개 모드(흰 종이색으로 덮는다)
+const hex2 = (n) => n.toString(16).padStart(2, "0");
+function ezSetColor(c) {
+  if (ezPen.erase) ezMode(false);   // 색을 고르면 그리기로 돌아온다
+  ezPen.c = c.toLowerCase(); LS.set("ww.ezc", ezPen.c);
+  const r = parseInt(ezPen.c.slice(1, 3), 16), g = parseInt(ezPen.c.slice(3, 5), 16), b = parseInt(ezPen.c.slice(5, 7), 16);
+  for (const [k, v] of [["R", r], ["G", g], ["B", b]] as [string, number][]) { $<HTMLInputElement>("ez" + k).value = String(v); $("ez" + k + "v").textContent = String(v); }
+  $<HTMLInputElement>("ezColor").value = ezPen.c; $("ezHex").textContent = ezPen.c.toUpperCase();
+  $all<HTMLButtonElement>("#ezSwatches button").forEach((b2) => b2.classList.toggle("on", b2.dataset.c === ezPen.c));
+  ezSizeUI();
+}
+function ezMode(erase) {
+  ezPen.erase = erase;
+  for (const [id, on] of [["ezPen", !erase], ["ezEraser", erase]] as [string, boolean][]) { const b2 = $(id); b2.setAttribute("aria-pressed", String(on)); b2.classList.toggle("ghost", !on); }
+  $("ezStage").classList.toggle("erasing", erase); ezSizeUI();
+}
+function ezSizeUI() {
+  $<HTMLInputElement>("ezSize").value = String(ezPen.w); $("ezSizeV").textContent = `${ezPen.w}px`;
+  const dot = $("ezSizeDot"), stage = $("ezStage"), k = (stage.clientWidth || 600) / 1024, d = Math.max(3, (ezPen.erase ? Math.max(ezPen.w, 10) : ezPen.w) * k);
+  Object.assign(dot.style, { width: `${d}px`, height: `${d}px`, background: ezPen.c, boxShadow: ezPen.c === "#ffffff" ? "inset 0 0 0 1px #999" : "" });
+  const cur = $("ezCursor"); Object.assign(cur.style, { width: `${d}px`, height: `${d}px`, borderColor: ezPen.c === "#ffffff" || ezPen.c === "#111118" ? "#7B5BD6" : "#111118", background: ezPen.c + "55" });
+}
+{
+  $("ezSwatches").innerHTML = EZ_SW.map((c) => `<button type="button" data-c="${c.toLowerCase()}" style="background:${c}" title="${c}"></button>`).join("");
+  $all<HTMLButtonElement>("#ezSwatches button").forEach((b2) => (b2.onclick = () => ezSetColor(b2.dataset.c)));
+  for (const k of ["R", "G", "B"]) $("ez" + k).addEventListener("input", () => ezSetColor("#" + ["R", "G", "B"].map((q) => hex2(+$<HTMLInputElement>("ez" + q).value)).join("")));
+  $("ezColor").addEventListener("input", () => ezSetColor($<HTMLInputElement>("ezColor").value));
+  $("ezSize").addEventListener("input", () => { ezPen.w = +$<HTMLInputElement>("ezSize").value; LS.set("ww.ezw", String(ezPen.w)); ezSizeUI(); });
+  $("ezPen").onclick = () => ezMode(false); $("ezEraser").onclick = () => ezMode(true);
+  $("ezUndo").onclick = ezUndo; $("ezRedo").onclick = ezRedoOne; $("ezClose").onclick = () => closeEasel();
+  const stage = $("ezStage"), cur = $("ezCursor");
+  const at = (e) => { const r = stage.getBoundingClientRect(); return [clamp((e.clientX - r.left) / r.width * 1000, 0, 1000), clamp((e.clientY - r.top) / r.height * 1000, 0, 1000)]; };
+  stage.addEventListener("pointerdown", (e) => { if (e.button !== 0) return; e.preventDefault(); stage.setPointerCapture(e.pointerId); const [px, py] = at(e); ezBegin(Math.round(px), Math.round(py), ezPen.erase ? "#ffffff" : ezPen.c, ezPen.erase ? Math.max(ezPen.w, 10) : ezPen.w); });
+  stage.addEventListener("pointermove", (e) => { const r = stage.getBoundingClientRect(); cur.style.display = "block"; cur.style.left = `${e.clientX - r.left}px`; cur.style.top = `${e.clientY - r.top}px`; if (ezState().cur) { const [px, py] = at(e); ezMove(Math.round(px), Math.round(py)); } });
+  stage.addEventListener("pointerleave", () => { cur.style.display = "none"; });
+  const up = () => ezEnd(); stage.addEventListener("pointerup", up); stage.addEventListener("pointercancel", up);
+  addEventListener("resize", () => { if (!easelEd.hidden) ezSizeUI(); });
+}
+function openEasel() {
+  if (locked()) document.exitPointerLock(); keys.clear(); me.runHold = false;
+  const stage = $("ezStage"), S = ezState(); if (S.show.parentElement !== stage) stage.prepend(S.show);
+  easelEd.hidden = false; ezSetColor(ezPen.c); ezMode(false); requestAnimationFrame(ezSizeUI);
+}
+let menuQuietUntil = 0;
+function closeEasel(relock = true) { if (ezState().cur) ezEnd(); easelEd.hidden = true; menuQuietUntil = performance.now() + 800; if (relock) syncCursor(); }   // Esc로 닫을 땐 다시 고정하지 않는다(그 Esc가 설정창까지 열지 않게)
+// 붓: 하루들 부스 안에서만. 붓 꽂이 앞에서 F로 들고, 다시 F로 꽂는다. 부스 밖으로 나가면 저절로 꽂이로 돌아간다
+const boothZone = () => FLOORS[12].zones.find((z) => z.name === "하루들 부스");
+const inBooth = () => { const b = boothZone(); return me.f === 12 && !!b && inRect({ x: b.x - .3, y: b.y - .3, w: b.w + .6, h: b.h + .6 }, me.x, me.y); };
+const nearFurn = (kind, r) => me.f === 12 && FLOORS[12].furn.some((o) => o.kind === kind && Math.hypot(o.x + o.w / 2 - me.x, o.y + o.h / 2 - me.y) < r);
+function makeBrush() { // 붓: 나무 자루 + 은색 물림쇠 + 지금 고른 색 붓끝(위를 향해 쥔다)
+  const g = new THREE.Group();
+  const h = solidMesh(new THREE.CylinderGeometry(.012, .016, .26, 8), C.woodD, { line: .004, cast: false }); h.position.y = .13; g.add(h);
+  const f2 = solidMesh(new THREE.CylinderGeometry(.016, .014, .05, 8), 0xC3C7CD, { line: .003, cast: false }); f2.position.y = .28; g.add(f2);
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(.018, .07, 8), new THREE.MeshToonMaterial({ color: ezPen.c, gradientMap: gradient })); tip.position.y = .34; g.add(tip); g.userData.tip = tip;
+  return g;
+}
+function holdBrush(a, has, color?) {   // 나·다른 크루 모두: 붓을 들었으면 오른손에
+  if (has && !a.brushMesh) { a.brushMesh = makeBrush(); scene.add(a.brushMesh); }
+  if (!has && a.brushMesh) { a.brushMesh.removeFromParent(); a.brushMesh = null; }
+  if (!a.brushMesh) return;
+  const r = a.doll.root, p = r.position, h = a.doll.turn.rotation.y, fx = Math.sin(h), fz = Math.cos(h), rx = Math.cos(h), rz = -Math.sin(h);
+  a.brushMesh.visible = r.visible; a.brushMesh.position.set(p.x + rx * .24 + fx * .12, p.y + .5, p.z + rz * .24 + fz * .12); a.brushMesh.rotation.set(fz * .5, h, -fx * .5);
+  if (color) a.brushMesh.userData.tip.material.color.set(color);
+}
+function toggleBrush() {
+  if (me.brush) { me.brush = false; showToast("붓을 꽂아 뒀어요", "", 1400); }
+  else { if (me.act && ["gun", "dance"].includes(me.act.name)) endAct(me); me.brush = true; showToast("붓을 들었어요", TOUCH ? "이젤을 눌러 함께 그려요." : "이젤 앞에서 F나 클릭하면 그림판이 열려요.", 2600); }
+  sendPresence(true);
+}
+function tryEasel() {
+  if (!me.brush) { showToast("붓이 필요해요", "부스의 붓 꽂이 앞에서 F를 눌러 붓을 먼저 들어요.", 2600); return; }
+  openEasel();
+}
 // 내 캐릭터: 하루들 월드와 같은 부위·색 조합. 이 브라우저에 저장
 let myAv = (() => { try { return avDecode(LS.get("ww.avatar")) || { ...DEFAULT_AV }; } catch { return { ...DEFAULT_AV }; } })();
 const lookOf = (i) => ({ hair: HAIRS[i % HAIRS.length], acc: ACC[Math.floor(i / HAIRS.length) % ACC.length], prop: "bag" });
-const me = { jumps: 0, prop: null, goal: null, lie: null, seat: null, f: 12, x: ELEV_SPAWN[0], y: ELEV_SPAWN[1], h: Math.PI / 2, fc: 0, fh: 0, fk: 0, kickAt: -9, hc: 0, hd: 0, up: 0, jz: 0, jv: 0, jc: 0, ac: 0, an: null, as: 0, act: null, board: null, runHold: false, runToggle: false, moving: false, say: "", sayAt: 0, path: null };
+const me = { jumps: 0, prop: null, goal: null, lie: null, seat: null, f: 12, x: ELEV_SPAWN[0], y: ELEV_SPAWN[1], h: Math.PI / 2, brush: false, brushMesh: null, fc: 0, fh: 0, fk: 0, kickAt: -9, hc: 0, hd: 0, up: 0, jz: 0, jv: 0, jc: 0, ac: 0, an: null, as: 0, act: null, board: null, runHold: false, runToggle: false, moving: false, say: "", sayAt: 0, path: null };
 let floor = FLOORS[12];   // 처음 들어오면 12층 엘리베이터 앞
 let meDoll = makeChar(myAv); scene.add(meDoll.root);
 Object.defineProperty(me, "doll", { get: () => meDoll });
@@ -1312,6 +1570,13 @@ const keys = new Set();
 const MOVE = { KeyW: "w", KeyA: "a", KeyS: "s", KeyD: "d", ArrowUp: "arrowup", ArrowDown: "arrowdown", ArrowLeft: "arrowleft", ArrowRight: "arrowright" };
 const SKILL_KEY = { Digit1: "draw", Digit2: "wave", Digit3: "heart", Numpad1: "draw", Numpad2: "wave", Numpad3: "heart", KeyZ: "dance" };   // Z: 춤(한 번 누르면 계속, 다시 누르면 멈춤)
 addEventListener("keydown", (e) => {
+  if (!easelEd.hidden) { // 그림판이 열려 있으면 게임 키는 쉰다
+    if (e.code === "Escape") { e.preventDefault(); closeEasel(false); }
+    else if ((e.ctrlKey || e.metaKey) && e.code === "KeyZ") { e.preventDefault(); if (e.shiftKey) ezRedoOne(); else ezUndo(); }
+    else if ((e.ctrlKey || e.metaKey) && e.code === "KeyY") { e.preventDefault(); ezRedoOne(); }
+    else if (e.code === "KeyE" && !e.ctrlKey && !e.metaKey && (e.target as HTMLElement).tagName !== "INPUT") { e.preventDefault(); ezMode(!ezPen.erase); }
+    return;
+  }
   if ((e.target as HTMLElement).tagName === "INPUT") return;
   const c = e.code;
   if (!tour.hidden) { // 안내 중: ←→로 넘기고 Enter·Space·F로 다음, Esc로 건너뛰기
@@ -1320,7 +1585,12 @@ addEventListener("keydown", (e) => {
     return;
   }
   if (!guide.hidden) { if (c === "Escape" || c === "Enter" || c === "Space" || c === "KeyF") { e.preventDefault(); closeGuide(); } return; }
-  if (c === "Escape") { const was = uiOpen(); closePanel(); picker.hidden = true; inv.hidden = true; closeAvPanel(); lb.hidden = true; if (was) syncCursor(); return; }   // 창이 없을 때 Esc는 그냥 커서 꺼내기
+  if (c === "Escape") {
+    if (!menu.hidden) { if (performance.now() - menuAt > 300) closeMenu(); return; }   // 설정창이 떠 있으면 닫고 돌아간다(막 열린 직후 같은 Esc는 무시)
+    if (!profile.hidden) { closeProfile(); return; }
+    const was = uiOpen(); closePanel(); picker.hidden = true; inv.hidden = true; closeAvPanel(); lb.hidden = true; if (was) { syncCursor(); return; }
+    openMenu(); return;   // 창이 없으면 설정창
+  }
   if (!picker.hidden) { // 층 고르기 창: 숫자키로 바로, W/S로 옮기고 F·Space로 고른다(Enter는 버튼이 직접 받는다)
     const bs = $all<HTMLButtonElement>("#pickList button:not([disabled])"), at = bs.indexOf(document.activeElement as HTMLButtonElement);   // 커서로 눌러도 되고 키로 골라도 된다
     const n = { Digit1: 11, Digit2: 12, Digit3: 13, Digit4: 14, Numpad1: 11, Numpad2: 12, Numpad3: 13, Numpad4: 14 }[c];
@@ -1352,7 +1622,7 @@ const ICON = { // 하루들 낙서체 아이콘(검은 선 + 노랑·하늘 포�
 const ITEMS = [
   { id: "laptop", name: "노트북", tip: "앉아서 펼치기" },
   { id: "coffee", name: "아아", tip: "아이스 아메리카노", title: "아이스 아메리카노 · 언제든 한 모금" },
-  { id: "gun", name: "종이 총", tip: "꺼내서 F·클릭으로 발사", title: "종이 총 · 꺼낸 채로 F나 클릭하면 색종이가 팡!" },
+  { id: "gun", name: "종이 총", tip: "꺼내서 클릭·F로 발사", title: "종이 총 · 꺼낸 채로 왼쪽 클릭이나 F를 누르면 종이 총알이 슝!" },
 ];
 const inv = document.getElementById("inv");
 const invGrid = document.getElementById("invGrid");
@@ -1367,7 +1637,7 @@ function useItem(id) {
   } else if (id === "coffee") useSkill("coffee");
   else if (id === "gun") { // 꺼내 들고 다닌다(걸어도 계속). 한 번 더 누르면 넣는다
     if (me.act?.name === "gun") { endAct(me); sendPresence(true); showToast("종이 총을 넣었어요", "", 1400); }
-    else { useSkill("gun"); showToast("종이 총을 꺼냈어요", TOUCH ? "🎆를 누르면 색종이가 팡!" : "F나 클릭으로 발사! 3을 다시 누르면 넣어요.", 2600); }
+    else { useSkill("gun"); showToast("종이 총을 꺼냈어요", TOUCH ? "🎆를 누르면 종이 총알이 슝!" : "왼쪽 클릭이나 F로 발사! 3을 다시 누르면 넣어요.", 2600); }
   }
   inv.hidden = true; syncCursor();
 }
@@ -1386,7 +1656,7 @@ const joy = { on: false, x: 0, y: 0, id: -1, cx: 0, cy: 0 };
   mRun.onclick = () => runBtn.click();
   document.getElementById("mJump").addEventListener("pointerdown", (e) => { e.preventDefault(); jump(); });
   document.getElementById("mInv").onclick = () => toggleInv();
-  document.getElementById("mFire").onclick = () => fireFirework();
+  document.getElementById("mFire").onclick = () => fireFirework(me.act?.name === "gun");   // 모바일: 종이 총을 들었으면 총알, 아니면 폭죽
   $all("#mPad [data-skill]").forEach((b) => (b.onclick = () => useSkill(b.dataset.skill)));
   const chatBtn = document.getElementById("mChat"), sayIn = $<HTMLInputElement>("sayInput");
   chatBtn.onclick = () => { if (document.body.classList.toggle("chatting")) sayIn.focus(); else sayIn.blur(); };
@@ -1399,7 +1669,7 @@ document.getElementById("rotR").onclick = () => (cam.yawT -= Math.PI / 4);
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 let drag = null; const pointers = new Map();
 const pinchDist = () => { const [a, b] = [...pointers.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
-canvas.addEventListener("pointerdown", (e) => { canvas.setPointerCapture(e.pointerId); pointers.set(e.pointerId, { x: e.clientX, y: e.clientY }); drag = { x: e.clientX, y: e.clientY, moved: pointers.size > 1, yaw: cam.yawT, pitch: cam.pitchT, ip: cam.ipT, look: cam.lookT, pinch: pointers.size === 2 ? pinchDist() : 0, dist: cam.distT, id: cam.idT }; });
+canvas.addEventListener("pointerdown", (e) => { try { canvas.setPointerCapture(e.pointerId); } catch { } /* 마우스 고정 중엔 캡처가 거절될 수 있다 */ pointers.set(e.pointerId, { x: e.clientX, y: e.clientY }); drag = { x: e.clientX, y: e.clientY, moved: pointers.size > 1, yaw: cam.yawT, pitch: cam.pitchT, ip: cam.ipT, look: cam.lookT, pinch: pointers.size === 2 ? pinchDist() : 0, dist: cam.distT, id: cam.idT }; });
 canvas.addEventListener("pointermove", (e) => {
   if (!drag || !pointers.has(e.pointerId)) return; pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (pointers.size === 2) { if (!drag.pinch) { drag.pinch = pinchDist(); drag.dist = cam.distT; drag.id = cam.idT; } const ratio = drag.pinch / Math.max(1, pinchDist()); if (inside()) cam.idT = clamp(drag.id * ratio, 1.2, 6); else cam.distT = clamp(drag.dist * ratio, 6, 66); drag.moved = true; return; }
@@ -1410,8 +1680,10 @@ canvas.addEventListener("pointermove", (e) => {
 const endDrag = (e) => {
   pointers.delete(e.pointerId); canvas.classList.remove("dragging");
   if (drag && !drag.moved && pointers.size === 0) {
-    if (inside() && e.pointerType === "mouse" && !locked()) lockMouse();   // 들어가서 볼 때 누르면 커서를 숨기고 고정
-    else if (locked()) { if (picker.hidden) { if (me.act?.name === "gun") fireFirework(); else clickAt(innerWidth / 2, innerHeight / 2); } }   // 종이 총을 들었으면 클릭으로 발사   // 고정 중엔 화면 가운데(조준점)를 누른 것으로(층 고르는 중엔 무시)
+    if (!locked() && boothHit(e.clientX, e.clientY)) { }   // 바로가기·이젤을 눌렀으면 고정하지 않고 바로 연다
+    else if (inside() && e.pointerType === "mouse" && !locked()) lockMouse();   // 들어가서 볼 때 누르면 커서를 숨기고 고정
+    else if (locked()) { if (picker.hidden && me.act?.name !== "gun") clickAt(innerWidth / 2, innerHeight / 2); }   // 고정 중 클릭(종이 총은 아래 mousedown에서 바로 쏜다)
+    else if (me.act?.name === "gun" && e.button === 0 && !TOUCH) { const a = aimAt(e.clientX, e.clientY); fireFirework(true, a); }   // 커서가 보일 때(위에서 보기 등): 누른 곳 쪽으로 발사   // 고정 중엔 화면 가운데(조준점)를 누른 것으로(층 고르는 중엔 무시)
     else clickAt(e.clientX, e.clientY);
   }
   if (pointers.size === 0) drag = null;
@@ -1421,7 +1693,7 @@ let lockFailed = false;
 const locked = () => document.pointerLockElement === canvas;
 // 경계: 창(층 고르기·크루 피드·사진·캐릭터 꾸미기·조작법)이 떠 있는 동안은 커서를 꺼내 두고, 다 닫히면 게임으로 돌아와 다시 고정한다.
 // 채팅은 게임 안의 일이라 고정을 유지한다
-const uiOpen = () => !tour.hidden || !inv.hidden || !picker.hidden || panel.classList.contains("open") || !avPanel.hidden || !guide.hidden || !lb.hidden;
+const uiOpen = () => !easelEd.hidden || !menu.hidden || !profile.hidden || !tour.hidden || !inv.hidden || !picker.hidden || panel.classList.contains("open") || !avPanel.hidden || !guide.hidden || !lb.hidden;
 function syncCursor() { if (uiOpen()) { if (locked()) document.exitPointerLock(); } else lockMouse(); }
 function lockMouse() {
   if (TOUCH) return;   // 터치 기기는 고정하지 않는다(화면을 끌어서 둘러본다)
@@ -1437,10 +1709,12 @@ document.addEventListener("mousemove", (e) => {
   if (VIEW.mode === "first") cam.lookT = clamp(cam.lookT - dy * .0026, -1.0, 1.1); else cam.ipT = clamp(cam.ipT + dy * .0026, -.05, 1.1);
 });
 // 고정이 거절돼도(조작 없이 불렸거나 막 풀린 직후) 다음 클릭에 다시 시도한다. 아예 지원 안 하는 브라우저만 끄기(lockMouse 안에서)
+// 종이 총: 마우스 고정 중 왼쪽 버튼을 누르는 순간 바로 발사(눌렀다 떼는 클릭 판정을 기다리지 않는다)
+document.addEventListener("mousedown", (e) => { if (e.button === 0 && locked() && me.act?.name === "gun" && !uiOpen()) { e.preventDefault(); fireFirework(true); } });
 document.addEventListener("pointerlockerror", () => {});
 document.addEventListener("pointerlockchange", () => {
   document.getElementById("cross").hidden = !(VIEW.mode === "first" || locked());
-  if (!locked() && inside() && !uiOpen()) showToast("커서가 나왔어요", "화면을 한 번 누르면 다시 둘러봐요.", 2600);   // Esc·알트탭으로 풀렸을 때
+  if (!locked() && inside() && !uiOpen() && performance.now() > menuQuietUntil) { if (document.hasFocus()) openMenu(); else showToast("커서가 나왔어요", "화면을 한 번 누르면 다시 둘러봐요.", 2600); }   // Esc로 풀리면 설정창, 알트탭이면 안내만
 });
 canvas.addEventListener("pointerup", endDrag); canvas.addEventListener("pointercancel", endDrag);
 canvas.addEventListener("wheel", (e) => {
@@ -1448,8 +1722,21 @@ canvas.addEventListener("wheel", (e) => {
   if (VIEW.mode === "top") cam.distT = clamp(cam.distT * (1 + e.deltaY * .0012), 6, 66);
   else if (VIEW.mode === "third") { cam.idT = clamp(cam.idT * (1 + e.deltaY * .0012), 1.2, 6); }
 }, { passive: false });
+function aimAt(cx, cy) {   // 화면에서 누른 곳(바닥)으로의 방향. 못 찾으면 지금 몸 방향
+  ndc.set(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
+  const g = ray.intersectObject(FLOORS[me.f].slab, false)[0]; if (!g) return me.h;
+  return Math.atan2(tX(g.point.x) - me.x, tY(g.point.z) - me.y);
+}
+function boothHit(cx, cy) {   // 커서가 보일 때 바로가기·이젤을 눌렀으면 바로 처리
+  if (me.f !== 12 || !(linkBoards.length || ezBoards.length)) return false;
+  ndc.set(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
+  if (!ray.intersectObjects([...linkBoards, ...ezBoards], false)[0]) return false;
+  clickAt(cx, cy); return true;
+}
 function clickAt(cx, cy) {
   ndc.set(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
+  if (me.f === 12 && linkBoards.length) { const lh = ray.intersectObjects(linkBoards, false)[0]; if (lh) { openLink(lh.object.userData.link); return; } }   // 바로가기 장치를 눌렀다
+  if (me.f === 12 && ezBoards.length) { const eh = ray.intersectObjects(ezBoards, false)[0]; if (eh && nearFurn("painteasel", 3.2)) { tryEasel(); return; } }   // 이젤을 눌렀다
   const hit = ray.intersectObjects(NPCS.filter((n) => n.f === me.f && n.doll.root.visible).map((n) => n.doll.root), true).find((h) => h.object !== (h.object.parent as any)?.userData?.blob && !(h.object as any).isPoints);
   let npcIdx = -1; for (let q: THREE.Object3D | null = hit ? hit.object : null; q; q = q.parent) if (q.userData.npc !== undefined) { npcIdx = q.userData.npc; break; }
   if (hit && npcIdx >= 0) { const n = NPCS[npcIdx]; n.say = "반가워!"; n.sayAt = performance.now(); NPCS.forEach((o) => (o.talk = o === n)); openPanel(n.p); return; }
@@ -1494,7 +1781,9 @@ function standUp() {
   if (!me.lie) return; for (const o of floor.furn) if (o.taken === "me") o.taken = false; [me.x, me.y] = nearestFree(floor, me.x + Math.sin(me.lie.yaw) * 1.2, me.y + Math.cos(me.lie.yaw) * 1.2); me.lie = null; sendPresence(true);
 }
 const atCall = () => floor.calls.some((k) => inRect({ x: k.x - .2, y: k.y - .3, w: k.w + .4, h: k.h + .6 }, me.x, me.y));
-function interact() { if (me.act?.name === "gun" && !me.lie && !me.seat && !atCall()) { fireFirework(); return; }   // 종이 총을 들었으면 F는 발사
+function interact() {
+  if (!me.lie && !me.seat && me.f === 12) { if (me.brush && nearFurn("painteasel", 2.1)) { tryEasel(); return; } if (nearFurn("brushcup", 1.7)) { toggleBrush(); return; } if (nearFurn("painteasel", 2.1)) { tryEasel(); return; } if (nearFurn("linkkiosk", 1.7)) { openLink("https://www.harudle.com/"); return; } if (nearFurn("instaboard", 1.7)) { openLink("https://www.instagram.com/harudle.official/"); return; } }   // 하루들 부스: 붓 꽂이 · 함께 그리는 이젤   // 붓을 들었으면 이젤이 먼저
+  if (me.act?.name === "gun" && !me.lie && !me.seat && !atCall()) { fireFirework(true); return; }   // 종이 총을 들었으면 F도 발사(엘리베이터 앞만 예외)
   if (me.lie || me.seat) { standUp(); return; } const st = nearSeat(); if (st && !(nearNPC() && Math.hypot(st.x - me.x, st.y - me.y) > .55)) { sitDown(st); return; } const n = nearNPC(); if (n) { n.say = "반가워!"; n.sayAt = performance.now(); NPCS.forEach((o) => (o.talk = o === n)); openPanel(n.p); return; } const bag = nearBag(); if (bag) { lieDown(bag); return; } if (atCall()) { openPicker(); return; } fireFirework(); }   // 주변에 아무것도 없으면 F는 앞으로 폭죽
 let openP = null;
 function openPanel(p) {
@@ -1539,7 +1828,7 @@ picker.addEventListener("click", (e) => { if (e.target === picker) closePicker()
 const fade = document.getElementById("fade"); let lastPortal = 0;
 function goFloor(f, spawn) {
   fade.style.opacity = "1";
-  setTimeout(() => { standUp(); me.f = f; floor = FLOORS[f]; [me.x, me.y] = nearestFree(floor, spawn[0], spawn[1]); me.jz = 0; me.jv = 0; me.up = 0; dog.x = me.x - 1; dog.y = me.y + .5; me.path = null; curZone = null; showFloors(); refreshRoomTags(); updateFloorHud(); sendPresence(true); cam.target.set(wx(me.x), floorY(f), wz(me.y)); fade.style.opacity = "0"; }, 250);
+  setTimeout(() => { if (me.brush) { me.brush = false; } standUp(); me.f = f; floor = FLOORS[f]; [me.x, me.y] = nearestFree(floor, spawn[0], spawn[1]); me.jz = 0; me.jv = 0; me.up = 0; dog.x = me.x - 1; dog.y = me.y + .5; me.path = null; curZone = null; showFloors(); refreshRoomTags(); updateFloorHud(); sendPresence(true); cam.target.set(wx(me.x), floorY(f), wz(me.y)); fade.style.opacity = "0"; }, 250);
 }
 // 층 바로가기 버튼은 없다: 다른 층은 엘리베이터나 계단으로만 간다
 function updateFloorHud() { document.querySelector("#floorBadge b").textContent = me.f + "F"; document.querySelector("#floorBadge span").textContent = FLOOR_INFO[me.f]; }
@@ -1598,7 +1887,20 @@ avPanel.addEventListener("click", (e) => {
 });
 function openAvPanel() { if (locked()) document.exitPointerLock(); avPanel.hidden = false; renderAvPanel(); if (!inside()) { avCamBack = cam.distT; cam.distT = 6; cam.yawT = me.h; cam.pitchT = .5; } /* 얼굴이 보이게 앞쪽에서 */ document.getElementById("avDone").focus(); }
 function closeAvPanel() { const was = !avPanel.hidden; avPanel.hidden = true; if (was) syncCursor(); if (avCamBack !== null) { cam.distT = avCamBack; avCamBack = null; } }
-document.getElementById("lookBtn").onclick = () => (avPanel.hidden ? openAvPanel() : closeAvPanel());
+/* ───── Esc 설정창: 프로필 수정 · 캐릭터 외형 수정 ───── */
+const menu = document.getElementById("menu"), profile = document.getElementById("profile"), profileName = $<HTMLInputElement>("profileName");
+let menuAt = 0, renameMe: ((v: string) => void) | null = null, myNameNow = () => "";
+function openMenu() { if (locked()) document.exitPointerLock(); keys.clear(); me.runHold = false; menu.hidden = false; menuAt = performance.now(); $("menuClose").focus(); }
+function closeMenu() { menu.hidden = true; syncCursor(); }
+function openProfile() { menu.hidden = true; profile.hidden = false; profileName.value = myNameNow(); profileName.focus(); profileName.select(); }
+function closeProfile(back = true) { profile.hidden = true; if (back) openMenu(); else syncCursor(); }
+$("menuClose").onclick = closeMenu;
+$("menuProfile").onclick = openProfile;
+$("menuLook").onclick = () => { menu.hidden = true; openAvPanel(); };
+$("menuGuide").onclick = () => { menu.hidden = true; openGuide(); };
+$("profileCancel").onclick = () => closeProfile();
+$("profileForm").addEventListener("submit", (e) => { e.preventDefault(); const v = profileName.value.trim().slice(0, 16); if (v && renameMe) renameMe(v); closeProfile(false); showToast("프로필을 바꿨어요", `이제 ${myNameNow()}(으)로 보여요.`, 2200); });
+profileName.addEventListener("keydown", (e) => { if (e.code === "Escape") { e.preventDefault(); e.stopPropagation(); closeProfile(); } });
 // 채팅: Enter로 들어가고, 쓰고 Enter면 보내고 나온다(빈 채로 Enter·Esc면 그냥 나온다). 나오면 다시 마우스를 고정한다
 const sayInput = $<HTMLInputElement>("sayInput");
 function openChat() { keys.clear(); me.runHold = false; sayInput.focus(); }
@@ -1640,7 +1942,7 @@ let wasMoving = false;
 document.addEventListener("visibilitychange", () => { if (document.hidden && me.moving) { me.moving = false; wasMoving = false; sendPresence(true); } });
 function sendPresence(force) {
   if (!room) return; const now = performance.now(); if (!force && now - lastSent < 90) return; lastSent = now;
-  room.presence({ f: me.f, x: Math.round(me.x * 100) / 100, y: Math.round(me.y * 100) / 100, u: Math.round(me.up * 100) / 100, h: Math.round(me.h * 100) / 100, lp: me.act?.name === "laptop" ? 1 : 0, gn: me.act?.name === "gun" ? 1 : 0, fk: me.fk, hc: me.hc, hd: Math.round(me.hd * 100) / 100, fc: me.fc, fh: Math.round(me.fh * 100) / 100, dn: me.act?.name === "dance" ? 1 : 0, m: me.moving ? 1 : 0, r: running() ? 1 : 0, l: me.lie ? 1 : 0, st: me.seat ? 1 : 0, ly: me.lie ? Math.round(me.lie.yaw * 100) / 100 : 0, jc: me.jc, ac: me.ac, an: me.an, as: me.as, look: 0, av: avEncode(myAv), say: me.say && Date.now() - me.sayAt < 6000 ? me.say : null }).catch(() => { });
+  room.presence({ f: me.f, x: Math.round(me.x * 100) / 100, y: Math.round(me.y * 100) / 100, u: Math.round(me.up * 100) / 100, h: Math.round(me.h * 100) / 100, lp: me.act?.name === "laptop" ? 1 : 0, gn: me.act?.name === "gun" ? 1 : 0, br: me.brush ? 1 : 0, bc: ezPen.c, fk: me.fk, hc: me.hc, hd: Math.round(me.hd * 100) / 100, fc: me.fc, fh: Math.round(me.fh * 100) / 100, dn: me.act?.name === "dance" ? 1 : 0, m: me.moving ? 1 : 0, r: running() ? 1 : 0, l: me.lie ? 1 : 0, st: me.seat ? 1 : 0, ly: me.lie ? Math.round(me.lie.yaw * 100) / 100 : 0, jc: me.jc, ac: me.ac, an: me.an, as: me.as, look: 0, av: avEncode(myAv), say: me.say && Date.now() - me.sayAt < 6000 ? me.say : null }).catch(() => { });
 }
 // EC2에서는 직접 만든 WebSocket 서버가 room 역할을 한다
 function wsRoom() {
@@ -1649,10 +1951,13 @@ function wsRoom() {
   let myName = LS.get(nameKey) || `크루${Math.floor(Math.random() * 900 + 100)}`; LS.set(nameKey, myName);
   const nameBtn = document.getElementById("nameBtn"), nameForm = document.getElementById("nameForm"), nameInput = $<HTMLInputElement>("nameInput");
   nameBtn.hidden = false; nameBtn.textContent = `이름: ${myName}`; myTag.textContent = myName;
-  nameBtn.onclick = () => { nameBtn.hidden = true; nameForm.hidden = false; nameInput.value = myName; nameInput.focus(); nameInput.select(); };
+  nameBtn.onclick = () => openProfile();   // 이름 칩을 눌러도 프로필 수정
+  myNameNow = () => myName;
+  renameMe = (v) => { myName = v; LS.set(nameKey, v); send({ t: "name", name: v }); nameBtn.textContent = `이름: ${myName}`; myTag.textContent = myName; };
   const saveName = () => { const v = nameInput.value.trim().slice(0, 16); if (v) { myName = v; LS.set(nameKey, v); send({ t: "name", name: v }); } nameForm.hidden = true; nameBtn.hidden = false; nameBtn.textContent = `이름: ${myName}`; myTag.textContent = myName; };
   nameForm.addEventListener("submit", (e) => { e.preventDefault(); saveName(); }); nameInput.addEventListener("blur", saveName);
   const send = (m) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m)); };
+  netSend = send;   // 이젤 획도 같은 연결로
   let myId = null, firstV = null;
   // 서버가 새 버전으로 바뀌면 페이지는 그대로 두고, 새로고침을 권하는 버튼만 띄운다
   const showUpdate = () => { if (document.getElementById("updateChip")) return; const b = document.createElement("button"); b.id = "updateChip"; b.type = "button"; b.textContent = "새 버전이 나왔어요 · 새로고침"; b.onclick = () => location.reload(); document.body.append(b); };
@@ -1661,6 +1966,7 @@ function wsRoom() {
     ws.onopen = () => { retry = 800; send({ t: "name", name: myName }); if (last) send({ t: "p", p: last }); };
     ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch { return; }
       if (m.t === "hello") { myId = m.id; if (m.v) { if (!firstV) firstV = m.v; else if (m.v !== firstV) showUpdate(); } }
+      if (m.t === "ez") easelNet(m);
       if (m.t === "bye") retry = 150; /* 서버가 새 버전으로 바뀌는 중: 곧바로 다시 붙는다 */ if (m.t === "peers" && handler) handler({ peers: m.peers.map((p) => ({ ...p, kind: "viewer", sameTab: p.peer === myId })) }); };
     ws.onclose = () => { setTimeout(connect, retry); retry = Math.min(10000, retry * 1.6); };
   };
@@ -1673,7 +1979,7 @@ async function joinRoom() {
       room = wsRoom();
       room.onPeers((ch) => {
         peerList = ch.peers.filter((p) => !p.sameTab);
-        for (const [k, v] of peers) if (!peerList.some((p) => p.peer === k)) { endAct(v); dropDoll(v.doll); v.tag.remove(); v.bub.remove(); peers.delete(k); }
+        for (const [k, v] of peers) if (!peerList.some((p) => p.peer === k)) { endAct(v); holdBrush(v, false); dropDoll(v.doll); v.tag.remove(); v.bub.remove(); peers.delete(k); }
         online.textContent = peerList.length ? `같이 있는 크루 ${peerList.length + 1}명` : "혼자 둘러보는 중";
       });
       sendPresence(true); return;
@@ -1683,7 +1989,7 @@ async function joinRoom() {
     room.onPeers(async (ch) => {
       peerList = ch.peers.filter((p) => !p.sameTab && p.kind === "viewer");
       const ids = peerList.map((p) => p.by).filter(Boolean); if (user && ids.length) { const ps = await user.profiles(ids); for (const id of ids) names[id] = ps[id]?.name || ""; }
-      for (const [k, v] of peers) if (!peerList.some((p) => p.peer === k)) { endAct(v); dropDoll(v.doll); v.tag.remove(); v.bub.remove(); peers.delete(k); }
+      for (const [k, v] of peers) if (!peerList.some((p) => p.peer === k)) { endAct(v); holdBrush(v, false); dropDoll(v.doll); v.tag.remove(); v.bub.remove(); peers.delete(k); }
       online.textContent = peerList.length ? `같이 있는 크루 ${peerList.length + 1}명` : "혼자 둘러보는 중";
     }, () => { });
     sendPresence(true);
@@ -1725,7 +2031,7 @@ function syncPeers(dt, t) {
     // 받는 쪽 안전장치: "걷는 중"이라고 와도 위치가 0.5초 넘게 그대로면 멈춘 것으로 본다(멈춤 신호가 빠졌거나 그 사람이 다른 탭으로 갔을 때)
     if (s.x !== v.sx || s.y !== v.sy) { v.sx = s.x; v.sy = s.y; v.movedAt = t; }
     const walking = (v.walking = !!s.m && t - (v.movedAt ?? -9) < .5);
-    applyWobble(v); v.doll.update(dt, t, walking, typeof s.h === "number" ? s.h : null, 0, false, tickAct(v, dt), v.jz > .01, walking && !!s.r);
+    holdBrush(v, !!s.br && vis, typeof s.bc === "string" && /^#[0-9a-f]{6}$/i.test(s.bc) ? s.bc : undefined); applyWobble(v); v.doll.update(dt, t, walking, typeof s.h === "number" ? s.h : null, 0, false, tickAct(v, dt), v.jz > .01, walking && !!s.r);
     v.tag.textContent = p.name || (p.by && names[p.by]) || "크루";
     const rp = v.doll.root.position;
     if (vis) project(v.tag, rp.x, rp.y - .05, rp.z, true); else v.tag.style.display = "none";
@@ -1785,7 +2091,8 @@ function step(dt, t) {
   }
   checkZone();
   const near = nearNPC(), call = atCall(), bag = nearBag(), seat = nearSeat();
-  actBtn.hidden = !(me.lie || me.seat || near || bag || call || seat); actBtn.textContent = me.lie || me.seat ? "일어나기" : seat && !(near && Math.hypot(seat.x - me.x, seat.y - me.y) > .55) ? "앉기" : near ? `${near.p.nick}와 대화하기` : bag ? "빈백에 눕기" : "엘리베이터 타기";
+  const ez0 = !me.lie && !me.seat && nearFurn("painteasel", 2.1), cup = !(me.brush && ez0) && !me.lie && !me.seat && nearFurn("brushcup", 1.7), ez = !cup && ez0, site = !cup && !ez && nearFurn("linkkiosk", 1.7), insta = !cup && !ez && !site && nearFurn("instaboard", 1.7);   // 하루들 부스
+  actBtn.hidden = !(me.lie || me.seat || near || bag || call || seat || cup || ez || site || insta); actBtn.textContent = cup ? (me.brush ? "붓 꽂기" : "붓 들기") : ez ? "함께 그리기" : site ? "하루들 바로가기" : insta ? "인스타 바로가기" : me.lie || me.seat ? "일어나기" : seat && !(near && Math.hypot(seat.x - me.x, seat.y - me.y) > .55) ? "앉기" : near ? `${near.p.nick}와 대화하기` : bag ? "빈백에 눕기" : "엘리베이터 타기";
   if (me.say && Date.now() - me.sayAt > 6000) { me.say = ""; sendPresence(true); }
 }
 const tgt = new THREE.Vector3();
@@ -1807,6 +2114,8 @@ function render(dt, t) {
   setPos(meDoll, me.f, me.x, me.y); meDoll.root.position.y += me.up + me.jz; meDoll.blob.position.y = .012 - me.jz; meDoll.blob.scale.setScalar(1 - Math.min(.5, me.jz)); applyLie(meDoll, me.lie); meDoll.setSeated(me.seat); meDoll.root.visible = VIEW.mode === "top" || (VIEW.mode === "third" && !cam.close);
   meDoll.update(dt, t, me.moving, me.lie ? 0 : me.seat ? me.seat.yaw : me.h, 0, !!(me.say && Date.now() - me.sayAt < 2500), tickAct(me, dt), me.jz > .01, running() && me.moving);
   applyWobble(me);
+  if (me.brush && !inBooth()) { me.brush = false; if (!easelEd.hidden) closeEasel(); showToast("붓은 부스 안에서만 써요", "붓 꽂이에 돌려놨어요.", 2200); sendPresence(true); }
+  holdBrush(me, me.brush, ezPen.c);
   setPos(dog.doll, me.f, dog.x, dog.y); dog.doll.update(dt, t, dog.moving, dog.h);
   for (const n of NPCS) if (n.doll.root.visible) { setPos(n.doll, n.f, n.x, n.y); applyLie(n.doll, n.lie); n.doll.setSeated(n.seat); n.doll.update(dt, t, n.moving, n.lie ? 0 : n.seat ? n.seat.yaw : n.talk ? Math.atan2(me.x - n.x, me.y - n.y) : n.h, n.seed, performance.now() - n.sayAt < 2500, tickAct(n, dt));  applyWobble(n); }
   tickFx(dt); tickMeteors(dt); tickFireworks(dt);
@@ -1844,7 +2153,7 @@ fontsReady.then(() => {
   loadFeed(); joinRoom();
   ready = true;
   // 화면 점검용 손잡이: 주소 끝에 ?debug를 붙였을 때만
-  if (new URLSearchParams(location.search).has("debug")) (window as any).__t = { peers, gl: renderer, Q, me, NPCS, cam, goFloor, setView, setMyAv, useSkill, jump, lieDown, sitDown, nearSeat, AVATAR_PRESETS, get floor() { return floor; } };
+  if (new URLSearchParams(location.search).has("debug")) (window as any).__ez = ezState; (window as any).__t = { peers, gl: renderer, Q, me, NPCS, cam, goFloor, setView, setMyAv, useSkill, jump, lieDown, sitDown, nearSeat, AVATAR_PRESETS, get floor() { return floor; } };
 });
 
 return { frame(dt: number) { if (!ready) return; const t = performance.now() / 1000; step(Math.min(.05, dt), t); render(Math.min(.05, dt), t); } };
