@@ -835,7 +835,7 @@ const DOODLES = [
   (g) => { g.strokeRect(34, 22, 40, 28); for (const cx of [38, 70]) { g.beginPath(); g.arc(cx, 68, 10, 0, 7); g.stroke(); g.beginPath(); g.moveTo(cx - 12, 96); g.quadraticCurveTo(cx, 76, cx + 12, 96); g.stroke(); } },
   (g) => { g.beginPath(); g.arc(40, 40, 14, Math.PI, 0); g.arc(60, 36, 16, Math.PI, 0); g.arc(78, 44, 11, Math.PI * 1.2, Math.PI * .5); g.lineTo(28, 55); g.arc(28, 46, 9, Math.PI * .5, Math.PI * 1.5); g.stroke(); g.strokeStyle = "#7DB3F0"; for (const x of [36, 52, 68]) { g.beginPath(); g.moveTo(x, 64); g.lineTo(x - 4, 76); g.moveTo(x + 6, 82); g.lineTo(x + 2, 94); g.stroke(); } },
 ];
-function drawComic(g, seed, prog) {
+function drawComic(g, seed, prog, npc = false) {
   const r = rng(seed), picks = []; while (picks.length < 4) { const i = Math.floor(r() * DOODLES.length); if (!picks.includes(i)) picks.push(i); }
   g.clearRect(0, 0, 256, 256); g.save(); g.lineJoin = "round"; g.lineCap = "round";
   g.fillStyle = "rgba(17,17,24,.35)"; g.fillRect(6, 8, 248, 246); g.fillStyle = "#fff"; g.fillRect(2, 2, 248, 246); g.strokeStyle = "#111118"; g.lineWidth = 4; g.strokeRect(2, 2, 248, 246);
@@ -847,6 +847,7 @@ function drawComic(g, seed, prog) {
     if (p < 1) { g.fillStyle = BRAND; g.beginPath(); g.arc(px + 112 * p, py + 56 + Math.sin(p * 30) * 30, 5, 0, 7); g.fill(); }
   }
   if (prog >= 4) { g.fillStyle = NAVY; g.font = `700 30px ${HAND}`; g.textAlign = "right"; g.fillText("하루들!", 244, 242); }
+  if (npc) { g.fillStyle = NAVY; g.fillRect(2, 2, 58, 26); g.fillStyle = "#FFD43B"; g.font = `700 20px ${HAND}`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("NPC", 31, 16); }   // NPC가 든 그림은 왼쪽 위에 표시
   g.restore();
 }
 const fxTex = (draw) => canvasTex(64, 64, draw);
@@ -867,13 +868,13 @@ function tickFx(dt) {
 function makeBoard(seed) {
   const cv = document.createElement("canvas"); cv.width = cv.height = 256; const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
   const mesh = new THREE.Mesh(new THREE.PlaneGeometry(.95, .95), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide })); mesh.renderOrder = 4;
-  return { mesh, g: cv.getContext("2d"), tex, seed, last: -1, sparked: false };
+  return { mesh, g: cv.getContext("2d"), tex, seed, last: -1, sparked: false, npc: false };
 }
 // actor: { doll, act, board } — 나, 크루(NPC), 같이 있는 크루 모두 같은 방식
 function startAct(a, name, seed?) {
   if (!SKILLS[name]) return; endAct(a);
   a.act = { name, t: 0, seed: seed ?? Math.floor(Math.random() * 1e6) };
-  if (name === "draw") { a.board = makeBoard(a.act.seed); scene.add(a.board.mesh); }
+  if (name === "draw") { a.board = makeBoard(a.act.seed); a.board.npc = NPCS.includes(a); scene.add(a.board.mesh); }
   if (name === "laptop" || name === "coffee") { a.prop = name === "laptop" ? makeLaptop() : makeIcedCoffee(); scene.add(a.prop); }
 }
 // 인벤토리 물건: 노트북(펼친 화면에 코드), 아이스 아메리카노(투명 컵에 얼음·빨대)
@@ -917,7 +918,7 @@ function tickAct(a, dt) {
   if (a.board) {
     const b = a.board; b.mesh.visible = a.doll.root.visible; b.mesh.position.set(p.x, p.y + 1.6, p.z); b.mesh.rotation.y = cam.yaw;
     const prog = Math.min(4, Math.max(0, (e - .4) / .9));
-    if (Math.abs(prog - b.last) > .03 || (prog >= 4 && b.last < 4)) { drawComic(b.g, b.seed, prog); b.tex.needsUpdate = true; b.last = prog; }
+    if (Math.abs(prog - b.last) > .03 || (prog >= 4 && b.last < 4)) { drawComic(b.g, b.seed, prog, b.npc); b.tex.needsUpdate = true; b.last = prog; }
     b.mesh.scale.setScalar(.25 + .75 * easeOut(clamp(e / .35, 0, 1)));
     if (prog >= 4 && !b.sparked) { b.sparked = true; if (a.doll.root.visible) spawnFx(starTex, p, 7, 1.2, 1.5); }
     b.mesh.material.opacity = clamp((s.dur - e) / .5, 0, 1);
@@ -1191,7 +1192,7 @@ function refreshRoomTags() {
 const myTag = mkLabel("name-tag me", "나"), myBub = mkLabel("bub", ""); myBub.hidden = true;
 const hintBub = mkLabel("bub hint", ""); hintBub.hidden = true;
 let npcTags = [];
-function refreshTags() { npcTags.forEach((t) => { t.tag.remove(); t.bub.remove(); }); npcTags = NPCS.map((n) => { const tag = mkLabel("name-tag", n.p.nick); const bub = mkLabel("bub", ""); bub.hidden = true; return { n, tag, bub }; }); }
+function refreshTags() { npcTags.forEach((t) => { t.tag.remove(); t.bub.remove(); }); npcTags = NPCS.map((n) => { const tag = mkLabel("name-tag", `${n.p.nick} (NPC)`); const bub = mkLabel("bub", ""); bub.hidden = true; return { n, tag, bub }; }); }
 
 /* ════════════════ 10. 입력 (키보드 · 끌어 돌리기 · 휠/핀치 · 클릭 이동) ════════════════ */
 const keys = new Set();
@@ -1355,7 +1356,7 @@ let openP = null;
 function openPanel(p) {
   if (locked()) document.exitPointerLock();
   openP = p;
-  document.getElementById("pName").textContent = p.nick;
+  document.getElementById("pName").textContent = `${p.nick} (NPC)`;
   $<HTMLImageElement>("pAvatar").src = p.avatar || avatarURL(avToLook(avFromSeed(String(p.nick))));
   const cats = [...new Set(p.feeds.map((f) => f.cat).filter(Boolean))];
   document.getElementById("pMeta").textContent = `하루들 공개 피드 ${p.total}편${cats.length ? " · " + cats.join(" · ") : ""}`;
