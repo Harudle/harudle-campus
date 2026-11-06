@@ -20,7 +20,7 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap">
-  <script type="module" crossorigin src="/assets/index-C4mBvKwX.js"></script>
+  <script type="module" crossorigin src="/assets/index-DjC7qviq.js"></script>
   <link rel="stylesheet" crossorigin href="/assets/index-DvPKW6t3.css">
 </head>
 <body>
@@ -32,7 +32,7 @@
 <div id="loading"><div>캠퍼스를 접는 중…<small>종이 디오라마를 세우고 있어요</small></div></div>
 
 <div class="hud" id="floorHud">
-  <div class="chip" id="floorBadge"><b>11F</b><span>배움이 시작되는 공간</span></div>
+  <div class="chip" id="floorBadge"><b>12F</b><span>함께, 또 따로 학습의 공간</span></div>
 </div>
 <div class="hud" id="topRight">
   <button class="chip" id="feedBtn" hidden>네 컷 사진 불러오기</button>
@@ -59,19 +59,20 @@
     <li><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><p><b>걷기</b></p></li>
     <li><span><kbd>Shift</kbd></span><p><b>달리기</b></p></li>
     <li><span><kbd>Space</kbd></span><p><b>점프</b> 공중에서 한 번 더 누르면 더블 점프</p></li>
-    <li><span><kbd>Tab</kbd></span><p><b>인벤토리</b> 노트북(앉아서 펼치기)·아이스 아메리카노</p></li>
-    <li><span><kbd>F</kbd></span><p><b>대화 · 앉기 · 눕기</b></p></li>
+    <li><span><kbd>Tab</kbd></span><p><b>인벤토리</b> 노트북(앉아서 펼치기)·아이스 아메리카노·종이 총(F·클릭 발사)</p></li>
+    <li><span><kbd>F</kbd></span><p><b>대화 · 앉기 · 눕기</b> 주변에 아무것도 없으면 앞으로 폭죽 🎆</p></li>
     <li><span><kbd>V</kbd></span><p><b>시점 바꾸기</b></p></li>
     <li><span><kbd>Enter</kbd></span><p><b>채팅 열기 · 보내기</b></p></li>
     <li><span><kbd>Esc</kbd></span><p><b>마우스 커서 꺼내기</b></p></li>
     <li><span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></span><p><b>네 컷 · 인사 · 하트</b></p></li>
+    <li><span><kbd>Z</kbd></span><p><b>춤</b> 한 번 누르면 계속, 다시 누르면 멈춰요</p></li>
   </ul>
   <ul class="touch-only">
     <li><span>🕹️</span><p><b>왼쪽 조이스틱으로 걷기</b> 살짝 밀면 천천히, 끝까지 밀면 빠르게</p></li>
     <li><span>👆</span><p><b>화면을 끌어서 둘러보기</b> 두 손가락으로 벌리고 좁혀 가까이·멀리</p></li>
     <li><span>달리기</span><p><b>한 번 누르면 켜지고, 다시 누르면 꺼져요</b></p></li>
     <li><span>점프</span><p><b>공중에서 한 번 더 누르면 더블 점프</b> 책상·화분 위에도 올라가요</p></li>
-    <li><span>💬</span><p><b>채팅</b> · 🎒 인벤토리 · 🖍️👋💗 네 컷·인사·하트</p></li>
+    <li><span>💬</span><p><b>채팅</b> · 🎒 인벤토리 · 🖍️👋💗💃🎆 네 컷·인사·하트·춤·폭죽</p></li>
     <li><span>대화하기</span><p><b>크루·의자·엘리베이터 가까이 가면 버튼이 떠요</b></p></li>
   </ul>
   <button class="btn" type="button" id="guideOk">시작하기</button>
@@ -80,6 +81,7 @@
   <button class="skill" data-skill="draw"><kbd>1</kbd>네 컷 그리기</button>
   <button class="skill" data-skill="wave"><kbd>2</kbd>인사</button>
   <button class="skill" data-skill="heart"><kbd>3</kbd>하트</button>
+  <button class="skill" data-skill="dance"><kbd>Z</kbd>춤</button>
   <button class="skill" id="jumpBtn"><kbd>Space</kbd>점프</button>
   <button class="skill" id="runBtn" aria-pressed="false"><kbd>Shift</kbd>달리기</button>
 </div>
@@ -113,6 +115,8 @@
     <button class="mBtn sm" data-skill="draw" aria-label="네 컷 그리기">🖍️</button>
     <button class="mBtn sm" data-skill="wave" aria-label="인사">👋</button>
     <button class="mBtn sm" data-skill="heart" aria-label="하트">💗</button>
+    <button class="mBtn sm" data-skill="dance" aria-label="춤">💃</button>
+    <button class="mBtn sm" id="mFire" aria-label="폭죽">🎆</button>
     <button class="mBtn sm" id="mInv" aria-label="인벤토리">🎒</button>
     <button class="mBtn sm" id="mChat" aria-label="채팅">💬</button>
   </div>

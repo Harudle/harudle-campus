@@ -823,7 +823,7 @@ const avatarCache = new Map();
 const avatarURL = (look) => { const k = lookKey(look); if (avatarCache.has(k)) return avatarCache.get(k); const cv = document.createElement("canvas"); cv.width = cv.height = 128; const g = cv.getContext("2d"); g.fillStyle = WEAK; g.fillRect(0, 0, 128, 128); g.translate(64, 122); g.scale(3.4, 3.4); drawChar(g, look); const u = cv.toDataURL(); avatarCache.set(k, u); return u; };
 
 /* ════════════════ 5-2. 스킬: 네 컷 그리기 · 인사 · 하트 ════════════════ */
-const SKILLS = { draw: { label: "네 컷 그리기", dur: 5.4 }, wave: { label: "인사", dur: 2 }, heart: { label: "하트", dur: 2 }, laptop: { label: "노트북", dur: 1e9 }, coffee: { label: "아이스 아메리카노", dur: 4.6 } };   // laptop은 일어날 때까지 펼쳐 둔다
+const SKILLS = { draw: { label: "네 컷 그리기", dur: 5.4 }, wave: { label: "인사", dur: 2 }, heart: { label: "하트", dur: 2 }, laptop: { label: "노트북", dur: 1e9 }, coffee: { label: "아이스 아메리카노", dur: 4.6 }, dance: { label: "춤", dur: 1e9 }, gun: { label: "종이 총", dur: 1e9 } }   // 춤은 한 번 누르면 계속(다시 누르거나 움직이면 멈춘다);   // laptop은 일어날 때까지 펼쳐 둔다
 const easeOut = (x) => 1 - (1 - x) ** 3;
 // 하루들 낙서 한 칸씩(0~108 좌표). 같은 seed면 누가 봐도 같은 네 컷이 나온다
 const DOODLES = [
@@ -856,12 +856,82 @@ function drawComic(g, seed, prog, npc = false) {
 const fxTex = (draw) => canvasTex(64, 64, draw);
 const heartTex = fxTex((g) => { g.fillStyle = "#F7A6A0"; g.strokeStyle = "#111118"; g.lineWidth = 3; g.beginPath(); g.moveTo(32, 54); g.bezierCurveTo(4, 34, 12, 8, 32, 22); g.bezierCurveTo(52, 8, 60, 34, 32, 54); g.fill(); g.stroke(); });
 const starTex = fxTex((g) => { g.fillStyle = "#FFD43B"; g.strokeStyle = "#111118"; g.lineWidth = 3; g.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? 11 : 26; g.lineTo(32 + Math.cos(a) * rr, 32 + Math.sin(a) * rr); } g.closePath(); g.fill(); g.stroke(); });
+const noteTex = fxTex((g) => { g.fillStyle = "#7DB3F0"; g.strokeStyle = "#111118"; g.lineWidth = 3; g.beginPath(); g.ellipse(22, 46, 10, 8, -.4, 0, 7); g.fill(); g.stroke(); g.beginPath(); g.ellipse(46, 40, 10, 8, -.4, 0, 7); g.fill(); g.stroke(); g.lineWidth = 4; g.beginPath(); g.moveTo(31, 44); g.lineTo(31, 12); g.lineTo(55, 6); g.lineTo(55, 38); g.stroke(); });   // 춤출 때 퐁퐁 뜨는 음표
 const fx = [];
 function spawnFx(tex, at, n = 1, spread = .4, up = 1.1) {
   for (let i = 0; i < n; i++) {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(.2, .2), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
     m.position.set(at.x + (Math.random() - .5) * spread, at.y + up + Math.random() * .3, at.z + (Math.random() - .5) * spread); m.renderOrder = 5; scene.add(m);
     fx.push({ m, vy: .5 + Math.random() * .5, vx: (Math.random() - .5) * .4, life: 1.4 });
+  }
+}
+// 폭죽: 앞(들어가서 볼 땐 보는 쪽, 위에서 볼 땐 몸이 향한 쪽)으로 포물선을 그리며 날아가 터진다. 같이 있는 크루에게도 보인다
+const FW_COLORS = [0xFFC300, 0xFF5A5F, 0x2F80ED, 0x20B486, 0x8E5CF7, 0xFF8C1A, 0xE83E8C].map((c) => new THREE.Color(c));
+const fireworks = []; let fwReady = 0;
+const fwDot = canvasTex(32, 32, (g) => { const r = g.createRadialGradient(16, 16, 0, 16, 16, 16); r.addColorStop(0, "rgba(255,255,255,1)"); r.addColorStop(.45, "rgba(255,255,255,.9)"); r.addColorStop(1, "rgba(255,255,255,0)"); g.fillStyle = r; g.fillRect(0, 0, 32, 32); });
+function fireFirework() {
+  const now = performance.now(); if (now < fwReady) return; fwReady = now + (me.act?.name === "gun" ? 250 : 600);
+  me.fh = inside() ? cam.yaw + Math.PI : me.h; me.fc++; me.fk = me.act?.name === "gun" ? 1 : 0;
+  if (me.fk) { me.h = me.fh; me.kickAt = now / 1000; shootPaper(me.f, me.x, me.y, me.fh, me.up + me.jz, me); } else launchFirework(me.f, me.x, me.y, me.fh, me.up + me.jz);
+  sendPresence(true);
+}
+// 게더타운처럼: 손 앞에서 부채꼴(좌우 약 70도)로 색종이 불꽃이 팍! 퍼져 나가고, 흩날리며 떨어진다
+function launchFirework(f, x, y, dir, lift = 0) {
+  const fx = Math.sin(dir), fz = Math.cos(dir), h = floorY(f) + heightAt(FLOORS[f], x, y) + lift + .75;
+  burst(new THREE.Vector3(wx(x) + fx * .35, h, wz(y) + fz * .35), f, dir);
+}
+function burst(pos, f, dir) {
+  const n = 120, geo = new THREE.BufferGeometry(), P = new Float32Array(n * 3), Cc = new Float32Array(n * 3), V = [];
+  for (let i = 0; i < n; i++) {
+    P[i * 3] = pos.x; P[i * 3 + 1] = pos.y; P[i * 3 + 2] = pos.z;
+    const a = dir + (Math.random() - .5) * 1.25, up = -.05 + Math.random() * .75, sp = 4.5 + Math.random() * 4.5;   // 부채꼴: 앞쪽 ±36도, 살짝 위로
+    V.push(new THREE.Vector3(Math.sin(a) * Math.cos(up) * sp, Math.sin(up) * sp, Math.cos(a) * Math.cos(up) * sp));
+    const c = FW_COLORS[i % FW_COLORS.length]; Cc[i * 3] = c.r; Cc[i * 3 + 1] = c.g; Cc[i * 3 + 2] = c.b;
+  }
+  geo.setAttribute("position", new THREE.BufferAttribute(P, 3)); geo.setAttribute("color", new THREE.BufferAttribute(Cc, 3));
+  const mat = new THREE.PointsMaterial({ size: .2, map: fwDot, vertexColors: true, transparent: true, depthWrite: false, alphaTest: .05 });
+  const pts = new THREE.Points(geo, mat); pts.frustumCulled = false; pts.renderOrder = 6; scene.add(pts);
+  fireworks.push({ kind: "burst", m: pts, v: V, t: 0, f, floor: floorY(f) + .03 });
+}
+function tickFireworks(dt) {
+  for (let i = fireworks.length - 1; i >= 0; i--) {
+    const w = fireworks[i]; w.t += dt; w.m.visible = w.f === me.f;
+    if (w.kind === "bullet") {
+      const pos = w.m.position, fl = FLOORS[w.f], ground = floorY(w.f) + heightAt(fl, tX(pos.x), tY(pos.z)) + .05;
+      if (!w.hit) {
+        w.m.rotation.x += w.spin.x * dt; w.m.rotation.y += w.spin.y * dt; w.m.rotation.z += w.spin.z * dt;
+        // 빠른 총알이 한 프레임에 사람을 건너뛰지 않게 8cm씩 나눠 움직이며 맞았는지 본다
+        const steps = Math.max(1, Math.ceil(w.v.length() * dt / .08)), sdt = dt / steps;
+        for (let st = 0; st < steps && !w.hit; st++) {
+        w.v.y -= 3 * sdt; pos.addScaledVector(w.v, sdt);
+        const gx = tX(pos.x), gy = tY(pos.z), y0 = pos.y - floorY(w.f);
+        const hitWall = solid(fl, gx, gy) && (fl.wgrid[Math.floor(gy) * W + Math.floor(gx)] || y0 < (fl.top[Math.floor(gy) * W + Math.floor(gx)] || 1.2) + .05);
+        const hitDoll = [me, ...NPCS, ...peers.values()].find((a: any) => a !== w.shooter && a.doll?.root.visible && (a.f ?? w.f) === w.f && Math.hypot(a.doll.root.position.x - pos.x, a.doll.root.position.z - pos.z) < .3 && y0 > a.doll.root.position.y - floorY(w.f) && y0 < a.doll.root.position.y - floorY(w.f) + 1.15);
+        if (hitWall || hitDoll || pos.y <= ground || w.t > 1.6) { w.hit = true; w.t = 0; const hd = Math.atan2(w.v.x, w.v.z); paperPuff(pos.clone(), w.f, hd);
+          // 맞은 사람이 휘청: 내가 맞았으면 내가 정해서 모두에게 알린다(hc). NPC는 각자 화면에서. 다른 크루는 그 사람이 보낸 hc로 휘청인다
+          if (hitDoll === me) { me.hc++; me.hd = hd; hitReact(me, hd); sendPresence(true); } else if (NPCS.includes(hitDoll)) hitReact(hitDoll, hd);
+          w.v.set(-w.v.x * .12, 0, -w.v.z * .12); }
+        }
+      } else { // 맞은 뒤: 툭 떨어져 바닥에 잠깐 남았다 사라진다
+        w.v.y -= 9 * dt; pos.addScaledVector(w.v, dt); if (pos.y < ground) { pos.y = ground; w.v.set(0, 0, 0); }
+        if (w.t > 1.2) { w.m.scale.setScalar(Math.max(.01, 1 - (w.t - 1.2) / .4)); }
+        if (w.t > 1.6) { w.m.removeFromParent(); fireworks.splice(i, 1); }
+      }
+    } else if (w.kind === "paper") {
+      const life = w.life || 2.6, k = Math.max(0, 1 - dt * 3.5);
+      for (let j = 0; j < w.P.length; j++) { const q = w.P[j]; q.v.multiplyScalar(k); q.v.y -= 2.4 * dt;
+        if (q.v.y < -.9) q.v.y = -.9;   // 종이는 천천히 떨어진다
+        q.p.x += (q.v.x + Math.sin(w.t * 6 + q.ph) * .25) * dt; q.p.y = Math.max(w.floor, q.p.y + q.v.y * dt); q.p.z += q.v.z * dt;
+        if (q.p.y > w.floor) { q.r.x += q.w.x * dt; q.r.y += q.w.y * dt; q.r.z += q.w.z * dt; } else q.r.x = -Math.PI / 2;
+        w.mt.compose(q.p, w.q.setFromEuler(q.r), w.one); w.m.setMatrixAt(j, w.mt); }
+      w.m.instanceMatrix.needsUpdate = true; w.m.material.opacity = clamp((life - w.t) / .6, 0, 1);
+      if (w.t >= life) { w.m.removeFromParent(); w.m.material.dispose(); w.m.dispose(); fireworks.splice(i, 1); }
+    } else {
+      const pos = w.m.geometry.attributes.position, life = 1.6;   // 팍 퍼졌다가 공기에 금방 느려지고, 색종이처럼 하늘하늘 떨어져 바닥에 멈춘다
+      for (let k = 0; k < w.v.length; k++) { const vv = w.v[k]; vv.multiplyScalar(Math.max(0, 1 - dt * 3.2)); vv.y -= 3 * dt; pos.array[k * 3] += vv.x * dt; pos.array[k * 3 + 1] = Math.max(w.floor, pos.array[k * 3 + 1] + vv.y * dt); pos.array[k * 3 + 2] += vv.z * dt; }
+      pos.needsUpdate = true; w.m.material.opacity = clamp((life - w.t) / .5, 0, 1);
+      if (w.t >= life) { w.m.removeFromParent(); w.m.geometry.dispose(); w.m.material.dispose(); fireworks.splice(i, 1); }
+    }
   }
 }
 function tickFx(dt) {
@@ -878,7 +948,7 @@ function startAct(a, name, seed?) {
   if (!SKILLS[name]) return; endAct(a);
   a.act = { name, t: 0, seed: seed ?? Math.floor(Math.random() * 1e6) };
   if (name === "draw") { a.board = makeBoard(a.act.seed); a.board.npc = NPCS.includes(a); scene.add(a.board.mesh); }
-  if (name === "laptop" || name === "coffee") { a.prop = name === "laptop" ? makeLaptop() : makeIcedCoffee(); scene.add(a.prop); }
+  if (name === "laptop" || name === "coffee" || name === "gun") { a.prop = name === "laptop" ? makeLaptop() : name === "gun" ? makePaperGun() : makeIcedCoffee(); scene.add(a.prop); }
 }
 // 인벤토리 물건: 노트북(펼친 화면에 코드), 아이스 아메리카노(투명 컵에 얼음·빨대)
 function makeLaptop() { // 맥북: 은색 알루미늄 몸체, 검은 테두리 화면(코드가 흘러간다), 검은 자판·트랙패드, 뚜껑 뒤 로고. 화면은 앉은 사람 쪽(+z)을 본다
@@ -914,7 +984,38 @@ function makeIcedCoffee() { // 테이크아웃 아이스 아메리카노: 위가
   for (let k = 0; k < 9; k++) { const a = k * 2.4, y = .03 + (k * .037) % .1, rr = rb + (rt - rb) * (y / H) + .001; const d = new THREE.Mesh(new THREE.SphereGeometry(.0028, 6, 4), drop); d.position.set(Math.cos(a) * rr, y, Math.sin(a) * rr); g.add(d); }   // 겉면 물방울
   return g;
 }
-function endAct(a) { if (a.prop) { a.prop.removeFromParent(); a.prop = null; } if (a.board) { a.board.mesh.removeFromParent(); a.board.tex.dispose(); a.board.mesh.geometry.dispose(); a.board.mesh.material.dispose(); a.board = null; } a.act = null; }
+function makePaperGun() { // 종이 총(파티 팡팡 총): 노란 몸통, 분홍 손잡이, 앞으로 벌어지는 하늘색 나팔 총구에 색종이가 살짝 삐져나온다. 앞(+z)을 겨눈다
+  const g = new THREE.Group();
+  box(g, .07, .07, .2, 0xFFD43B, 0, -.035, 0, { line: .008 });
+  const grip = box(g, .055, .12, .06, 0xF7A6A0, 0, -.13, -.05, { line: .008 }); grip.rotation.x = -.35;
+  box(g, .012, .03, .04, C.dark, 0, -.075, .0, { line: 0 });
+  const bell = solidMesh(new THREE.CylinderGeometry(.06, .03, .12, 16, 1, true), 0x7DB3F0, { line: .008 }); bell.rotation.x = Math.PI / 2; bell.position.set(0, 0, .16); g.add(bell);
+  for (const [x, y, c] of [[-.02, .015, 0xF15B5B], [.015, -.01, 0x7FCFAE], [.0, .025, 0xFFD43B]]) { const pc = new THREE.Mesh(new THREE.PlaneGeometry(.03, .018), new THREE.MeshBasicMaterial({ color: c, side: THREE.DoubleSide })); pc.position.set(x, y, .205); pc.rotation.set(.4, x * 20, y * 30); g.add(pc); }
+  g.traverse((m: any) => { if (m.isMesh) m.castShadow = false; });
+  return g;
+}
+// 종이 총 발사: 총구에서 구겨 뭉친 종이 총알 한 발이 앞으로 쭉 날아간다(살짝 떨어진다). 벽·가구·사람·바닥에 맞으면 종이 부스러기가 톡 튀고 굴러 떨어진다
+const BULLET_GEO = new THREE.IcosahedronGeometry(.075, 0), SCRAP_GEO = new THREE.PlaneGeometry(.04, .03);
+function shootPaper(f, x, y, dir, lift = 0, shooter = null) {
+  const fx = Math.sin(dir), fz = Math.cos(dir), rx = Math.cos(dir), rz = -Math.sin(dir);
+  const m = solidMesh(BULLET_GEO, 0xFAF8F2, { line: .01, cast: false });
+  m.position.set(wx(x) + rx * .2 + fx * .6, floorY(f) + heightAt(FLOORS[f], x, y) + lift + .6, wz(y) + rz * .2 + fz * .6); scene.add(m);
+  fireworks.push({ kind: "bullet", m, v: new THREE.Vector3(fx * 13, .6, fz * 13), spin: new THREE.Vector3(9, 4, 7), t: 0, f, shooter, hit: false });
+}
+// 맞으면 머리가 맞은 방향으로 휙 젖혀졌다가 두세 번 흔들리며 돌아온다(0.8초)
+function hitReact(a, dir) { a.hitAt = performance.now() / 1000; a.hitDir = dir || 0; }
+function applyWobble(a) {
+  const r = a.doll?.root; if (!r || a.hitAt === undefined || a.lie) return;
+  const e = performance.now() / 1000 - a.hitAt; if (e > .8) { if (a.wobbling) { r.rotation.x = 0; if (a.act?.name !== "dance") r.rotation.z = 0; a.wobbling = false; } return; }
+  const k = .38 * Math.exp(-e * 5) * Math.cos(e * 16); a.wobbling = true;
+  r.rotation.x = Math.cos(a.hitDir) * k; r.rotation.z = (a.act?.name === "dance" ? r.rotation.z : 0) - Math.sin(a.hitDir) * k;
+}
+function paperPuff(pos, f, dir) {   // 맞은 자리에 종이 부스러기 몇 장
+  const n = 10, im = new THREE.InstancedMesh(SCRAP_GEO, new THREE.MeshBasicMaterial({ color: 0xFFFFFF, side: THREE.DoubleSide, transparent: true }), n); im.frustumCulled = false; scene.add(im);
+  const P = []; for (let i = 0; i < n; i++) { const a = dir + Math.PI + (Math.random() - .5) * 2.2, up = Math.random() * 1.1; P.push({ p: pos.clone(), v: new THREE.Vector3(Math.sin(a) * 1.6, 1 + up * 1.4, Math.cos(a) * 1.6), r: new THREE.Euler(Math.random() * 6, Math.random() * 6, 0), w: new THREE.Vector3((Math.random() - .5) * 16, (Math.random() - .5) * 16, 0), ph: Math.random() * 6 }); im.setColorAt(i, new THREE.Color(i % 3 ? 0xFAF8F2 : 0xE8E4DA)); }
+  fireworks.push({ kind: "paper", m: im, P, t: 0, f, floor: floorY(f) + heightAt(FLOORS[f], tX(pos.x), tY(pos.z)) + .02, q: new THREE.Quaternion(), mt: new THREE.Matrix4(), one: new THREE.Vector3(1, 1, 1), life: 1.4 });
+}
+function endAct(a) { if (a.act?.name === "dance" && a.doll) a.doll.root.rotation.z = 0; if (a.prop) { a.prop.removeFromParent(); a.prop = null; } if (a.board) { a.board.mesh.removeFromParent(); a.board.tex.dispose(); a.board.mesh.geometry.dispose(); a.board.mesh.material.dispose(); a.board = null; } a.act = null; }
 function tickAct(a, dt) {
   if (!a.act) return null;
   const prev = a.act.t; a.act.t += dt; const e = a.act.t, s = SKILLS[a.act.name], p = a.doll.root.position;
@@ -928,7 +1029,10 @@ function tickAct(a, dt) {
   }
   if (a.prop) { // 노트북은 앉은 무릎 앞 책상 높이에, 커피는 오른손에 들고 입으로 가져간다
     const h = a.doll.turn.rotation.y, fx = Math.sin(h), fz = Math.cos(h), rx = Math.cos(h), rz = -Math.sin(h); a.prop.visible = a.doll.root.visible; a.prop.rotation.y = h;
-    if (a.act.name === "laptop") { a.prop.position.set(p.x + fx * .42, p.y + .46, p.z + fz * .42); a.prop.rotation.y = h + Math.PI; const ct = a.prop.userData.code; if (ct) ct.offset.y = (ct.offset.y - dt * .06) % 1; }   // 화면이 나를 본다, 코드는 위로 흘러간다
+    if (a.act.name === "gun") { // 오른손에 쥐고 앞으로 겨눈다. 쏘면 잠깐 뒤로 튄다
+      const kick = Math.max(0, (a.kickAt ?? -9) + .18 - performance.now() / 1000) * 1.4;
+      a.prop.position.set(p.x + rx * .2 + fx * (.32 - kick), p.y + .6, p.z + rz * .2 + fz * (.32 - kick)); a.prop.rotation.x = -kick * 2; }
+    else if (a.act.name === "laptop") { a.prop.position.set(p.x + fx * .42, p.y + .46, p.z + fz * .42); a.prop.rotation.y = h + Math.PI; const ct = a.prop.userData.code; if (ct) ct.offset.y = (ct.offset.y - dt * .06) % 1; }   // 화면이 나를 본다, 코드는 위로 흘러간다
     else { // 마시기: 0~.7초 컵을 입까지 들고, ~3.4초 빨대로 쪽쪽(커피가 줄고 볼이 오물), ~4초 내리고, 끝에 "캬" 반짝
       const k = e < .7 ? easeOut(e / .7) : e < 3.4 ? 1 : e < 4 ? 1 - easeOut((e - 3.4) / .6) : 0, suck = e > .7 && e < 3.4 ? Math.sin((e - .7) * 9) * .5 + .5 : 0;
       const side = lerp(.26, .05, k), fwd = lerp(.16, .23, k), up = lerp(.5, .69, k) - suck * .006;
@@ -938,6 +1042,11 @@ function tickAct(a, dt) {
     }
   }
   if (a.act.name === "heart" && Math.floor(e * 3) !== Math.floor(prev * 3) && a.doll.root.visible) spawnFx(heartTex, p, 2, .3, 1.15);
+  if (a.act.name === "dance") { // 춤: 박자(초당 2.4번)에 맞춰 통통 튀고 좌우로 흔들고, 음표가 퐁퐁 (끝날 땐 스르르 멈춘다)
+    const beat = e * 2.4 * Math.PI, fade = clamp((s.dur - e) / .4, 0, 1);
+    p.y += Math.abs(Math.sin(beat)) * .09 * fade; a.doll.root.rotation.z = Math.sin(beat / 2) * .14 * fade;
+    if (Math.floor(e * 1.2) !== Math.floor(prev * 1.2) && a.doll.root.visible && e < s.dur - .4) spawnFx(noteTex, p, 1, .5, 1.3);
+  }
   if (e >= s.dur) { endAct(a); return null; }
   return a.act.name;
 }
@@ -1160,8 +1269,8 @@ const LS = { get(k) { try { return localStorage.getItem(k); } catch { return nul
 // 내 캐릭터: 하루들 월드와 같은 부위·색 조합. 이 브라우저에 저장
 let myAv = (() => { try { return avDecode(LS.get("ww.avatar")) || { ...DEFAULT_AV }; } catch { return { ...DEFAULT_AV }; } })();
 const lookOf = (i) => ({ hair: HAIRS[i % HAIRS.length], acc: ACC[Math.floor(i / HAIRS.length) % ACC.length], prop: "bag" });
-const me = { jumps: 0, prop: null, goal: null, lie: null, seat: null, f: 11, x: ELEV_SPAWN[0], y: ELEV_SPAWN[1], h: Math.PI / 2, up: 0, jz: 0, jv: 0, jc: 0, ac: 0, an: null, as: 0, act: null, board: null, runHold: false, runToggle: false, moving: false, say: "", sayAt: 0, path: null };
-let floor = FLOORS[11];
+const me = { jumps: 0, prop: null, goal: null, lie: null, seat: null, f: 12, x: ELEV_SPAWN[0], y: ELEV_SPAWN[1], h: Math.PI / 2, fc: 0, fh: 0, fk: 0, kickAt: -9, hc: 0, hd: 0, up: 0, jz: 0, jv: 0, jc: 0, ac: 0, an: null, as: 0, act: null, board: null, runHold: false, runToggle: false, moving: false, say: "", sayAt: 0, path: null };
+let floor = FLOORS[12];   // 처음 들어오면 12층 엘리베이터 앞
 let meDoll = makeChar(myAv); scene.add(meDoll.root);
 Object.defineProperty(me, "doll", { get: () => meDoll });
 const running = () => me.runHold || me.runToggle;
@@ -1170,7 +1279,7 @@ function jump() { // 땅에서 한 번, 공중에서 한 번 더(더블 점프)
   const air = me.jz > .001 || me.jv > 0; if (air && me.jumps >= 2) return;
   me.jumps = air ? 2 : 1; me.jv = air ? 4.2 : 4.6; if (air) spawnFx(starTex, meDoll.root.position, 3, .5, .2); me.jc++; sendPresence(true);
 }
-function useSkill(name) { if (!SKILLS[name]) return; if (me.lie) standUp(); me.path = null; startAct(me, name); me.ac++; me.an = name; me.as = me.act.seed; sendPresence(true); }
+function useSkill(name) { if (!SKILLS[name]) return; if (name === "dance" && me.act?.name === "dance") { endAct(me); sendPresence(true); return; } if (me.lie) standUp(); me.path = null; startAct(me, name); me.ac++; me.an = name; me.as = me.act.seed; sendPresence(true); }
 const dog = { x: ELEV_SPAWN[0] - 1, y: ELEV_SPAWN[1] + 1, moving: false, h: 0, doll: makeDog() }; scene.add(dog.doll.root);
 const peers = new Map();
 const setPos = (d, f, x, y) => d.root.position.set(wx(x), floorY(f) + heightAt(FLOORS[f], x, y), wz(y));
@@ -1201,7 +1310,7 @@ function refreshTags() { npcTags.forEach((t) => { t.tag.remove(); t.bub.remove()
 const keys = new Set();
 // 한글 입력 상태에서는 e.key가 ㅈ·ㅁ·ㄴ·ㅇ로 들어와서 WASD가 안 먹었다 → 자판 위치(e.code)로 읽는다
 const MOVE = { KeyW: "w", KeyA: "a", KeyS: "s", KeyD: "d", ArrowUp: "arrowup", ArrowDown: "arrowdown", ArrowLeft: "arrowleft", ArrowRight: "arrowright" };
-const SKILL_KEY = { Digit1: "draw", Digit2: "wave", Digit3: "heart", Numpad1: "draw", Numpad2: "wave", Numpad3: "heart" };
+const SKILL_KEY = { Digit1: "draw", Digit2: "wave", Digit3: "heart", Numpad1: "draw", Numpad2: "wave", Numpad3: "heart", KeyZ: "dance" };   // Z: 춤(한 번 누르면 계속, 다시 누르면 멈춤)
 addEventListener("keydown", (e) => {
   if ((e.target as HTMLElement).tagName === "INPUT") return;
   const c = e.code;
@@ -1222,7 +1331,7 @@ addEventListener("keydown", (e) => {
   }
   if (!lb.hidden) return;
   if (c === "Tab") { e.preventDefault(); if (!e.repeat) toggleInv(); return; }
-  if (!inv.hidden) { const k = { Digit1: 0, Digit2: 1, Numpad1: 0, Numpad2: 1 }[c]; if (k !== undefined) { e.preventDefault(); useItem(ITEMS[k].id); return; } }   // 인벤토리를 연 채로도 걷기·점프는 그대로
+  if (!inv.hidden) { const k = { Digit1: 0, Digit2: 1, Digit3: 2, Numpad1: 0, Numpad2: 1, Numpad3: 2 }[c]; if (k !== undefined) { e.preventDefault(); useItem(ITEMS[k].id); return; } }   // 인벤토리를 연 채로도 걷기·점프는 그대로
   if (c === "Space") { e.preventDefault(); if (!e.repeat) jump(); return; }
   if (c === "KeyF") { e.preventDefault(); if (!e.repeat) interact(); return; }
   if (c === "Enter" || c === "NumpadEnter") { e.preventDefault(); if (!e.repeat) openChat(); return; }   // Enter: 채팅창으로 들어간다
@@ -1238,10 +1347,12 @@ $all(".skill[data-skill]").forEach((b) => (b.onclick = () => useSkill(b.dataset.
 const ICON = { // 하루들 낙서체 아이콘(검은 선 + 노랑·하늘 포인트)
   laptop: `<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M11 12h26v18H11z" fill="#1C2B55" stroke="#111118" stroke-width="2.5" stroke-linejoin="round"/><path d="M15 17h9M15 21h14M15 25h7" stroke="#FFD43B" stroke-width="2" stroke-linecap="round"/><path d="M6 33h36l-3 5H9z" fill="#fff" stroke="#111118" stroke-width="2.5" stroke-linejoin="round"/></svg>`,
   coffee: `<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M27 4l-3 12" stroke="#111118" stroke-width="2.5" stroke-linecap="round"/><path d="M13 14h22l-3 28H16z" fill="#E8F3FB" stroke="#111118" stroke-width="2.5" stroke-linejoin="round"/><path d="M15 22h18l-2 19H17z" fill="#5A3A24"/><rect x="18" y="18" width="6" height="6" rx="1" fill="#fff" stroke="#111118" stroke-width="1.5"/><rect x="25" y="20" width="5" height="5" rx="1" fill="#fff" stroke="#111118" stroke-width="1.5"/></svg>`,
+  gun: `<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M8 18h20v9H8z" fill="#FFD43B" stroke="#111118" stroke-width="2.5" stroke-linejoin="round"/><path d="M28 16l10-5v23l-10-5z" fill="#7DB3F0" stroke="#111118" stroke-width="2.5" stroke-linejoin="round"/><path d="M12 27l-3 11h7l3-11" fill="#F7A6A0" stroke="#111118" stroke-width="2.5" stroke-linejoin="round"/><path d="M40 17l5-3M41 23h5M40 29l5 3" stroke="#111118" stroke-width="2.2" stroke-linecap="round"/><path d="M17 27v4h4" fill="none" stroke="#111118" stroke-width="2" stroke-linecap="round"/></svg>`,
 };
 const ITEMS = [
   { id: "laptop", name: "노트북", tip: "앉아서 펼치기" },
   { id: "coffee", name: "아아", tip: "아이스 아메리카노", title: "아이스 아메리카노 · 언제든 한 모금" },
+  { id: "gun", name: "종이 총", tip: "꺼내서 F·클릭으로 발사", title: "종이 총 · 꺼낸 채로 F나 클릭하면 색종이가 팡!" },
 ];
 const inv = document.getElementById("inv");
 const invGrid = document.getElementById("invGrid");
@@ -1254,6 +1365,10 @@ function useItem(id) {
     if (me.act?.name === "laptop") { endAct(me); sendPresence(true); inv.hidden = true; syncCursor(); return; }   // 한 번 더 누르면 덮는다
     useSkill("laptop"); showToast("노트북을 펼쳤어요", "일어나면 덮어요. 오늘도 커밋 하나!", 2400);
   } else if (id === "coffee") useSkill("coffee");
+  else if (id === "gun") { // 꺼내 들고 다닌다(걸어도 계속). 한 번 더 누르면 넣는다
+    if (me.act?.name === "gun") { endAct(me); sendPresence(true); showToast("종이 총을 넣었어요", "", 1400); }
+    else { useSkill("gun"); showToast("종이 총을 꺼냈어요", TOUCH ? "🎆를 누르면 색종이가 팡!" : "F나 클릭으로 발사! 3을 다시 누르면 넣어요.", 2600); }
+  }
   inv.hidden = true; syncCursor();
 }
 document.getElementById("jumpBtn").onclick = jump;
@@ -1271,6 +1386,7 @@ const joy = { on: false, x: 0, y: 0, id: -1, cx: 0, cy: 0 };
   mRun.onclick = () => runBtn.click();
   document.getElementById("mJump").addEventListener("pointerdown", (e) => { e.preventDefault(); jump(); });
   document.getElementById("mInv").onclick = () => toggleInv();
+  document.getElementById("mFire").onclick = () => fireFirework();
   $all("#mPad [data-skill]").forEach((b) => (b.onclick = () => useSkill(b.dataset.skill)));
   const chatBtn = document.getElementById("mChat"), sayIn = $<HTMLInputElement>("sayInput");
   chatBtn.onclick = () => { if (document.body.classList.toggle("chatting")) sayIn.focus(); else sayIn.blur(); };
@@ -1295,7 +1411,7 @@ const endDrag = (e) => {
   pointers.delete(e.pointerId); canvas.classList.remove("dragging");
   if (drag && !drag.moved && pointers.size === 0) {
     if (inside() && e.pointerType === "mouse" && !locked()) lockMouse();   // 들어가서 볼 때 누르면 커서를 숨기고 고정
-    else if (locked()) { if (picker.hidden) clickAt(innerWidth / 2, innerHeight / 2); }   // 고정 중엔 화면 가운데(조준점)를 누른 것으로(층 고르는 중엔 무시)
+    else if (locked()) { if (picker.hidden) { if (me.act?.name === "gun") fireFirework(); else clickAt(innerWidth / 2, innerHeight / 2); } }   // 종이 총을 들었으면 클릭으로 발사   // 고정 중엔 화면 가운데(조준점)를 누른 것으로(층 고르는 중엔 무시)
     else clickAt(e.clientX, e.clientY);
   }
   if (pointers.size === 0) drag = null;
@@ -1378,7 +1494,8 @@ function standUp() {
   if (!me.lie) return; for (const o of floor.furn) if (o.taken === "me") o.taken = false; [me.x, me.y] = nearestFree(floor, me.x + Math.sin(me.lie.yaw) * 1.2, me.y + Math.cos(me.lie.yaw) * 1.2); me.lie = null; sendPresence(true);
 }
 const atCall = () => floor.calls.some((k) => inRect({ x: k.x - .2, y: k.y - .3, w: k.w + .4, h: k.h + .6 }, me.x, me.y));
-function interact() { if (me.lie || me.seat) { standUp(); return; } const st = nearSeat(); if (st && !(nearNPC() && Math.hypot(st.x - me.x, st.y - me.y) > .55)) { sitDown(st); return; } const n = nearNPC(); if (n) { n.say = "반가워!"; n.sayAt = performance.now(); NPCS.forEach((o) => (o.talk = o === n)); openPanel(n.p); return; } const bag = nearBag(); if (bag) { lieDown(bag); return; } if (atCall()) openPicker(); }
+function interact() { if (me.act?.name === "gun" && !me.lie && !me.seat && !atCall()) { fireFirework(); return; }   // 종이 총을 들었으면 F는 발사
+  if (me.lie || me.seat) { standUp(); return; } const st = nearSeat(); if (st && !(nearNPC() && Math.hypot(st.x - me.x, st.y - me.y) > .55)) { sitDown(st); return; } const n = nearNPC(); if (n) { n.say = "반가워!"; n.sayAt = performance.now(); NPCS.forEach((o) => (o.talk = o === n)); openPanel(n.p); return; } const bag = nearBag(); if (bag) { lieDown(bag); return; } if (atCall()) { openPicker(); return; } fireFirework(); }   // 주변에 아무것도 없으면 F는 앞으로 폭죽
 let openP = null;
 function openPanel(p) {
   if (locked()) document.exitPointerLock();
@@ -1523,7 +1640,7 @@ let wasMoving = false;
 document.addEventListener("visibilitychange", () => { if (document.hidden && me.moving) { me.moving = false; wasMoving = false; sendPresence(true); } });
 function sendPresence(force) {
   if (!room) return; const now = performance.now(); if (!force && now - lastSent < 90) return; lastSent = now;
-  room.presence({ f: me.f, x: Math.round(me.x * 100) / 100, y: Math.round(me.y * 100) / 100, u: Math.round(me.up * 100) / 100, h: Math.round(me.h * 100) / 100, m: me.moving ? 1 : 0, r: running() ? 1 : 0, l: me.lie ? 1 : 0, st: me.seat ? 1 : 0, ly: me.lie ? Math.round(me.lie.yaw * 100) / 100 : 0, jc: me.jc, ac: me.ac, an: me.an, as: me.as, look: 0, av: avEncode(myAv), say: me.say && Date.now() - me.sayAt < 6000 ? me.say : null }).catch(() => { });
+  room.presence({ f: me.f, x: Math.round(me.x * 100) / 100, y: Math.round(me.y * 100) / 100, u: Math.round(me.up * 100) / 100, h: Math.round(me.h * 100) / 100, lp: me.act?.name === "laptop" ? 1 : 0, gn: me.act?.name === "gun" ? 1 : 0, fk: me.fk, hc: me.hc, hd: Math.round(me.hd * 100) / 100, fc: me.fc, fh: Math.round(me.fh * 100) / 100, dn: me.act?.name === "dance" ? 1 : 0, m: me.moving ? 1 : 0, r: running() ? 1 : 0, l: me.lie ? 1 : 0, st: me.seat ? 1 : 0, ly: me.lie ? Math.round(me.lie.yaw * 100) / 100 : 0, jc: me.jc, ac: me.ac, an: me.an, as: me.as, look: 0, av: avEncode(myAv), say: me.say && Date.now() - me.sayAt < 6000 ? me.say : null }).catch(() => { });
 }
 // EC2에서는 직접 만든 WebSocket 서버가 room 역할을 한다
 function wsRoom() {
@@ -1572,7 +1689,16 @@ async function joinRoom() {
     sendPresence(true);
   } catch { }
 }
+// 다른 크루가 앉은 의자·누운 빈백은 "사용 중": 내가 같은 자리에 앉지 않는다
+function syncOccupancy() {
+  for (const st of floor.seats || []) if (st.taken === "peer") st.taken = false;
+  for (const o of floor.furn) if (o.taken === "peer") o.taken = false;
+  for (const p of peerList) { const s = p.presence || {}; if (s.f !== me.f || !(s.st || s.l)) continue;
+    if (s.st) { let best = null, bd = .5; for (const st of floor.seats || []) { if (st.taken) continue; const d = Math.hypot(st.x - s.x, st.y - s.y); if (d < bd) { bd = d; best = st; } } if (best) best.taken = "peer"; }
+    else for (const o of floor.furn) if (o.kind === "beanbag" && !o.taken && Math.hypot(bagSpot(o).x - s.x, bagSpot(o).y - s.y) < .6) { o.taken = "peer"; break; } }
+}
 function syncPeers(dt, t) {
+  syncOccupancy();
   for (const p of peerList) {
     const s = p.presence || {}; if (typeof s.x !== "number" || !FLOORS[s.f]) continue;
     const l = avDecode(s.av) || avFromSeed(p.peer), key = avKey(l);
@@ -1580,15 +1706,26 @@ function syncPeers(dt, t) {
     if (!v) { v = { doll: makeChar(l), key, x: s.x, y: s.y, tag: mkLabel("name-tag peer", "크루"), bub: mkLabel("bub", "") }; v.bub.hidden = true; scene.add(v.doll.root); peers.set(p.peer, v); }
     if (v.key !== key) { const vis0 = v.doll.root.visible; dropDoll(v.doll); v.doll = makeChar(l); v.doll.root.visible = vis0; scene.add(v.doll.root); v.key = key; }
     v.x = lerp(v.x, s.x, Math.min(1, dt * 10)); v.y = lerp(v.y, s.y, Math.min(1, dt * 10));
-    if (s.jc !== v.jc) { if (v.jc !== undefined) v.jv = 4.6; v.jc = s.jc; }
+    if (s.jc !== v.jc) { if (v.jc !== undefined) { const air = (v.jz || 0) > .05; v.jv = air ? 4.2 : 4.6; if (air && v.doll.root.visible) spawnFx(starTex, v.doll.root.position, 3, .5, .2); } v.jc = s.jc; }   // 공중에서 또 뛰면 더블 점프(별)
+    if (s.fc !== v.fc) { if (v.fc !== undefined && v.doll.root.visible) { if (s.fk) { v.kickAt = performance.now() / 1000; shootPaper(s.f, v.x, v.y, +s.fh || 0, +s.u || 0, v); } else launchFirework(s.f, v.x, v.y, +s.fh || 0, +s.u || 0); } v.fc = s.fc; }   // 다른 크루의 폭죽
+    if (s.hc !== v.hc) { if (v.hc !== undefined) hitReact(v, +s.hd || 0); v.hc = s.hc; }   // 그 크루가 종이 총알에 맞았다
     if (s.ac !== v.ac) { if (v.ac !== undefined && typeof s.an === "string") startAct(v, s.an, s.as | 0); v.ac = s.ac; }
-    if ((s.m || (!s.st && v.act?.name === "laptop")) && v.act) endAct(v);
+    if (((s.m && v.act?.name !== "gun") || (!s.st && v.act?.name === "laptop")) && v.act) endAct(v);
+    if (s.gn && v.act?.name !== "gun" && !s.dn && !s.lp) startAct(v, "gun", 0);   // 종이 총도 꺼내 둔 상태(gn)로 받는다
+    else if (!s.gn && v.act?.name === "gun") endAct(v);
+    // 노트북은 "펼쳐 둔 상태"(lp)로 계속 받는다: 나중에 들어온 사람도 앉아서 노트북 하는 크루를 본다
+    if (s.lp && s.st && !s.m && v.act?.name !== "laptop") startAct(v, "laptop", 0);
+    else if (!s.lp && v.act?.name === "laptop") endAct(v);
+    // 춤도 계속되는 상태(dn)로 받는다: 나중에 들어온 사람도 춤추는 크루를 본다
+    if (s.dn && !s.m && v.act?.name !== "dance") startAct(v, "dance", 0);
+    else if (!s.dn && v.act?.name === "dance") endAct(v);
     v.jz = v.jz || 0; v.jv = v.jv || 0; if (v.jz > 0 || v.jv > 0) { v.jv -= 15 * dt; v.jz += v.jv * dt; if (v.jz <= 0) { v.jz = 0; v.jv = 0; } }
-    const vis = s.f === me.f; v.doll.root.visible = vis; setPos(v.doll, s.f, v.x, v.y); v.doll.root.position.y += (+s.u || 0) + v.jz; v.doll.blob.position.y = .012 - v.jz; applyLie(v.doll, s.l ? { yaw: +s.ly || 0 } : null); v.doll.setSeated(s.st);
+    // 같은 층이거나, 뚫린 자리(라이브러리·계단 구멍) 너머 위·아래층이면 보인다(그 사람의 폭죽·노트북·춤도 같이)
+    const vis = s.f === me.f || (Math.abs(s.f - me.f) === 1 && nearRects(voidsOf(FLOORS[Math.max(s.f, me.f)]), s.x, s.y, s.x, s.y)); v.doll.root.visible = vis; setPos(v.doll, s.f, v.x, v.y); v.doll.root.position.y += (+s.u || 0) + v.jz; v.doll.blob.position.y = .012 - v.jz; applyLie(v.doll, s.l ? { yaw: +s.ly || 0 } : null); v.doll.setSeated(s.st);
     // 받는 쪽 안전장치: "걷는 중"이라고 와도 위치가 0.5초 넘게 그대로면 멈춘 것으로 본다(멈춤 신호가 빠졌거나 그 사람이 다른 탭으로 갔을 때)
     if (s.x !== v.sx || s.y !== v.sy) { v.sx = s.x; v.sy = s.y; v.movedAt = t; }
     const walking = (v.walking = !!s.m && t - (v.movedAt ?? -9) < .5);
-    v.doll.update(dt, t, walking, typeof s.h === "number" ? s.h : null, 0, false, tickAct(v, dt), v.jz > .01, walking && !!s.r);
+    applyWobble(v); v.doll.update(dt, t, walking, typeof s.h === "number" ? s.h : null, 0, false, tickAct(v, dt), v.jz > .01, walking && !!s.r);
     v.tag.textContent = p.name || (p.by && names[p.by]) || "크루";
     const rp = v.doll.root.position;
     if (vis) project(v.tag, rp.x, rp.y - .05, rp.z, true); else v.tag.style.display = "none";
@@ -1624,7 +1761,7 @@ function step(dt, t) {
     if (up !== me.up) { me.up = up; me.jz = Math.max(0, z); if (z < 0) me.jv = Math.max(0, me.jv); sendPresence(true); } }
   me.moving = !!(vx || vy);
   if (!runTipShown) { if (me.moving && running()) runTipShown = true; else if (me.moving) { walkFor += dt; if (walkFor > 5) { runTipShown = true; showToast("더 빨리 가고 싶다면", "Shift를 누른 채로 걸으면 달리고, Space를 누르면 점프해요.", 4200); } } }
-  if (me.moving) { me.h = Math.atan2(vx, vy); if (me.act) endAct(me); sendPresence(false); }
+  if (me.moving) { me.h = Math.atan2(vx, vy); if (me.act && me.act.name !== "gun") endAct(me); sendPresence(false); }
   else if (wasMoving) sendPresence(true);   // 멈춘 순간은 꼭 보낸다(안 보내면 남들 화면에서 제자리걸음이 남는다)
   wasMoving = me.moving;
   // 시야는 몸 방향을 따라가지 않는다: 마우스로만 돈다
@@ -1657,7 +1794,8 @@ function render(dt, t) {
   // 1인칭 고개는 마우스를 그대로 따른다(뒤따라 미끄러지는 느낌이 어지럽다). Q·E처럼 크게 돌릴 때만 부드럽게
   if (VIEW.mode === "first" && Math.abs(cam.yawT - cam.yaw) < .35) cam.yaw = cam.yawT; else cam.yaw = lerp(cam.yaw, cam.yawT, Math.min(1, dt * 8));
   if (VIEW.mode === "first") cam.look = cam.lookT;
-  const fov = VIEW.mode === "first" ? 62 : 38; if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }   // 1인칭은 넓게 봐야 덜 어지럽다 cam.pitch = lerp(cam.pitch, cam.pitchT, Math.min(1, dt * 8)); cam.dist = lerp(cam.dist, cam.distT, Math.min(1, dt * 8));
+  const fov = VIEW.mode === "first" ? 62 : 38; if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }   // 1인칭은 넓게 봐야 덜 어지럽다
+  cam.pitch = lerp(cam.pitch, cam.pitchT, Math.min(1, dt * 8)); cam.dist = lerp(cam.dist, cam.distT, Math.min(1, dt * 8));   // 위에서 볼 때 기울기·거리(휠·핀치 확대)
   cam.ip = lerp(cam.ip, cam.ipT, Math.min(1, dt * 8)); cam.id = lerp(cam.id, cam.idT, Math.min(1, dt * 8)); cam.look = lerp(cam.look, cam.lookT, Math.min(1, dt * 10));
   tgt.set(wx(me.x), floorY(me.f) + .4, wz(me.y)); cam.target.lerp(tgt, Math.min(1, dt * 6));
   if (inside()) { cam.target.copy(tgt); placeInside(); } else placeCamera();
@@ -1668,9 +1806,10 @@ function render(dt, t) {
   adaptQuality(dt);
   setPos(meDoll, me.f, me.x, me.y); meDoll.root.position.y += me.up + me.jz; meDoll.blob.position.y = .012 - me.jz; meDoll.blob.scale.setScalar(1 - Math.min(.5, me.jz)); applyLie(meDoll, me.lie); meDoll.setSeated(me.seat); meDoll.root.visible = VIEW.mode === "top" || (VIEW.mode === "third" && !cam.close);
   meDoll.update(dt, t, me.moving, me.lie ? 0 : me.seat ? me.seat.yaw : me.h, 0, !!(me.say && Date.now() - me.sayAt < 2500), tickAct(me, dt), me.jz > .01, running() && me.moving);
+  applyWobble(me);
   setPos(dog.doll, me.f, dog.x, dog.y); dog.doll.update(dt, t, dog.moving, dog.h);
-  for (const n of NPCS) if (n.doll.root.visible) { setPos(n.doll, n.f, n.x, n.y); applyLie(n.doll, n.lie); n.doll.setSeated(n.seat); n.doll.update(dt, t, n.moving, n.lie ? 0 : n.seat ? n.seat.yaw : n.talk ? Math.atan2(me.x - n.x, me.y - n.y) : n.h, n.seed, performance.now() - n.sayAt < 2500, tickAct(n, dt)); }
-  tickFx(dt); tickMeteors(dt);
+  for (const n of NPCS) if (n.doll.root.visible) { setPos(n.doll, n.f, n.x, n.y); applyLie(n.doll, n.lie); n.doll.setSeated(n.seat); n.doll.update(dt, t, n.moving, n.lie ? 0 : n.seat ? n.seat.yaw : n.talk ? Math.atan2(me.x - n.x, me.y - n.y) : n.h, n.seed, performance.now() - n.sayAt < 2500, tickAct(n, dt));  applyWobble(n); }
+  tickFx(dt); tickMeteors(dt); tickFireworks(dt);
   for (const s of spinners) s.rotation.y += dt * .9;
   syncPeers(dt, t);
   const mp = meDoll.root.position;

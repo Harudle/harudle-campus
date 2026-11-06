@@ -392,7 +392,7 @@ function BrushArm({ color, motion }: { color: string; motion?: RefObject<WalkMot
 }
 
 /** 우테코 캠퍼스 확장: 스킬과 점프 자세. 원본 Avatar의 모양은 그대로 두고 팔·소품만 바꾼다. */
-export type AvatarPose = { act: 'draw' | 'wave' | 'heart' | 'laptop' | 'coffee' | null; waving: boolean; air: boolean }
+export type AvatarPose = { act: 'draw' | 'wave' | 'heart' | 'laptop' | 'coffee' | 'dance' | 'gun' | null; waving: boolean; air: boolean }
 
 type AvatarProps = {
   config: AvatarConfig
@@ -416,8 +416,8 @@ export function Avatar({ config, motion, pose }: AvatarProps) {
   // 네 컷 그리기는 그림판을 들고, 인사·하트·점프는 팔을 든다. 그림판을 원래 든 캐릭터는 팔을 들 때 잠깐 내려놓는다.
   useFrame(({ clock }) => {
     const p = pose?.current
-    const armsUp = !!p && (p.act === 'wave' || p.act === 'heart' || p.waving || p.air)
-    const busy = p?.act === 'laptop' || p?.act === 'coffee'   // 노트북·커피를 쓰는 동안엔 원래 든 것을 내려놓는다
+    const armsUp = !!p && (p.act === 'wave' || p.act === 'heart' || p.act === 'dance' || p.waving || p.air)
+    const busy = p?.act === 'laptop' || p?.act === 'coffee' || p?.act === 'gun'   // 노트북·커피를 쓰는 동안엔 원래 든 것을 내려놓는다
     const boardOn = p?.act === 'draw' || (holdingBoard && !armsUp && !busy)
     if (boardSet.current) boardSet.current.visible = boardOn
     if (freeSet.current) freeSet.current.visible = !boardOn
@@ -439,6 +439,12 @@ export function Avatar({ config, motion, pose }: AvatarProps) {
       const k = e < 0.7 ? ease(e / 0.7) : e < 3.4 ? 1 : e < 4 ? 1 - ease((e - 3.4) / 0.6) : 0   // 엔진의 컵 위치와 같은 박자
       const sip = e > 0.7 && e < 3.4 ? Math.sin((e - 0.7) * 9) * 0.04 : 0
       l.rotation.z = -0.35; r.rotation.z = 0.35 - k * 0.55; r.rotation.x = -k * 2.25 + sip
+    }
+    else if (p?.act === 'gun') { l.rotation.z = -0.35; r.rotation.z = 0.25; r.rotation.x = -1.45 }   // 종이 총: 오른팔을 앞으로 쭉 뻗어 겨눈다
+    else if (p?.act === 'dance') { // 춤: 두 팔을 번갈아 위아래로 흔든다(엔진이 몸을 통통 튀기고 좌우로 흔든다)
+      const b = clock.elapsedTime * 2.4 * Math.PI
+      l.rotation.z = -1.6 - Math.sin(b) * 0.9; r.rotation.z = 1.6 - Math.sin(b) * 0.9
+      l.rotation.x = Math.sin(b * 0.5) * 0.3; r.rotation.x = -Math.sin(b * 0.5) * 0.3
     }
     else if (p?.act === 'heart') { l.rotation.z = -2.7; r.rotation.z = 2.7 }
     else if (p?.act === 'wave' || p?.waving) { l.rotation.z = -0.35; r.rotation.z = 2.5 + Math.sin(clock.elapsedTime * 12) * 0.35 }
