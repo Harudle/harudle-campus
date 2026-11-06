@@ -168,6 +168,12 @@ const arcadeTex = (hue) => canvasTex(128, 96, (g) => { g.fillStyle = "#111118"; 
 const totemTex = (f) => canvasTex(512, 256, (g) => { g.fillStyle = "#0E1E46"; g.fillRect(0, 0, 512, 256); g.strokeStyle = "#fff"; g.lineWidth = 6; g.beginPath(); g.arc(92, 112, 40, 0, 7); g.stroke(); g.beginPath(); g.ellipse(92, 118, 72, 18, -.25, 0, 7); g.stroke(); g.fillStyle = "#fff"; g.font = `700 50px ${HAND}`; g.textBaseline = "middle"; g.fillText("우아한테크코스", 170, 96, 322); g.fillStyle = "#FFD43B"; g.font = `700 32px ${HAND}`; g.fillText(`${f}F · ${FLOOR_INFO[f]}`, 170, 170, 322); });
 const BALLS = [0xF15B5B, 0xFFD43B, 0x7DB3F0, 0x7FCFAE, 0xF7A6A0, 0xFFFFFF];
 function buildFurn(G, o, fl) {
+  if (o.turn && !o.turned) {   // turn: 가로로 만든 모양을 제자리에서 돌려 세운다(앞면이 +z → turn만큼 회전)
+    const cx = o.x + o.w / 2, cy = o.y + o.h / 2, g = new THREE.Group(), inner = new THREE.Group();
+    g.position.set(wx(cx), 0, wz(cy)); g.rotation.y = o.turn; inner.position.set(-wx(cx), 0, -wz(cy)); g.add(inner); G.add(g);
+    const flip = Math.abs(Math.sin(o.turn)) > .5;
+    return buildFurn(inner, { ...o, turned: true, ...(flip ? { w: o.h, h: o.w, x: cx - o.h / 2, y: cy - o.w / 2 } : {}) }, fl);
+  }
   const x = wx(o.x + o.w / 2), z = wz(o.y + o.h / 2), w = o.w * S, d = o.h * S, horiz = o.w >= o.h;
   const chairs = (row, off) => { for (let i = 0; i < o.w; i++) chair(G, wx(o.x + i + .5), wz(row) + off, Math.PI); };
   switch (o.kind) {
@@ -221,16 +227,19 @@ function buildFurn(G, o, fl) {
     case "bigtable": case "table": box(G, w - .12, .44, d - .12, C.wood, x, 0, z);
       if (horiz) { const n = o.kind === "bigtable" ? o.w : Math.max(1, Math.round(w / 1.2)); for (let k = 0; k < n; k++) for (const s of [-1, 1]) chair(G, wx(o.x) + (k + .5) * w / n, z + s * (d / 2 + .02), s < 0 ? 0 : Math.PI, o.kind === "bigtable" ? 0xFFD43B : C.white);
         for (let k = 0; k < n; k += (o.kind === "bigtable" ? 2 : 1)) cyl(G, .04, .035, .09, k % 2 ? 0x7DB3F0 : C.white, wx(o.x) + (k + .5) * w / n, .44, z + (k % 4 ? .1 : -.1), { line: .006 }); }
+      else { const n = o.kind === "bigtable" ? o.h : Math.max(1, Math.round(d / 1.2)); for (let k = 0; k < n; k++) for (const s of [-1, 1]) chair(G, x + s * (w / 2 + .02), wz(o.y) + (k + .5) * d / n, s < 0 ? Math.PI / 2 : -Math.PI / 2, o.kind === "bigtable" ? 0xFFD43B : C.white);   // 세로로 놓인 테이블: 양옆에 의자
+        for (let k = 0; k < n; k += (o.kind === "bigtable" ? 2 : 1)) cyl(G, .04, .035, .09, k % 2 ? 0x7DB3F0 : C.white, x + (k % 4 ? .1 : -.1), .44, wz(o.y) + (k + .5) * d / n, { line: .006 }); }
       break;
     case "planter": box(G, w, .3, d * .8, C.brick, x, 0, z); for (let i = 0; i < o.w; i++) ball(G, .18 + (i % 3) * .03, C.leaf, wx(o.x + i + .5), .4, z, { line: .012 }); break;
     case "plant": { cyl(G, .22, .16, .36, 0xD98E64, x, 0, z, { seg: 16 }); cyl(G, .2, .2, .02, 0x5A4636, x, .35, z, { line: 0 }); cyl(G, .025, .03, .5, 0x6B8F4E, x, .36, z, { line: 0 });
       const rr = rng(o.x * 11 + o.y); for (let i = 0; i < 9; i++) { const a = i / 9 * Math.PI * 2 + rr() * .4, tilt = .5 + rr() * .5, len = .32 + rr() * .14;
         const leaf = solidMesh(new THREE.SphereGeometry(1, 10, 6), i % 3 ? 0x3F8F5A : 0x5DB075, { line: .012 }); leaf.scale.set(len * .32, .03, len); leaf.position.set(x + Math.sin(a) * len * .75, .62 + (i % 3) * .1 + Math.cos(tilt) * .08, z + Math.cos(a) * len * .75); leaf.rotation.set(-tilt * .5, a, 0, "YXZ"); G.add(leaf); }
       break; }
-    case "tower": { const r = w / 2 - .1; for (let k = 0; k < 4; k++) cyl(G, r, r, .05, C.gray, x, k * .4, z, { seg: 28 });
+    case "tower": { const r = w / 2 - .1, n = o.tall ? Math.floor((FH + CEIL[13]) / .4) : 3;   // tall: 12층 바닥부터 13층 천장까지
+      for (let k = 0; k <= n; k++) cyl(G, r, r, .05, C.gray, x, k * .4, z, { seg: 28 });
       const rr = rng(o.x * 13);
-      for (let k = 0; k < 3; k++) for (let i = 0; i < 26; i++) { const a = i / 26 * Math.PI * 2; const bh = .22 + rr() * .1; const b = new THREE.Mesh(new THREE.BoxGeometry(.06, bh, .16), toon(new THREE.Color(BOOKS[(i + k) % BOOKS.length]).getHex())); b.position.set(x + Math.cos(a) * (r - .1), k * .4 + .05 + bh / 2, z + Math.sin(a) * (r - .1)); b.rotation.y = -a; b.castShadow = true; G.add(b); }
-      cyl(G, .12, .12, 1.25, C.grayD, x, 0, z); break; }
+      for (let k = 0; k < n; k++) for (let i = 0; i < 26; i++) { const a = i / 26 * Math.PI * 2; const bh = .22 + rr() * .1; const b = new THREE.Mesh(new THREE.BoxGeometry(.06, bh, .16), toon(new THREE.Color(BOOKS[(i + k) % BOOKS.length]).getHex())); b.position.set(x + Math.cos(a) * (r - .1), k * .4 + .05 + bh / 2, z + Math.sin(a) * (r - .1)); b.rotation.y = -a; b.castShadow = true; G.add(b); }
+      cyl(G, .12, .12, n * .4 + .05, C.grayD, x, 0, z); break; }
     case "shelf": { box(G, w - .06, 1.0, d - .06, 0xF4EFE6, x, 0, z); const rr = rng(o.x * 7 + o.y); const n = Math.max(o.w, o.h) * 4;
       for (let k = 0; k < 2; k++) for (let i = 0; i < n; i++) { const bh = .22 + rr() * .08; const along = (i + .5) / n;
         const geo = horiz ? new THREE.BoxGeometry(w / n * .8, bh, .05) : new THREE.BoxGeometry(.05, bh, d / n * .8);
@@ -263,6 +272,12 @@ function buildFurn(G, o, fl) {
       box(G, w * .7, .55, .4, C.white, x, 0, wz(o.y + o.h) - .3); for (let i = 0; i < 3; i++) box(G, .3, .04, .25, 0xBFC6D2, x - .7 + i * .7, .55, wz(o.y + o.h) - .3, { line: .006 }); break; }
     case "rack": box(G, w - .1, 1.6, d - .1, C.dark, x, 0, z); { const rr = rng(o.x * 31); for (let i = 0; i < o.h * 3; i++) box(G, .02, .02, .02, rr() > .4 ? 0x7FCFAE : 0xFFD43B, x + w / 2 - .04, .2 + (i % 6) * .22, wz(o.y) + .3 + Math.floor(i / 6) * .5, { line: 0, cast: false }); } break;
     case "crates": { const rr = rng(o.x * 17 + o.y); for (let i = 0; i < o.w; i++) for (let j = 0; j < o.h; j++) { const hh = .3 + rr() * .3; box(G, .5, hh, .5, 0xD8B48A, wx(o.x + i + .5), 0, wz(o.y + j + .5), { line: .01 }); if (rr() > .5) box(G, .4, .25, .4, 0xE6C9A3, wx(o.x + i + .5), hh, wz(o.y + j + .5), { line: .01 }); } break; }
+    case "flight": { // 오르는 계단 한 줄(dir 쪽으로 높아진다). h0 = h1이면 층계참
+      const along = o.dir === "e" ? o.w : o.h, n = o.h0 === o.h1 ? 1 : along * 3;
+      for (let i = 0; i < n; i++) { const hh = Math.max(.05, o.h0 + (o.h1 - o.h0) * (i + 1) / n);
+        if (o.dir === "e") box(G, w / n, hh, d - .1, 0xFFF3B0, wx(o.x) + (i + .5) * w / n, 0, z, { line: .01 });
+        else box(G, w - .1, hh, d / n, 0xFFF3B0, x, 0, wz(o.y) + (i + .5) * d / n, { line: .01 }); }
+      break; }
     case "stairsdeco": for (let i = 0; i < o.h; i++) box(G, w - .1, (i % 4 + 1) * .12, S, 0xDCDAE3, x, 0, wz(o.y + i + .5), { line: .01, cast: false }); break;
     case "bench": box(G, w - .1, .3, d * .6, C.wood, x, 0, z); for (const s of [-1, 1]) box(G, .06, .3, d * .5, C.woodD, x + s * (w / 2 - .2), 0, z, { line: 0 }); ball(G, .12, 0xFFD43B, x - .3, .4, z, { line: .008 }); break;
     case "beanbag": { // 누울 수 있는 큰 빈백: 납작한 몸통 + 등받이 쪽 볼록
@@ -272,6 +287,15 @@ function buildFurn(G, o, fl) {
     case "partition": box(G, w * .5, 1.2, d - .1, 0x7A9A7E, x, 0, z); break;
     case "focusdesk": box(G, w - .08, .44, d - .2, C.white, x, 0, wz(o.y) + d / 2 - .05);
       for (let i = 0; i < o.w; i++) { const px = wx(o.x + i + .5); monitor(G, px, .44, wz(o.y) + .15, 0, .36); chair(G, px, wz(o.y + 1) + .1, Math.PI); if (i) box(G, .03, .3, d - .2, 0x7A9A7E, wx(o.x + i), .44, wz(o.y) + d / 2 - .05, { line: .005 }); } break;
+    case "duo": // 1인용 흰 책상에 의자 둘이 마주 붙어 있다
+      box(G, w - .4, .44, d - .4, C.white, x, 0, z); for (const s of [-1, 1]) chair(G, x, z + s * (d / 2 - .1), s < 0 ? 0 : Math.PI); break;
+    case "pairrow": // 띄엄띄엄 놓은 페어 책상: 남북 양쪽에 둘씩 앉아 한 모니터를 같이 본다(모니터는 등을 맞대고 둘)
+      box(G, w - .06, .44, d - .04, C.wood, x, 0, z);
+      for (const s of [-1, 1]) {
+        monitor(G, x, .44, z + s * .08, s < 0 ? Math.PI : 0, .55);
+        box(G, .3, .02, .1, C.white, x, .44, z + s * (d / 2 - .3), { line: .005 });
+        for (const k of [-1, 1]) chair(G, x + k * .4, z + s * (d / 2 + .1), s < 0 ? 0 : Math.PI);
+      } break;
     case "pairdesk": // 안쪽 벽에 붙은 책상 하나, 모니터 하나, 의자 둘
       box(G, w - .1, .44, d - .2, C.wood, x, 0, z); monitor(G, x, .44, z + .08, Math.PI, .55); box(G, .3, .02, .1, C.white, x - .18, .44, z - .1, { line: .005 }); box(G, .3, .02, .1, C.white, x + .18, .44, z - .1, { line: .005 });
       chair(G, x - .25, z - d / 2 - .1, 0); chair(G, x + .25, z - d / 2 - .1, 0); break;
@@ -304,7 +328,9 @@ function buildFurn(G, o, fl) {
 }
 function buildPortal(G, p, fl) {
   const x = wx(p.x + p.w / 2), z = wz(p.y + p.h / 2), w = p.w * S, d = p.h * S;
-  if (p.kind === "stairs") {
+  if (p.kind === "mat") { // 계단 모양은 따로 있고(flight) 여기는 밟으면 넘어가는 발판
+    box(G, w - .1, .03, d - .1, 0xFFF3B0, wx(p.x + p.w / 2), 0, wz(p.y + p.h / 2), { line: .012, cast: false });
+  } else if (p.kind === "stairs") {
     const up = p.to > fl.f, n = 6;
     for (let i = 0; i < n; i++) { const hh = up ? (i + 1) * .12 : .03; box(G, w - .1, hh, d / n, 0xFFF3B0, x, 0, wz(p.y) + (i + .5) * d / n, { line: .012, cast: false }); }
   } else {
