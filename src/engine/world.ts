@@ -145,6 +145,19 @@ export function makeFloor(f) {
     for (const y of [16, 19, 22, 25]) F("walltable", 9, y, 1, 2, { turn: Math.PI / 2, raw: true });   // 화단 앞 나무 테이블, 의자는 화단을 보고 앉는다
     F("carrel", 7, 16, 1, 12, { turn: -Math.PI / 2, raw: true });   // 칸막이 바깥(서쪽) 면에 붙은 1인 칸막이 책상 12자리: 칸막이 너머 코워킹 존 쪽을 보고 앉는다
     F("bigtable", 15, 16, 2, 12, { raw: true });   // 세로로 길게, 양쪽에 의자가 줄지어 있다
+    // 코워킹 존 맞은편: 하루들 부스(넓힌 뒤 좌표). 보라 매트 위에 뒷벽 현수막, 네 컷 만화를 세워 둔 카운터, 네 컷을 걸어 둔 이젤 둘. 코워킹 쪽(서쪽)을 본다
+    Z(21, 18, 5, 7, "하루들 부스", "우리끼리 통하는 네컷만화, 하루들. 붓 꽂이에서 붓을 들고(F) 가운데 이젤을 누르면 다 같이 네컷을 그려요.", { tint: "#EFE7FB", raw: true });
+    F("hbmat", 21, 18, 5, 7, { raw: true }); F("hbwall", 25, 18, 1, 7, { raw: true }); F("hbcounter", 23, 20, 1, 3, { raw: true });
+    // 정면(서쪽)에서 볼 때 겹치지 않게: 북쪽에 함께 그리는 이젤, 남쪽에 우냐냐 댄스 이젤을 마주 보게 안쪽으로 기울이고, 바로가기 둘은 부스 바깥 양옆에
+    F("hbballoon", 24, 18, 1, 1, { raw: true }); F("hbballoon", 24, 24, 1, 1, { raw: true });
+    // 이벤트 소품: 배너 위 가랜드, 카운터 뒤 양쪽 롤업 배너, 카운터 뒤 선물 상자 더미, 앞쪽 포토 프레임
+    F("hbbunting", 25, 18, 1, 7, { raw: true }); F("rollup", 24, 19, 1, 1, { seed: 0, raw: true }); F("rollup", 24, 23, 1, 1, { seed: 1, raw: true });
+    F("hbgifts", 24, 22, 1, 1, { raw: true }); F("photoframe", 21, 24, 1, 1, { raw: true });
+    // 함께 그리는 이젤(붓을 들고 누르면 그림판, 모두에게 실시간)과 붓 꽂이
+    F("brushcup", 21, 18, 1, 1, { raw: true });
+    F("painteasel", 22, 19, 1, 1, { raw: true, tilt: .45 });   // 북쪽, 안쪽(남서)을 비스듬히 본다
+    F("easel", 22, 23, 1, 1, { seed: 2, raw: true, tilt: -.45 });   // 남쪽, 마주 보게
+    F("linkkiosk", 20, 17, 1, 1, { raw: true, tilt: .35 }); F("instaboard", 20, 25, 1, 1, { raw: true, tilt: -.35 });   // 바로가기: harudle.com · 인스타(누르면 새 탭), 부스 바깥 양옆에서 안쪽을 본다
     for (const y of [16, 20, 24]) F("table", 12, y, 2, 2, { raw: true });   // 4인 테이블
     R(1, 24, 17, 9, "작은 강의실", { doors: [{ s: "n", from: 13, len: 2 }], sign: "Small Classroom" });
     Z(2, 25, 15, 7, "작은 강의실", "작은 규모 수업과 스터디가 열리는 강의실이에요.");
@@ -262,7 +275,7 @@ export const TOPS: Record<string, number> = {
   counter: .58, kitchenrow: .62, lowcounter: .62, island: .56, hightable: .66, mcdesk: .5, lectern: .66, pingpong: .66,
   greenbox: .55, planter: .3, plant: .36, crates: .5,
 };
-export const WALK_THROUGH = new Set(["poster", "walldeco", "linelight", "bleacher", "arcbleacher", "flight", "brickdeck", "pebbles", "redsteps", "mirrorball", "trampoline", "ballpit"]);
+export const WALK_THROUGH = new Set(["hbmat", "poster", "walldeco", "linelight", "bleacher", "arcbleacher", "flight", "brickdeck", "pebbles", "redsteps", "mirrorball", "trampoline", "ballpit"]);
 export const ELEV_SPAWN: [number, number] = [32.5, 15.5];   // 엘리베이터에서 내리는 자리(칸 한가운데)
 for (const fl of Object.values(FLOORS)) {
   const g = new Uint8Array(W * H); const set = (x, y) => { if (x >= 0 && y >= 0 && x < W && y < H) g[y * W + x] = 1; };

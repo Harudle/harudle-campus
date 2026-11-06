@@ -156,8 +156,6 @@ body.touch #camBtns{bottom:auto;top:50%;transform:translateY(-50%)}
 body.touch #bottom{display:none}
 body.touch.chatting #bottom{display:flex;bottom:auto;top:calc(64px + env(safe-area-inset-top,0px))}
 body.touch #zoneToast{max-width:calc(100% - 40px)}
-body.touch .gbox ul.touch-only li{grid-template-columns:64px 1fr;font-size:14px}
-body.touch .gbox ul.touch-only li b{display:block;margin:0 0 2px}
 body.touch.chatting #topRight{display:none}
 
 /* 첫 방문 안내(세 장): 가운데 종이 카드, 그림 + 큰 키 + 한 줄 설명, 아래 점과 이전·다음 */
@@ -188,3 +186,52 @@ body.touch.chatting #topRight{display:none}
 .tfoot .btn{width:auto;padding-left:16px;padding-right:16px}
 .tfoot .btn[hidden]{display:none}
 @media (prefers-reduced-motion:reduce){.tkey,.tstep.in{animation:none}}
+
+/* ───── Esc 설정창 · 프로필 수정 ───── */
+.modal{position:fixed;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;background:rgba(17,17,24,.35)}
+.modal[hidden]{display:none}
+.modal .box{background:var(--paper);border:3px solid var(--ink);border-radius:18px;padding:18px;width:min(320px,calc(100% - 32px));box-shadow:4px 5px 0 var(--ink);font-family:var(--hand)}
+.modal h4{margin:0 0 12px;font-size:20px}
+.modal .mlist{display:grid;gap:8px}
+.modal .mlist .btn{width:100%;font-size:16px;padding:10px}
+.modal .mhint{margin:10px 0 0;font-size:12px;opacity:.65;text-align:center}
+.modal .plabel{display:grid;gap:6px;font-size:14px}
+.modal .plabel input{font:inherit;font-size:16px;padding:8px 10px;border:2px solid var(--ink);border-radius:10px}
+.modal .prow{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
+
+/* ───── 조작법: 두 줄로 간단하게 ───── */
+.gbox{max-width:440px}
+.gbox ul.glist{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;font-size:14px;margin:0 0 14px}
+.gbox ul.glist li{display:flex;align-items:center;gap:8px;line-height:1.2;white-space:nowrap}
+.gbox ul.glist li span{flex:0 0 auto;min-width:0;display:flex;gap:2px}
+.gbox ul.glist.touch-only{display:none}
+body.touch .gbox ul.glist.touch-only{display:grid}
+body.touch .gbox ul.glist.kb-only{display:none}
+@media (max-width:420px){.gbox ul.glist{grid-template-columns:1fr}}
+
+/* ───── 함께 그리는 이젤: 그림판 ───── */
+#easelEd .ezbox{width:min(980px,calc(100% - 24px));max-height:calc(100% - 24px);overflow:auto;padding:14px 16px}
+.ezhead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.ezhead h4{margin:0}.ezhead small{font-size:12px;opacity:.6;margin-left:6px}
+.ezbody{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
+.ezwrap{position:relative;flex:0 0 auto;width:min(620px,calc(100vh - 140px),100%);aspect-ratio:1;border:3px solid var(--ink);border-radius:10px;overflow:hidden;cursor:none;touch-action:none;background:#fff}
+.ezwrap canvas{width:100%;height:100%;display:block}
+#ezCursor{position:absolute;left:0;top:0;border:2px solid #111118;border-radius:50%;pointer-events:none;transform:translate(-50%,-50%);box-shadow:0 0 0 1.5px #fff;display:none}
+.eztools{flex:1 1 220px;display:grid;gap:8px;align-content:start;font-size:14px}
+.ezrow{display:flex;gap:8px;align-items:center}
+.ezrow .btn{flex:1;padding:8px}
+.ezlab{margin:4px 0 0;font-weight:700}
+.ezsw{display:grid;grid-template-columns:repeat(8,1fr);gap:5px}
+.ezsw button{aspect-ratio:1;border:2px solid var(--ink);border-radius:7px;padding:0;cursor:pointer}
+.ezsw button.on{outline:3px solid #7B5BD6;outline-offset:1px}
+.ezrgb{display:grid;gap:4px}
+.ezrgb label{display:grid;grid-template-columns:16px 1fr 34px;align-items:center;gap:6px;font-weight:700}
+.ezrgb output{font-size:12px;text-align:right;font-variant-numeric:tabular-nums}
+#ezColor{width:44px;height:34px;border:2px solid var(--ink);border-radius:8px;padding:0;background:none}
+#ezHex{font-size:13px}
+#ezSize{flex:1}
+.ezdot{width:64px;height:64px;display:grid;place-items:center;border:2px dashed #ccc;border-radius:10px}
+.ezdot i{display:block;border-radius:50%}
+.ezhint{margin:2px 0 0;font-size:12px;opacity:.6}
+.ezmode .btn[aria-pressed="true"]{background:#7B5BD6;color:#fff}
+.ezwrap.erasing #ezCursor{background:rgba(255,255,255,.6)!important;border:2px dashed #111118!important}

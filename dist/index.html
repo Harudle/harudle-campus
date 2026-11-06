@@ -20,8 +20,8 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap">
-  <script type="module" crossorigin src="/assets/index-DjC7qviq.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-DvPKW6t3.css">
+  <script type="module" crossorigin src="/assets/index-CnGg9nS3.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-BiOVVNju.css">
 </head>
 <body>
 
@@ -38,7 +38,6 @@
   <button class="chip" id="feedBtn" hidden>네 컷 사진 불러오기</button>
   <button class="chip" id="nameBtn" hidden title="내 이름 바꾸기">이름</button>
   <form id="nameForm" hidden><input id="nameInput" class="chip" maxlength="16" aria-label="내 이름" style="width:130px"></form>
-  <button class="chip" id="lookBtn" title="내 캐릭터 꾸미기">내 캐릭터</button>
   <div class="chip" id="online">혼자 둘러보는 중</div>
 </div>
 <input type="file" id="feedFile" accept=".json,application/json" hidden>
@@ -55,25 +54,28 @@
 </div></div>
 <div id="guide" hidden><div class="gbox" role="dialog" aria-labelledby="guideTitle">
   <h4 id="guideTitle">이렇게 움직여요</h4>
-  <ul class="kb-only">
-    <li><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><p><b>걷기</b></p></li>
-    <li><span><kbd>Shift</kbd></span><p><b>달리기</b></p></li>
-    <li><span><kbd>Space</kbd></span><p><b>점프</b> 공중에서 한 번 더 누르면 더블 점프</p></li>
-    <li><span><kbd>Tab</kbd></span><p><b>인벤토리</b> 노트북(앉아서 펼치기)·아이스 아메리카노·종이 총(F·클릭 발사)</p></li>
-    <li><span><kbd>F</kbd></span><p><b>대화 · 앉기 · 눕기</b> 주변에 아무것도 없으면 앞으로 폭죽 🎆</p></li>
-    <li><span><kbd>V</kbd></span><p><b>시점 바꾸기</b></p></li>
-    <li><span><kbd>Enter</kbd></span><p><b>채팅 열기 · 보내기</b></p></li>
-    <li><span><kbd>Esc</kbd></span><p><b>마우스 커서 꺼내기</b></p></li>
-    <li><span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></span><p><b>네 컷 · 인사 · 하트</b></p></li>
-    <li><span><kbd>Z</kbd></span><p><b>춤</b> 한 번 누르면 계속, 다시 누르면 멈춰요</p></li>
+  <ul class="kb-only glist">
+    <li><span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span>걷기</li>
+    <li><span><kbd>Shift</kbd></span>달리기</li>
+    <li><span><kbd>Space</kbd></span>점프 (두 번: 더블)</li>
+    <li><span><kbd>F</kbd></span>상호작용 · 폭죽</li>
+    <li><span><kbd>Enter</kbd></span>채팅</li>
+    <li><span><kbd>Tab</kbd></span>인벤토리</li>
+    <li><span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></span>네 컷 · 인사 · 하트</li>
+    <li><span><kbd>Z</kbd></span>춤 (켜고 끄기)</li>
+    <li><span><kbd>클릭</kbd><kbd>F</kbd></span>종이 총 발사</li>
+    <li><span><kbd>V</kbd></span>시점 바꾸기</li>
+    <li><span><kbd>Esc</kbd></span>설정</li>
   </ul>
-  <ul class="touch-only">
-    <li><span>🕹️</span><p><b>왼쪽 조이스틱으로 걷기</b> 살짝 밀면 천천히, 끝까지 밀면 빠르게</p></li>
-    <li><span>👆</span><p><b>화면을 끌어서 둘러보기</b> 두 손가락으로 벌리고 좁혀 가까이·멀리</p></li>
-    <li><span>달리기</span><p><b>한 번 누르면 켜지고, 다시 누르면 꺼져요</b></p></li>
-    <li><span>점프</span><p><b>공중에서 한 번 더 누르면 더블 점프</b> 책상·화분 위에도 올라가요</p></li>
-    <li><span>💬</span><p><b>채팅</b> · 🎒 인벤토리 · 🖍️👋💗💃🎆 네 컷·인사·하트·춤·폭죽</p></li>
-    <li><span>대화하기</span><p><b>크루·의자·엘리베이터 가까이 가면 버튼이 떠요</b></p></li>
+  <ul class="touch-only glist">
+    <li><span>🕹️</span>조이스틱으로 걷기</li>
+    <li><span>👆</span>화면 끌어 둘러보기</li>
+    <li><span>달리기</span>눌러서 켜고 끄기</li>
+    <li><span>점프</span>두 번: 더블 점프</li>
+    <li><span>🖍️👋💗💃</span>표현</li>
+    <li><span>🎆</span>폭죽 · 종이 총</li>
+    <li><span>🎒</span>인벤토리</li>
+    <li><span>💬</span>채팅</li>
   </ul>
   <button class="btn" type="button" id="guideOk">시작하기</button>
 </div></div>
@@ -125,5 +127,43 @@
     <button class="mBtn lg" id="mJump">점프</button>
   </div>
 </div>
+<!-- Esc 설정창: 커서가 나오면 뜬다 -->
+<div id="menu" class="modal" hidden><div class="box" role="dialog" aria-labelledby="menuTitle">
+  <h4 id="menuTitle">설정</h4>
+  <div class="mlist">
+    <button class="btn ghost" type="button" id="menuProfile">프로필 수정</button>
+    <button class="btn ghost" type="button" id="menuLook">캐릭터 외형 수정</button>
+    <button class="btn ghost" type="button" id="menuGuide">조작법 보기</button>
+    <button class="btn" type="button" id="menuClose">게임으로 돌아가기</button>
+  </div>
+  <p class="mhint kb-only">Esc로 닫고 돌아가요</p>
+</div></div>
+<div id="profile" class="modal" hidden><form class="box" id="profileForm" autocomplete="off">
+  <h4>프로필 수정</h4>
+  <label class="plabel">이름<input id="profileName" maxlength="16" aria-label="내 이름"></label>
+  <div class="prow"><button class="btn ghost" type="button" id="profileCancel">취소</button><button class="btn" type="submit">저장</button></div>
+</form></div>
+<!-- 하루들 부스 함께 그리는 이젤: 그림판 -->
+<div id="easelEd" class="modal" hidden><div class="box ezbox" role="dialog" aria-label="함께 그리는 네컷">
+  <div class="ezhead"><h4>함께 그리는 네컷 <small>모두에게 실시간으로 보여요</small></h4><button class="btn ghost" type="button" id="ezClose">닫기</button></div>
+  <div class="ezbody">
+    <div class="ezwrap" id="ezStage"><div id="ezCursor"></div></div>
+    <div class="eztools">
+      <div class="ezrow ezmode" role="group" aria-label="도구"><button class="btn" type="button" id="ezPen" aria-pressed="true">✏️ 그리기</button><button class="btn ghost" type="button" id="ezEraser" aria-pressed="false">🧽 지우개</button></div>
+      <div class="ezrow"><button class="btn ghost" type="button" id="ezUndo" title="Ctrl+Z">↶ 뒤로</button><button class="btn ghost" type="button" id="ezRedo" title="Ctrl+Shift+Z">↷ 앞으로</button></div>
+      <p class="ezlab">색</p>
+      <div class="ezsw" id="ezSwatches"></div>
+      <div class="ezrgb">
+        <label>R<input type="range" id="ezR" min="0" max="255"><output id="ezRv"></output></label>
+        <label>G<input type="range" id="ezG" min="0" max="255"><output id="ezGv"></output></label>
+        <label>B<input type="range" id="ezB" min="0" max="255"><output id="ezBv"></output></label>
+      </div>
+      <div class="ezrow"><input type="color" id="ezColor" aria-label="색 고르기"><code id="ezHex"></code></div>
+      <p class="ezlab">굵기 <output id="ezSizeV"></output></p>
+      <div class="ezrow"><input type="range" id="ezSize" min="2" max="60"><span class="ezdot"><i id="ezSizeDot"></i></span></div>
+      <p class="ezhint kb-only">E 그리기↔지우개 · Ctrl+Z 뒤로 · Ctrl+Shift+Z 앞으로 · Esc 닫기</p>
+    </div>
+  </div>
+</div></div>
 </body>
 </html>

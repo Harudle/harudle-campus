@@ -4,7 +4,9 @@
 // - GET /api/feed : 하루들 공개 피드를 작성자별로 묶어 중계 (4분 캐시)
 // - WS  /ws       : 같은 캠퍼스에 있는 크루 위치·말풍선·스킬 공유
 import http from "node:http";
-import { readFile, stat } from "node:fs/promises";
+import { readFile, stat, writeFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
@@ -89,19 +91,49 @@ function sanitize(p) {
   return {
     f: [11, 12, 13, 14].includes(p.f) ? p.f : 11, x: num(p.x, 0, 56), y: num(p.y, 0, 40), u: num(p.u, 0, 2), h: num(p.h, -7, 7),
     m: p.m ? 1 : 0, r: p.r ? 1 : 0, look: Math.floor(num(p.look, 0, 99)), jc: Math.floor(num(p.jc, 0, 1e9)), ac: Math.floor(num(p.ac, 0, 1e9)),
-    l: p.l ? 1 : 0, ly: num(p.ly, -7, 7), st: p.st ? 1 : 0, av: typeof p.av === "string" && /^[0-9a-z]{7}([0-9A-F]{6}){6}$/.test(p.av) ? p.av : null, an: ["draw", "wave", "heart", "laptop", "coffee", "dance", "gun"].includes(p.an) ? p.an : null, lp: p.lp ? 1 : 0, gn: p.gn ? 1 : 0, fk: p.fk ? 1 : 0, hc: Math.floor(num(p.hc, 0, 1e9)), hd: num(p.hd, -50, 50), dn: p.dn ? 1 : 0, fc: Math.floor(num(p.fc, 0, 1e9)), fh: num(p.fh, -50, 50), as: Math.floor(num(p.as, 0, 1e7)), say: clean(p.say, 40) || null,
+    br: p.br ? 1 : 0, bc: typeof p.bc === "string" && /^#[0-9a-f]{6}$/i.test(p.bc) ? p.bc : null, l: p.l ? 1 : 0, ly: num(p.ly, -7, 7), st: p.st ? 1 : 0, av: typeof p.av === "string" && /^[0-9a-z]{7}([0-9A-F]{6}){6}$/.test(p.av) ? p.av : null, an: ["draw", "wave", "heart", "laptop", "coffee", "dance", "gun"].includes(p.an) ? p.an : null, lp: p.lp ? 1 : 0, gn: p.gn ? 1 : 0, fk: p.fk ? 1 : 0, hc: Math.floor(num(p.hc, 0, 1e9)), hd: num(p.hd, -50, 50), dn: p.dn ? 1 : 0, fc: Math.floor(num(p.fc, 0, 1e9)), fh: num(p.fh, -50, 50), as: Math.floor(num(p.as, 0, 1e7)), say: clean(p.say, 40) || null,
   };
+}
+/* ───────── 하루들 부스 공유 이젤: 획(stroke)을 모아 두고 모두에게 나눈다 ─────────
+   획 = { id, u(그린 사람), c(색), w(굵기), p[x,y,…](0~1000), h(뒤로가기로 숨김) }. 배포로 워커가 바뀌어도 남게 임시 폴더에 저장한다 */
+const EZ_FILE = join(tmpdir(), "harudle-easel.json"), EZ_MAX = 2500, EZ_PTS = 4000;
+let ezStrokes = [];
+try { const d = JSON.parse(readFileSync(EZ_FILE, "utf8")); if (Array.isArray(d.strokes)) ezStrokes = d.strokes; } catch { }
+const ezRedo = new Map();   // 사람별 앞으로가기 줄
+let ezDirty = false;
+setInterval(() => { if (!ezDirty) return; ezDirty = false; writeFile(EZ_FILE, JSON.stringify({ strokes: ezStrokes })).catch(() => { }); }, 4000).unref();
+const ezAll = (msg, except) => { const s = JSON.stringify(msg); for (const [pid, { ws }] of peers) if (pid !== except && ws.readyState === 1) ws.send(s); };
+function ezMessage(pid, m) {
+  const u = clean(m.u, 24); if (!u) return;
+  if (m.k === "seg") {
+    const id = clean(m.id, 32), c = /^#[0-9a-f]{6}$/i.test(m.c) ? m.c : "#111118", w = Math.min(80, Math.max(1, Number(m.w) || 6));
+    const pts = Array.isArray(m.p) ? m.p.slice(0, 400).map((v) => Math.min(1000, Math.max(0, Math.round(Number(v) || 0)))) : [];
+    if (!id || pts.length < 2) return;
+    let st = ezStrokes.find((x) => x.id === id);
+    if (!st) { st = { id, u, c, w, p: [], h: 0 }; ezStrokes.push(st); ezRedo.delete(u); if (ezStrokes.length > EZ_MAX) ezStrokes.splice(0, ezStrokes.length - EZ_MAX); }
+    if (st.u !== u || st.p.length >= EZ_PTS) return;
+    st.p.push(...pts); ezDirty = true;
+    ezAll({ t: "ez", k: "seg", id, u, c, w, p: pts }, pid);
+  } else if (m.k === "end") ezAll({ t: "ez", k: "end", id: clean(m.id, 32) }, pid);
+  else if (m.k === "undo") {
+    for (let i = ezStrokes.length - 1; i >= 0; i--) { const st = ezStrokes[i]; if (st.u === u && !st.h) { st.h = 1; (ezRedo.get(u) || ezRedo.set(u, []).get(u)).push(st.id); ezDirty = true; ezAll({ t: "ez", k: "vis", id: st.id, h: 1 }, pid); break; } }
+  } else if (m.k === "redo") {
+    const id = ezRedo.get(u)?.pop(), st = id && ezStrokes.find((x) => x.id === id);
+    if (st) { st.h = 0; ezDirty = true; ezAll({ t: "ez", k: "vis", id, h: 0 }, pid); }
+  }
 }
 wss.on("connection", (ws) => {
   const id = `p${++seq}`;
   peers.set(id, { ws, name: "크루", presence: null });
   ws.send(JSON.stringify({ t: "hello", id, v: VERSION }));
+  ws.send(JSON.stringify({ t: "ez", k: "all", strokes: ezStrokes }));   // 들어오자마자 이젤 그림 전체
   dirty = true;
   ws.on("message", (raw) => {
     let msg; try { msg = JSON.parse(raw); } catch { return; }
     const me = peers.get(id); if (!me) return;
     if (msg.t === "name") { me.name = clean(msg.name, 16) || "크루"; dirty = true; }
     if (msg.t === "p") { me.presence = sanitize(msg.p); dirty = true; }
+    if (msg.t === "ez") ezMessage(id, msg);
   });
   ws.on("close", () => { peers.delete(id); dirty = true; });
   ws.on("error", () => {});
