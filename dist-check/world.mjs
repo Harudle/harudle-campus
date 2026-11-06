@@ -36,6 +36,12 @@ var tX = (x) => (x + W * S / 2) / S;
 var tY = (z) => (z + H * S / 2) / S;
 var floorY = (f) => (f - 11) * FH;
 var FLOOR_INFO = { 11: "\uBC30\uC6C0\uC774 \uC2DC\uC791\uB418\uB294 \uACF5\uAC04", 12: "\uD568\uAED8, \uB610 \uB530\uB85C \uD559\uC2B5\uC758 \uACF5\uAC04", 13: "\uBAB0\uC785\uD558\uACE0 \uBC1C\uD45C\uD558\uB294 \uACF5\uAC04", 14: "\uB180\uACE0 \uC26C\uC5B4 \uAC00\uB294 \uB180\uC774\uD130" };
+var STEP_LAND = FH * 6 / 27;
+var STAIR_L = [
+  [29, 1, 2, 2, { dir: "e", h0: 0, h1: STEP_LAND }],
+  [31, 1, 2, 2, { dir: "e", h0: STEP_LAND, h1: STEP_LAND }],
+  [31, 3, 2, 7, { dir: "s", h0: STEP_LAND, h1: FH }]
+];
 function makeFloor(f) {
   const rooms = [], furn = [], zones = [], portals = [], calls = [];
   const R = (x, y, w, h, name, o = {}) => rooms.push({ x, y, w, h, name, ...o });
@@ -124,23 +130,23 @@ function makeFloor(f) {
     F("crates", 51, 30, 3, 2);
   }
   if (f === 12) {
-    Z(1, 1, 5, 22, "\uC2A4\uD0C0\uD2B8\uB799 \uACC4\uB2E8", "13\uCE35 \uC2A4\uD0C0\uD2B8\uB799\uC73C\uB85C \uC774\uC5B4\uC9C0\uB294 \uACC4\uB2E8\uC2DD \uC88C\uC11D. \uC544\uB798\uCABD \uACC4\uB2E8\uC73C\uB85C \uC62C\uB77C\uAC00\uC694.", { tint: "#F2F4E2" });
-    for (const y of [3, 7, 11, 15]) F("bench", 2, y, 3, 1);
-    P("stairs", 2, 19, 3, 3, 13, [3.5, 27.5], "13\uCE35 \uC2A4\uD0C0\uD2B8\uB799");
-    R(7, 1, 24, 10, "\uB77C\uC774\uBE0C\uB7EC\uB9AC", { doors: [{ s: "w", from: 4, len: 2 }, { s: "s", from: 4, len: 3 }, { s: "s", from: 16, len: 3 }] });
-    Z(8, 2, 22, 8, "\uB77C\uC774\uBE0C\uB7EC\uB9AC", "12\xB713\uCE35\uC744 \uC787\uB294 \uBCF5\uCE35 \uC11C\uC7AC. \uC6D0\uD615 \uC11C\uAC00\uC5D0 \uAE30\uC220\uC11C\uC640 \uAC1C\uBC1C \uBB38\uD654 \uCC45\uC774 \uBE7C\uACE1\uD574\uC694.", { tint: "#FBF4E6" });
-    F("tower", 23, 3, 5, 5);
-    F("shelf", 8, 2, 13, 1);
-    F("table", 10, 5, 4, 2);
-    F("table", 16, 5, 4, 2);
+    Z(1, 1, 5, 21, "\uD398\uC5B4\uC874", "\uCC45\uC0C1 \uB2E4\uC12F \uAC1C\uAC00 \uD55C \uC904\uB85C \uB298\uC5B4\uC120 \uC790\uB9AC. \uB450 \uC0AC\uB78C\uC774 \uBAA8\uB2C8\uD130 \uD558\uB098\uB97C \uAC19\uC774 \uBCF4\uBA70 \uD398\uC5B4 \uD504\uB85C\uADF8\uB798\uBC0D\uC744 \uD574\uC694.", { tint: "#F4F2FA" });
+    for (const y of [2, 6, 10, 14, 18]) F("pairrow", 2, y, 2, 2);
+    R(7, 1, 21, 10, "\uB77C\uC774\uBE0C\uB7EC\uB9AC", { doors: [{ s: "w", from: 4, len: 2 }, { s: "s", from: 4, len: 3 }, { s: "s", from: 16, len: 3 }] });
+    Z(8, 2, 19, 8, "\uB77C\uC774\uBE0C\uB7EC\uB9AC", "12\xB713\uCE35\uC744 \uC787\uB294 \uBCF5\uCE35 \uC11C\uC7AC. \uC6D0\uD615 \uC11C\uAC00\uC5D0 \uAE30\uC220\uC11C\uC640 \uAC1C\uBC1C \uBB38\uD654 \uCC45\uC774 \uBE7C\uACE1\uD574\uC694.", { tint: "#FBF4E6" });
+    F("tower", 9, 3, 5, 5, { tall: true });
+    F("shelf", 14, 2, 13, 1);
+    for (const x of [15, 18, 21, 24]) F("beanbag", x, 3, 2, 2);
     F("redsteps", 15, 8, 4, 2);
     F("beanbag", 20, 8, 2, 2);
     F("beanbag", 8, 8, 2, 2, { yaw: Math.PI / 2 });
     meetings(["\uBCF4\uC774\uC800", "\uC544\uD3F4\uB85C", "\uB514\uC2A4\uCEE4\uBC84\uB9AC", "\uD5C8\uBE14"], "12\uCE35 \uD68C\uC758\uC2E4\uC740 \uC6B0\uC8FC \uD0D0\uC0AC\uC120 \uC774\uB984\uC774\uC5D0\uC694.");
-    Z(7, 12, 10, 11, "\uCF54\uC6CC\uD0B9 \uC874", "\uCE78\uB9C9\uC774 \uB108\uBA38\uB85C \uC790\uC720\uB86D\uAC8C \uD37C\uC838\uC11C \uC77C\uD558\uB294 \uC790\uB9AC\uC608\uC694.", { tint: "#FFF8DC" });
+    P("mat", 28, 1, 1, 2, 13, [33.5, 10.5], "13\uCE35");
+    STAIR_L.forEach(([x, y, w, h, o]) => F("flight", x, y, w, h, o));
+    Z(7, 12, 10, 11, "\uCF54\uC6CC\uD0B9 \uC874", "\uB05D\uC774 \uC548 \uBCF4\uC774\uAC8C \uAE34 \uD14C\uC774\uBE14 \uD558\uB098\uC640 4\uC778 \uD14C\uC774\uBE14 \uC14B. \uCE78\uB9C9\uC774 \uB108\uBA38\uB85C \uC790\uC720\uB86D\uAC8C \uD37C\uC838\uC11C \uC77C\uD558\uB294 \uC790\uB9AC\uC608\uC694.", { tint: "#FFF8DC" });
     F("partition", 8, 13, 1, 8);
-    for (const [x, y] of [[10, 13], [13, 13], [10, 17], [13, 17]]) F("wtable", x, y, 2, 2);
-    F("plant", 14, 20, 2, 2);
+    F("bigtable", 14, 13, 2, 9);
+    for (const y of [13, 16, 19]) F("table", 10, y, 2, 2);
     R(1, 24, 17, 9, "\uC791\uC740 \uAC15\uC758\uC2E4", { doors: [{ s: "n", from: 13, len: 2 }] });
     Z(2, 25, 15, 7, "\uC791\uC740 \uAC15\uC758\uC2E4", "\uC791\uC740 \uADDC\uBAA8 \uC218\uC5C5\uACFC \uC2A4\uD130\uB514\uAC00 \uC5F4\uB9AC\uB294 \uAC15\uC758\uC2E4\uC774\uC5D0\uC694.");
     F("screen", 3, 25, 8, 1);
@@ -149,15 +155,14 @@ function makeFloor(f) {
       F("ltable", 3, y, 4, 1);
       F("ltable", 9, y, 4, 1);
     }
-    R(18, 24, 10, 9, "\uCE94\uD2F4", { doors: [{ s: "n", from: 4, len: 2 }] });
-    Z(19, 25, 8, 7, "\uCE94\uD2F4", "\uAC04\uC2DD\uACFC \uC74C\uB8CC\uB97C \uAEBC\uB0B4 \uBA39\uB294 \uACF3. \uC815\uC218\uAE30\uC640 \uCEE4\uD53C \uBA38\uC2E0\uC774 \uC788\uC5B4\uC694.", { tint: "#FFF4E0" });
-    F("fridge", 19, 25, 1, 1);
-    F("purifier", 20, 25, 1, 1);
-    F("counter", 24, 25, 3, 1, { props: ["sink", "coffee"] });
-    F("table", 19, 28, 3, 2);
-    F("table", 23, 28, 3, 2);
-    Z(28, 24, 6, 9, "\uD3F0\uBD80\uC2A4", "\uC62C\uB9AC\uBE0C\uBE5B \uC720\uB9AC\uBB38 1\uC778 \uBD80\uC2A4. \uD1B5\uD654\uB098 \uD654\uC0C1 \uD68C\uC758\uAC00 \uD544\uC694\uD560 \uB54C \uC3D9 \uB4E4\uC5B4\uAC00\uC694.", { npc: false });
-    for (const [x, y] of [[29, 25], [31, 25], [29, 29], [31, 29]]) F("booth", x, y, 2, 3);
+    Z(19, 25, 15, 7, "\uCE94\uD2F4", "\uAC04\uC2DD\uACFC \uC74C\uB8CC\uB97C \uAEBC\uB0B4 \uBA39\uB294 \uACF3. \uCF54\uCE58\uB8F8 \uBCBD\uC744 \uB530\uB77C \uC2F1\uD06C\uB300\xB7\uC815\uC218\uAE30\xB7\uB0C9\uC7A5\uACE0\uAC00 \uC788\uACE0, \uD770 2\uC778 \uCC45\uC0C1\uACFC 6\uC778 \uB098\uBB34 \uD14C\uC774\uBE14\uC5D0 \uC549\uC544 \uBA39\uC5B4\uC694.", { tint: "#FFF4E0" });
+    F("fridge", 33, 31, 1, 1, { turn: -Math.PI / 2 });
+    F("purifier", 33, 30, 1, 1, { turn: -Math.PI / 2 });
+    F("counter", 33, 27, 1, 3, { props: ["sink", "coffee"], turn: -Math.PI / 2 });
+    F("table", 20, 26, 2, 3);
+    F("table", 25, 26, 2, 3);
+    for (const x of [20, 23, 26]) F("duo", x, 31, 1, 1);
+    for (const y of [26, 28]) F("duo", 29, y, 1, 1);
     R(34, 24, 13, 9, "\uCF54\uCE58\uB8F8", { doors: [{ s: "n", from: 3, len: 2 }, { s: "n", from: 9, len: 2 }] });
     Z(35, 25, 11, 7, "\uCF54\uCE58\uB8F8", "\uCF54\uCE58\uB4E4\uC774 \uC77C\uD558\uB294 \uC624\uD508 \uB370\uC2A4\uD06C\uC608\uC694.");
     F("desk", 36, 27, 4, 2);
@@ -167,19 +172,20 @@ function makeFloor(f) {
     for (const x of [49, 51, 53]) F("rack", x, 24, 1, 7);
   }
   if (f === 13) {
-    R(1, 1, 30, 10, "\uB77C\uC774\uBE0C\uB7EC\uB9AC", { doors: [{ s: "s", from: 16, len: 3 }, { s: "s", from: 24, len: 3 }, { s: "e", from: 4, len: 2 }] });
+    R(1, 1, 30, 10, "\uB77C\uC774\uBE0C\uB7EC\uB9AC", { doors: [{ s: "s", from: 16, len: 3 }, { s: "s", from: 24, len: 3 }, { s: "e", from: 1, len: 2 }] });
     Z(2, 2, 28, 8, "\uB77C\uC774\uBE0C\uB7EC\uB9AC (\uC704\uCE35)", "\uBCF5\uCE35 \uC11C\uC7AC\uC758 \uC704\uCE35. \uB09C\uAC04 \uC544\uB798\uB85C \uC6D0\uD615 \uC11C\uAC00\uC640 12\uCE35\uC774 \uB0B4\uB824\uB2E4\uBCF4\uC5EC\uC694.", { tint: "#FBF4E6" });
-    F("void", 21, 2, 8, 7);
-    F("shelf", 2, 2, 17, 1);
-    F("sofa", 3, 6, 5, 2);
-    F("table", 11, 5, 4, 2);
-    F("beanbag", 14, 8, 2, 2);
-    F("beanbag", 8, 8, 2, 2, { yaw: Math.PI / 2 });
+    F("void", 8, 2, 7, 7);
+    F("shelf", 16, 2, 14, 1);
+    F("sofa", 17, 6, 5, 2);
+    F("table", 24, 5, 4, 2);
+    F("beanbag", 28, 8, 2, 2);
+    F("beanbag", 3, 7, 2, 2, { yaw: Math.PI / 2 });
     R(1, 11, 12, 22, "\uC2A4\uD0C0\uD2B8\uB799", { doors: [{ s: "e", from: 3, len: 2 }, { s: "e", from: 16, len: 3 }] });
     Z(2, 12, 10, 20, "\uC2A4\uD0C0\uD2B8\uB799", "\uD14C\uCF54\uD1A1\uACFC \uC120\uBC30 \uAE30\uC218\uC640\uC758 \uB9CC\uB0A8\uC774 \uC5F4\uB9AC\uB294 \uACC4\uB2E8\uC2DD \uBC1C\uD45C \uACF5\uAC04\uC774\uC5D0\uC694.", { tint: "#F2F4E2" });
     F("screenwall", 3, 12, 8, 1);
     F("bleacher", 4, 15, 8, 13, { axis: "y" });
-    P("stairs", 2, 29, 3, 3, 12, [3.5, 17.5], "12\uCE35 \uACC4\uB2E8");
+    F("void", 31, 4, 2, 6);
+    P("mat", 31, 10, 2, 1, 12, [29.5, 4.5], "12\uCE35");
     R(35, 1, 12, 9, "\uC6B0\uBB3C\uAC00", { doors: [{ s: "s", from: 6, len: 2 }] });
     Z(36, 2, 10, 7, "\uC6B0\uBB3C\uAC00", "\uAC00\uBCCD\uAC8C \uBAA8\uC5EC \uC218\uB2E4\uB97C \uB098\uB204\uB294 \uACF3. \uD0D5\uBE44\uC2E4 \uC55E \uBE45\uD14C\uC774\uBE14\uC5D0\uC11C \uC548\uBD80\uB97C \uBB3C\uC5B4\uC694.", { tint: "#FFF8DC" });
     F("counter", 36, 2, 6, 1, { props: ["sink", "coffee", "micro"] });
