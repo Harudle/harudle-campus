@@ -41,7 +41,17 @@ export const AVATAR_OPTIONS = {
     { value: 'brush', label: '붓' },
     { value: 'heart', label: '하트 풍선' },
   ],
+  // 귀 장식: 머리 장식과 따로 고른다(같이 낄 수 있다). 둘 다 잠겨 있다가 하루들 이벤트 부스에서 풀린다
+  // 에어팟: 인스타그램 팔로우 · 헤드셋(에어팟 맥스): 네컷만화를 만들어 피드에 올린 뒤 링크를 붙여넣기
+  ear: [
+    { value: 'none', label: '없음' },
+    { value: 'airpods', label: '에어팟' },
+    { value: 'headset', label: '헤드셋' },
+  ],
 } as const
+
+/** 처음엔 잠겨 있어 따로 풀어야 고를 수 있는 장식. 랜덤으로도 나오지 않는다 */
+export const LOCKED_OPTIONS: Partial<Record<keyof typeof AVATAR_OPTIONS, readonly string[]>> = { ear: ['airpods', 'headset'] }
 
 export const AVATAR_COLORS = [
   { value: '#FFFFFF', label: '하양' },
@@ -97,6 +107,7 @@ export const AVATAR_PRESETS: { label: string; config: AvatarConfig }[] = [
       neck: 'none',
       bag: 'none',
       held: 'sketch',
+      ear: 'none',
       outfitColor: '#FFFFFF',
       headColor: '#B9A6EC',
       neckColor: '#B9A6EC',
@@ -115,6 +126,7 @@ export const AVATAR_PRESETS: { label: string; config: AvatarConfig }[] = [
       neck: 'none',
       bag: 'messenger',
       held: 'none',
+      ear: 'none',
       outfitColor: '#FFFFFF',
       headColor: '#2F2F2F',
       neckColor: '#B9A6EC',
@@ -156,7 +168,7 @@ export function sanitizeAvatar(raw: unknown): AvatarConfig {
 export function randomAvatar(): AvatarConfig {
   const pick = (items: readonly { value: string }[]) => items[Math.floor(Math.random() * items.length)]
   const result = {} as Record<string, string>
-  for (const part of PARTS) result[part] = pick(AVATAR_OPTIONS[part]).value
+  for (const part of PARTS) result[part] = pick(AVATAR_OPTIONS[part].filter((o) => !LOCKED_OPTIONS[part]?.includes(o.value))).value
   for (const { key } of AVATAR_COLOR_PARTS) result[key] = pick(AVATAR_COLORS).value
   // 피부는 눈코입이 잘 보이도록 밝은 쪽에서만 고른다.
   result.skinColor = pick(AVATAR_COLORS.filter(({ label }) => label.startsWith('피부') && label !== '피부 4')).value
