@@ -97,14 +97,15 @@ function sanitize(p) {
 /* ───────── 하루들 부스 공유 이젤: 획(stroke)을 모아 두고 모두에게 나눈다 ─────────
    획 = { id, u(그린 사람), c(색), w(굵기), p[x,y,…](0~1000), h(뒤로가기로 숨김) }. 배포로 워커가 바뀌어도 남게 임시 폴더에 저장한다 */
 const EZ_FILE = join(tmpdir(), "harudle-easel.json"), EZ_MAX = 2500, EZ_PTS = 4000;
-let ezStrokes = [];
-try { const d = JSON.parse(readFileSync(EZ_FILE, "utf8")); if (Array.isArray(d.strokes)) ezStrokes = d.strokes; } catch { }
-const ezRedo = new Map();   // 사람별 앞으로가기 줄
+// 판(board)이 여럿: easel(부스 네컷 이젤), wb(12층 코워킹 존 화이트보드). 판마다 획과 사람별 앞으로가기 줄을 따로 둔다
+const EZ_BOARDS = ["easel", "wb"], ez = Object.fromEntries(EZ_BOARDS.map((b) => [b, { strokes: [], redo: new Map() }]));
+try { const d = JSON.parse(readFileSync(EZ_FILE, "utf8")); if (Array.isArray(d.strokes)) ez.easel.strokes = d.strokes; for (const b of EZ_BOARDS) if (Array.isArray(d.boards?.[b])) ez[b].strokes = d.boards[b]; } catch { }
 let ezDirty = false;
-setInterval(() => { if (!ezDirty) return; ezDirty = false; writeFile(EZ_FILE, JSON.stringify({ strokes: ezStrokes })).catch(() => { }); }, 4000).unref();
+setInterval(() => { if (!ezDirty) return; ezDirty = false; writeFile(EZ_FILE, JSON.stringify({ strokes: ez.easel.strokes, boards: Object.fromEntries(EZ_BOARDS.map((b) => [b, ez[b].strokes])) })).catch(() => { }); }, 4000).unref();
 const ezAll = (msg, except) => { const s = JSON.stringify(msg); for (const [pid, { ws }] of peers) if (pid !== except && ws.readyState === 1) ws.send(s); };
 function ezMessage(pid, m) {
   const u = clean(m.u, 24); if (!u) return;
+  const b = EZ_BOARDS.includes(m.b) ? m.b : "easel", ezStrokes = ez[b].strokes, ezRedo = ez[b].redo;
   if (m.k === "seg") {
     const id = clean(m.id, 32), c = /^#[0-9a-f]{6}$/i.test(m.c) ? m.c : "#111118", w = Math.min(80, Math.max(1, Number(m.w) || 6));
     const pts = Array.isArray(m.p) ? m.p.slice(0, 400).map((v) => Math.min(1000, Math.max(0, Math.round(Number(v) || 0)))) : [];
@@ -113,13 +114,13 @@ function ezMessage(pid, m) {
     if (!st) { st = { id, u, c, w, p: [], h: 0 }; ezStrokes.push(st); ezRedo.delete(u); if (ezStrokes.length > EZ_MAX) ezStrokes.splice(0, ezStrokes.length - EZ_MAX); }
     if (st.u !== u || st.p.length >= EZ_PTS) return;
     st.p.push(...pts); ezDirty = true;
-    ezAll({ t: "ez", k: "seg", id, u, c, w, p: pts }, pid);
-  } else if (m.k === "end") ezAll({ t: "ez", k: "end", id: clean(m.id, 32) }, pid);
+    ezAll({ t: "ez", b, k: "seg", id, u, c, w, p: pts }, pid);
+  } else if (m.k === "end") ezAll({ t: "ez", b, k: "end", id: clean(m.id, 32) }, pid);
   else if (m.k === "undo") {
-    for (let i = ezStrokes.length - 1; i >= 0; i--) { const st = ezStrokes[i]; if (st.u === u && !st.h) { st.h = 1; (ezRedo.get(u) || ezRedo.set(u, []).get(u)).push(st.id); ezDirty = true; ezAll({ t: "ez", k: "vis", id: st.id, h: 1 }, pid); break; } }
+    for (let i = ezStrokes.length - 1; i >= 0; i--) { const st = ezStrokes[i]; if (st.u === u && !st.h) { st.h = 1; (ezRedo.get(u) || ezRedo.set(u, []).get(u)).push(st.id); ezDirty = true; ezAll({ t: "ez", b, k: "vis", id: st.id, h: 1 }, pid); break; } }
   } else if (m.k === "redo") {
     const id = ezRedo.get(u)?.pop(), st = id && ezStrokes.find((x) => x.id === id);
-    if (st) { st.h = 0; ezDirty = true; ezAll({ t: "ez", k: "vis", id, h: 0 }, pid); }
+    if (st) { st.h = 0; ezDirty = true; ezAll({ t: "ez", b, k: "vis", id, h: 0 }, pid); }
   }
 }
 /* ───────── 채팅: 근처 · 전체 · 개인 ─────────
@@ -153,7 +154,7 @@ wss.on("connection", (ws) => {
   const id = `p${++seq}`;
   peers.set(id, { ws, name: "크루", presence: null });
   ws.send(JSON.stringify({ t: "hello", id, v: VERSION }));
-  ws.send(JSON.stringify({ t: "ez", k: "all", strokes: ezStrokes }));   // 들어오자마자 이젤 그림 전체
+  for (const b of EZ_BOARDS) ws.send(JSON.stringify({ t: "ez", b, k: "all", strokes: ez[b].strokes }));   // 들어오자마자 판마다 그림 전체
   dirty = true;
   ws.on("message", (raw) => {
     let msg; try { msg = JSON.parse(raw); } catch { return; }

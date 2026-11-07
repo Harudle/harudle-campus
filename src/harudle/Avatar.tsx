@@ -392,7 +392,7 @@ function BrushArm({ color, motion }: { color: string; motion?: RefObject<WalkMot
 }
 
 /** 우테코 캠퍼스 확장: 스킬과 점프 자세. 원본 Avatar의 모양은 그대로 두고 팔·소품만 바꾼다. */
-export type AvatarPose = { act: 'draw' | 'wave' | 'heart' | 'laptop' | 'coffee' | 'dance' | 'gun' | null; waving: boolean; air: boolean }
+export type AvatarPose = { act: 'draw' | 'wave' | 'heart' | 'laptop' | 'coffee' | 'dance' | 'gun' | 'read' | null; waving: boolean; air: boolean; style?: number; actT?: number; noHead?: boolean }
 
 type AvatarProps = {
   config: AvatarConfig
@@ -410,24 +410,28 @@ export function Avatar({ config, motion, pose }: AvatarProps) {
   const heldItem = useRef<THREE.Group>(null)
   const armL = useRef<THREE.Group>(null)
   const armR = useRef<THREE.Group>(null)
+  const head = useRef<THREE.Group>(null)
   const restR = holdingSide ? 1 : 0.35
   const actRef = useRef<{ act: string | null; t0: number }>({ act: null, t0: 0 })   // 동작이 시작된 시각(단계가 있는 동작용)
 
   // 네 컷 그리기는 그림판을 들고, 인사·하트·점프는 팔을 든다. 그림판을 원래 든 캐릭터는 팔을 들 때 잠깐 내려놓는다.
   useFrame(({ clock }) => {
     const p = pose?.current
+    if (head.current) head.current.visible = !p?.noHead
     const armsUp = !!p && (p.act === 'wave' || p.act === 'heart' || p.act === 'dance' || p.waving || p.air)
-    const busy = p?.act === 'laptop' || p?.act === 'coffee' || p?.act === 'gun'   // 노트북·커피를 쓰는 동안엔 원래 든 것을 내려놓는다
-    const boardOn = p?.act === 'draw' || (holdingBoard && !armsUp && !busy)
+    const busy = p?.act === 'laptop' || p?.act === 'coffee' || p?.act === 'gun' || p?.act === 'read'   // 노트북·커피를 쓰는 동안엔 원래 든 것을 내려놓는다
+    // 1인칭(noHead)에선 그림판·옆에 든 소품을 생략한다: 눈앞을 통째로 가린다(특히 앉으면). 팔과 노트북·커피·총은 그대로
+    const boardOn = !p?.noHead && (p?.act === 'draw' || (holdingBoard && !armsUp && !busy))
     if (boardSet.current) boardSet.current.visible = boardOn
     if (freeSet.current) freeSet.current.visible = !boardOn
-    if (heldItem.current) heldItem.current.visible = !armsUp && !busy
+    if (heldItem.current) heldItem.current.visible = !armsUp && !busy && !p?.noHead
     const l = armL.current
     const r = armR.current
     if (!l || !r) return
     l.rotation.x = 0; r.rotation.x = 0
     if (p?.act !== 'coffee' && actRef.current.act) actRef.current = { act: null, t0: 0 }
-    if (p?.act === 'laptop') { // 두 손을 앞으로 뻗어 자판을 번갈아 톡톡
+    if (p?.act === 'read') { l.rotation.z = -0.32; r.rotation.z = 0.32; l.rotation.x = -1.05; r.rotation.x = -1.05 + Math.max(0, Math.sin(clock.elapsedTime * 1.6) - 0.97) * 4 }   // 두 손을 앞으로(빈백에선 책을 받쳐 들고, 책상에선 독서대 양옆에 손을 얹는다)
+    else if (p?.act === 'laptop') { // 두 손을 앞으로 뻗어 자판을 번갈아 톡톡
       const tt = clock.elapsedTime * 14
       l.rotation.z = -0.22; r.rotation.z = 0.22
       l.rotation.x = -1.15 + Math.max(0, Math.sin(tt)) * 0.18; r.rotation.x = -1.15 + Math.max(0, Math.sin(tt + Math.PI)) * 0.18
@@ -438,13 +442,23 @@ export function Avatar({ config, motion, pose }: AvatarProps) {
       const ease = (x: number) => 1 - (1 - x) ** 3
       const k = e < 0.7 ? ease(e / 0.7) : e < 3.4 ? 1 : e < 4 ? 1 - ease((e - 3.4) / 0.6) : 0   // 엔진의 컵 위치와 같은 박자
       const sip = e > 0.7 && e < 3.4 ? Math.sin((e - 0.7) * 9) * 0.04 : 0
-      l.rotation.z = -0.35; r.rotation.z = 0.35 - k * 0.55; r.rotation.x = -k * 2.25 + sip
+      l.rotation.z = -0.35; r.rotation.z = 0.35 - k * 0.6; r.rotation.x = -k * 1.55 + sip   // 컵을 가슴 앞에 세워 들고 빨대로 쪽쪽(팔을 머리 위로 올리지 않는다)
     }
-    else if (p?.act === 'gun') { l.rotation.z = -0.35; r.rotation.z = 0.25; r.rotation.x = -1.45 }   // 종이 총: 오른팔을 앞으로 쭉 뻗어 겨눈다
-    else if (p?.act === 'dance') { // 춤: 두 팔을 번갈아 위아래로 흔든다(엔진이 몸을 통통 튀기고 좌우로 흔든다)
-      const b = clock.elapsedTime * 2.4 * Math.PI
-      l.rotation.z = -1.6 - Math.sin(b) * 0.9; r.rotation.z = 1.6 - Math.sin(b) * 0.9
-      l.rotation.x = Math.sin(b * 0.5) * 0.3; r.rotation.x = -Math.sin(b * 0.5) * 0.3
+    else if (p?.act === 'gun') { r.rotation.z = restR; l.rotation.z = -0.25; l.rotation.x = -1.45 }   // 종이 총: 오른팔(-x 쪽 armL)을 앞으로 쭉 뻗어 겨눈다
+    else if (p?.act === 'dance') { // 춤 열 가지의 팔(몸은 엔진이 같은 번호·박자로 움직인다)
+      const b = (p.actT ?? clock.elapsedTime) * 2.4 * Math.PI, s = Math.sin(b)
+      switch (p.style ?? 0) {
+        case 1: l.rotation.z = -1.5 + Math.sin(b) * 0.45; r.rotation.z = 1.5 + Math.sin(b - 1.4) * 0.45; break   // 파도: 양팔을 옆으로 뻗고 물결이 왼→오로 지나간다
+        case 2: l.rotation.z = -1.45; r.rotation.z = 1.45; l.rotation.x = r.rotation.x = Math.sin(b) * 0.15; break   // 빙글빙글: 팔 쫙
+        case 3: { const k = Math.abs(Math.sin(b / 2)); l.rotation.z = -0.4 - k * 2.4; r.rotation.z = 0.4 + k * 2.4; break }   // 만세 점프: 뛸 때 만세
+        case 4: { const k = Math.floor((p.actT ?? 0) * 2.4) % 2; l.rotation.z = -0.25; r.rotation.z = 0.25; l.rotation.x = k ? -1.57 : 0; r.rotation.x = k ? 0 : -1.57; break }   // 로봇: 팔을 각지게 번갈아 앞으로
+        case 5: { const up = Math.sin(b / 2) > 0; r.rotation.z = up ? 2.6 : 0.2; r.rotation.x = up ? 0 : -0.5; l.rotation.z = -0.6; l.rotation.x = 0.3; break }   // 디스코: 오른손 하늘 찌르고 땅 찌르고, 왼손은 허리
+        case 6: l.rotation.z = -0.9; r.rotation.z = 0.9; l.rotation.x = -0.9 + s * 0.3; r.rotation.x = -0.9 - s * 0.3; break   // 트위스트: 팔꿈치를 굽힌 듯 앞에서 흔든다
+        case 7: { const k = Math.max(0, Math.cos(b)); l.rotation.x = r.rotation.x = -1.35; l.rotation.z = -0.15 - (1 - k) * 0.45; r.rotation.z = 0.15 + (1 - k) * 0.45; break }   // 박수: 앞으로 뻗은 손이 박자마다 짝
+        case 8: l.rotation.z = -0.5 - Math.abs(s) * 0.4; r.rotation.z = 2.7; r.rotation.x = Math.abs(s) * 0.3; break   // 헤드뱅: 오른손 번쩍, 왼손은 기타 치듯
+        case 9: l.rotation.z = -0.3; r.rotation.z = 0.3; l.rotation.x = -Math.max(0, s) * 1.5; r.rotation.x = -Math.max(0, -s) * 1.5; break   // 셔플: 앞으로 번갈아 주먹질
+        default: l.rotation.z = -1.6 - s * 0.9; r.rotation.z = 1.6 - s * 0.9; l.rotation.x = Math.sin(b * 0.5) * 0.3; r.rotation.x = -Math.sin(b * 0.5) * 0.3   // 통통: 두 팔을 번갈아 위아래로
+      }
     }
     else if (p?.act === 'heart') { l.rotation.z = -2.7; r.rotation.z = 2.7 }
     else if (p?.act === 'wave' || p?.waving) { l.rotation.z = -0.35; r.rotation.z = 2.5 + Math.sin(clock.elapsedTime * 12) * 0.35 }
@@ -494,7 +508,7 @@ export function Avatar({ config, motion, pose }: AvatarProps) {
         <group ref={heldItem}>{holdingSide && <HeldItem kind={config.held} color={config.heldColor} />}</group>
       </group>
 
-      <group position-y={HEAD_Y}>
+      <group ref={head} position-y={HEAD_Y}>
         <mesh castShadow>
           <sphereGeometry args={[HEAD_RADIUS, 24, 18]} />
           <Skin color={config.skinColor} />

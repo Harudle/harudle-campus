@@ -63,18 +63,25 @@ export function makeFloor(f) {
   [16, 20].forEach((y, i) => { F("elev", 36, y, 1, 2, { turn: -Math.PI / 2, raw: true }); F("xbanner", 35, y, 1, 2, { style: i, turn: Math.PI, raw: true }); });   // 홀에서 동쪽 벽을 보면 왼쪽(북)이 검은 배너, 오른쪽이 흰 배너(사진 그대로)
 
   /* 오른쪽 기둥: 공조실 · 화장실(못 들어가는 방) */
-  closed(47, 1, 9, 12, "공조실"); F("acunit", 49, 3, 3, 2); F("acunit", 49, 7, 3, 2); F("acunit", 52, 3, 2, 6);
-  closed(47, 12, 9, 11, "화장실", "#E3EEF3"); F("door", 47, 15, 1, 2); F("door", 47, 19, 1, 2); F("wc", 49, 14, 5, 7);
+  closed(51, 1, 5, 12, "공조실"); F("acunit", 52, 3, 3, 2); F("acunit", 52, 7, 3, 2);   // 회의실 넷이 넓어진 만큼 동쪽으로 좁혔다
+  if (f === 13) { R(47, 12, 9, 12, "화장실", { closed: true, raw: true }); Z(48, 13, 7, 10, "화장실", "", { npc: false, tint: "#E3EEF3", raw: true }); }   // 13층은 은하수가 올라올 자리만큼 짧다(넓힌 뒤 좌표)
+  else closed(47, 12, 9, 11, "화장실", "#E3EEF3");
+  F("door", 47, 15, 1, 2); F("door", 47, 19, 1, 2); F("wc", 49, 14, 5, 7);
 
   // 회의실 네 개: 서쪽 줄(문이 동쪽)과 동쪽 줄(문이 서쪽). west = [x, 폭]으로 서쪽 줄만 옮기거나 좁힐 수 있다
-  const meetings = (names, desc, west = [33, 6]) => {
-    ([[west[0], 1, "e", west[1]], [west[0], 5, "e", west[1]], [41, 1, "w", 6], [41, 5, "w", 6]] as [number, number, string, number][]).forEach(([x, y, s, w], i) => {
-      R(x, y, w, 5, names[i], { doors: [{ s, from: 2, len: 1 }], planet: true });
-      Z(x + 1, y + 1, w - 2, 3, `회의실 ${names[i]}`, desc, { npc: false, tint: "#F4F2FA" });
-      // 들어오는 문 맞은편 벽에 모니터, 그쪽을 향해 테이블이 놓인다(문 앞 한 칸은 비운다)
-      F("tv", s === "e" ? x + 1 : x + w - 2, y + 1, 1, 3, { face: s === "e" ? "e" : "w" }); F("mtable", x + 2, y + 2, w - 4, 1);
+  // 회의실 넷: 서쪽 줄(문이 동쪽)과 동쪽 줄(문이 서쪽), 사이에 두 칸 복도. 모두 폭 7칸에 3칸짜리 테이블(의자 여섯)
+  // 창가 줄(보이저·디스커버리 / 금성·지구)은 북쪽 바깥 창에 바짝 붙어 창 쪽 벽 없이 통유리가 바로 보이고, 안쪽 줄보다 한 줄 깊다
+  const meetings = (names, desc, wx0 = 33) => {
+    const w = 7, ex = wx0 + w + 2;
+    ([[wx0, 0, "e"], [wx0, 5, "e"], [ex, 0, "w"], [ex, 5, "w"]] as [number, number, string][]).forEach(([x, y, s], i) => {
+      const win = y === 0, h = win ? 6 : 5;
+      R(x, y, w, h, names[i], { doors: [{ s, from: win ? 3 : 2, len: 1 }], planet: true, ...(win ? { open: ["n"] } : {}) });
+      Z(x + 1, y + 1, w - 2, h - 2, `회의실 ${names[i]}`, desc, { npc: false, tint: "#F4F2FA" });
+      // 들어오는 문 맞은편 벽에 모니터, 테이블은 모니터 옆에 가로로(의자는 남북으로 셋씩 마주 본다). 문 앞 한 칸은 비운다
+      F("tv", s === "e" ? x + 1 : x + w - 2, y + 1, 1, h - 2, { face: s === "e" ? "e" : "w" }); F("mtable", x + 2, y + 2, 3, 1, { horiz: true });
     });
   };
+
 
   if (f === 11) {
     // 큰 강의실: 벽 없이 탁 트였다. 입구 쪽(동남)에만 짧은 벽이 서 있고, 바깥 면에 행성 캐릭터와 "큰강의실" 그림
@@ -87,7 +94,8 @@ export function makeFloor(f) {
     for (const x of [5, 8, 11]) for (const y of [2, 6, 10, 14, 18, 22, 26]) F("ltable", x, y, 1, 3, { turn: Math.PI / 2, raw: true });
     Z(16, 1, 17, 10, "코워킹 존", "바퀴 달린 테이블과 천장에서 내려오는 콘센트. 인원에 맞춰 붙였다 떼었다 해요.", { tint: "#FFF8DC" });
     for (const [x, y] of [[17, 3], [21, 3], [17, 7], [21, 7]]) F("wtable", x, y, 2, 2);
-    F("counter", 25, 1, 6, 1, { props: ["sink", "coffee", "micro"] }); F("purifier", 31, 1, 1, 1); F("fridge", 32, 1, 1, 1);
+    // 탕비: 엘리베이터 홀 북서쪽 모서리 앞, 홀 벽 줄에 등을 맞추고 우물가(북)를 본다. 서쪽부터 냉장고 → 정수기 → 싱크대 카운터(싱크대가 동쪽 끝). dz로 벽 줄까지 민다
+    F("fridge", 24, 11, 1, 1, { raw: true, turn: Math.PI, dz: .74 }); F("purifier", 25, 11, 1, 1, { raw: true, turn: Math.PI, dz: .8 }); F("counter", 26, 11, 3, 1, { raw: true, turn: Math.PI, dz: .45, props: ["sink", "coffee", "micro"] });
     F("bigtable", 25, 6, 7, 2); F("plant", 30, 3, 2, 2);
     Z(25, 2, 8, 7, "우물가", "탕비실 앞 빅테이블. 소문이 퍼지는 곳이라 우물가라고 불러요.", { npc: true });
     meetings(["금성", "수성", "지구", "화성"], "원시부터 우주까지. 11층 회의실은 행성 이름이에요.");
@@ -96,12 +104,13 @@ export function makeFloor(f) {
     // 12층 작은 강의실과 같은 배치: 화면은 창가(서쪽) 벽에, 책상과 의자는 화면을 본다
     F("screen", 2, 25, 1, 7); F("lectern", 3, 31, 1, 1);
     for (const x of [5, 9, 13]) for (const y of [25, 29]) F("ltable", x, y, 1, 3, { turn: Math.PI / 2 });
-    // 12층 캔틴과 같은 구성(벽 없이 트임): 코치룸 벽을 따라 냉장고 → 정수기 → 싱크대, 6인 나무 테이블 둘, 2인 흰 책상
+    // 12층 캔틴과 같은 구성(벽 없이 트임): 코치룸 벽을 따라 냉장고 → 정수기 → 싱크대
     Z(17, 25, 13, 7, "캔틴", "간식과 음료를 꺼내 먹는 곳. 코치룸 벽을 따라 싱크대·정수기·냉장고가 있고, 흰 2인 책상과 6인 나무 테이블에 앉아 먹어요.", { tint: "#FFF4E0" });
     F("fridge", 29, 31, 1, 1, { turn: -Math.PI / 2 }); F("purifier", 29, 30, 1, 1, { turn: -Math.PI / 2 }); F("counter", 29, 27, 1, 3, { props: ["sink", "coffee"], turn: -Math.PI / 2 });
-    F("table", 18, 26, 2, 3); F("table", 22, 26, 2, 3);   // 6인 나무 테이블(세로)
-    for (const x of [18, 21, 24]) F("duo", x, 31, 1, 1);   // 1인용 흰 책상 + 의자 둘
-    for (const y of [26, 28]) F("duo", 26, y, 1, 1);
+    // 12층 캔틴과 같은 배치(넓힌 뒤 좌표, raw): 서쪽 끝 벽돌 화단 + 벽돌 벤치, 벤치에 붙인 나무 테이블 둘, 1인 책상 3×2
+    F("greenbox", 17, 31, 1, 7, { turn: Math.PI / 2, raw: true }); F("brickbench", 18, 31, 1, 7, { raw: true });
+    F("table", 19, 31, 2, 3, { raw: true, bench: "w" }); F("table", 19, 35, 2, 3, { raw: true, bench: "w" });
+    for (const x of [23, 26]) for (const y of [32, 34, 36]) F("duo", x, y, 1, 1, { raw: true });   // 11층 캔틴은 두 칸 좁아서 책상 열을 한 칸씩 당겼다
     R(30, 24, 20, 9, "코치룸", { doors: [{ s: "n", from: 4, len: 2 }, { s: "n", from: 13, len: 2 }] });
     Z(38, 25, 11, 7, "코치룸", "코치들이 일하는 오픈 데스크. 지정석 없이 그날 앉고 싶은 자리에 앉아요.");
     F("desk", 39, 27, 4, 2); F("desk", 44, 27, 4, 2); F("storage", 39, 31, 9, 1); F("plant", 47, 25, 2, 2);
@@ -116,16 +125,16 @@ export function makeFloor(f) {
     Z(1, 3, 5, 21, "페어존", "책상 다섯 개가 한 줄로 늘어선 자리. 두 사람이 모니터 하나를 같이 보며 페어 프로그래밍을 해요.", { tint: "#F4F2FA" });
     for (const y of [5, 9, 13, 17, 21]) F("pairrow", 2, y, 2, 2, { raw: true });   // 작은 강의실 쪽으로 3칸 당겼다   // 책상 하나에 의자 넷·모니터 둘(양쪽 한 쌍씩), 모두 모니터 10대
     Z(7, 1, 21, 11, "라이브러리", "12·13층을 잇는 복층 서재. 창가엔 조약돌과 풀 위에 1인 책상, 원형 서가에 기술서와 개발 문화 책이 빼곡해요.", { tint: "#FBF4E6" });
-    F("tower", 9, 3, 5, 5, { tall: true });   // 원형 서가는 13층 천장까지 솟아 있다
+    F("tower", 9, 3, 5, 5, { tall: true });   // 원형 서가는 13층 천장까지 솟아 있다. 북쪽(창가)이 트여 안으로 들어간다(정밀 충돌이 모양대로 깎는다)
     // 창가: 조약돌과 풀이 깔린 띠 위에 창을 보는 1인용 흰 책상, 의자는 띠 위(앉으러 걸어갈 수 있다)
-    F("pebbles", 8, 1, 19, 2); for (const x of [9, 12, 15, 18, 21, 24]) F("windowseat", x, 1, 1, 2);   // 이끼·디딤돌·나무 띠 위 흰 의자(방을 본다) + 띠 끝 원기둥 다리 흰 테이블
+    F("pebbles", 8, 1, 19, 2, { flush: true }); for (const x of [9, 14, 19, 24]) F("windowseat", x, 1, 2, 2, { beside: true });   // 이끼·디딤돌·나무 띠 위 창에 딱 붙인 원기둥 다리 흰 테이블 넷(띠도 창까지 깔고 나무는 없다), 의자는 띠를 따라 테이블 옆에서 테이블을 본다
     // 그 뒤로 통로 한 줄, 책장, 벽돌로 살짝 올라온 단(빈백 넷, 등받이는 책장 쪽), 식물이 우거진 벽돌 화단 둘
     F("shelf", 14, 4, 13, 1);
     F("brickdeck", 14, 5, 13, 3); for (const x of [15, 18, 21, 24]) F("beanbag", x, 5, 2, 2, { lift: DECK_H });
     F("greenbox", 14, 8, 4, 1); F("greenbox", 23, 8, 4, 1);
     F("halfround", 22, 9, 5, 2);   // 화단 앞 나무 반원 테이블: 곧은 쪽이 화단, 둥근 쪽에 의자
     // 보이저·아폴로는 한 칸 좁혀 동쪽으로 붙이고(가운데 복도도 한 칸), 계단과의 사이에 두 칸 틈을 낸다
-    meetings(["보이저", "아폴로", "디스커버리", "허블"], "12층 회의실은 우주 탐사선 이름이에요.", [35, 5]);
+    meetings(["보이저", "아폴로", "디스커버리", "허블"], "12층 회의실은 우주 탐사선 이름이에요.", 35);
     // 그 틈은 창으로 뻗은 회색 타일 길: 계단 밑엔 벽돌 화단과 나무 벤치, 맞은편 보이저·아폴로는 붉은 벽돌 벽에 발치 화단, 창가 끝에 작은 원탁
     for (const r of rooms) if (r.name === "보이저" || r.name === "아폴로") r.brick = "w";
     Z(33, 1, 2, 9, "계단 옆 길", "", { npc: false, tint: "#E4E3E0" });
@@ -137,14 +146,16 @@ export function makeFloor(f) {
     F("mtable", 29, 4, 1, 3, { side: "w" });   // 계단 난간에 딱 붙인 흰 테이블(세로), 의자는 서쪽에만 셋. 서쪽 줄로 계단 발치까지 지나간다
     F("rail", 31, 10, 2, 1, { edge: "n" });   // 계단 꼭대기 끝: 13층에서 막 내려와 발판이 쉬는 동안 남쪽으로 걸어도 계단 끝에서 떨어지지 않게
     // 라이브러리 남쪽, 엘리베이터 홀 가는 길에 캔틴과 같은 냉장고 → 정수기 → 싱크대 한 줄(앞이 남쪽)
-    F("fridge", 21, 15, 1, 1); F("purifier", 22, 15, 1, 1); F("counter", 23, 15, 4, 1, { props: ["sink", "coffee"] });   // 반원 테이블과 사이를 넓게(3칸 남쪽)
-    // 코워킹 존: 넓힌 뒤 좌표(raw). 작은 강의실 쪽으로 당겨 문 앞에 통로 세 줄만 남긴다. 가운데 칸막이는 벽돌 화단, 그 너머엔 독서실처럼 1인 칸막이 책상이 줄지어 붙어 있다
-    Z(7, 15, 10, 14, "코워킹 존", "끝이 안 보이게 긴 테이블 하나와 4인 테이블 셋. 식물이 우거진 벽돌 화단 앞에 나무 테이블이 붙어 있고, 화단 너머엔 독서실처럼 혼자 파고드는 1인 칸막이 자리가 줄지어 있어요.", { tint: "#FFF8DC", raw: true });
+    F("fridge", 21, 15, 1, 1, { turn: Math.PI }); F("purifier", 22, 15, 1, 1, { turn: Math.PI }); F("counter", 23, 15, 4, 1, { props: ["sink", "coffee"], turn: Math.PI });   // 냉장고·정수기·싱크대 모두 라이브러리 쪽(북)을 본다   // 반원 테이블과 사이를 넓게(3칸 남쪽)
+    // 코워킹 존: 넓힌 뒤 좌표(raw). 라이브러리 쪽(북)으로 두 칸 옮겨 작은 강의실 쪽에 나무 벽 화이트보드 자리를 낸다. 가운데 칸막이는 벽돌 화단, 그 너머엔 독서실처럼 1인 칸막이 책상이 줄지어 붙어 있다
+    Z(7, 13, 10, 15, "코워킹 존", "끝이 안 보이게 긴 테이블 하나와 4인 테이블 셋. 식물이 우거진 벽돌 화단 앞에 나무 테이블이 붙어 있고, 화단 너머엔 독서실처럼 혼자 파고드는 1인 칸막이 자리가 줄지어 있어요. 작은 강의실 쪽 나무 벽엔 큰 화이트보드가 걸려 있어요.", { tint: "#FFF8DC", raw: true });
     // 가운데 칸막이: 코워킹 쪽은 식물이 우거진 붉은 벽돌 화단, 칸막이 자리 쪽은 베이지 판
-    F("partition", 8, 16, 1, 12, { raw: true }); F("greenbox", 8, 16, 1, 12, { turn: Math.PI / 2, raw: true });
-    for (const y of [16, 19, 22, 25]) F("walltable", 9, y, 1, 2, { turn: Math.PI / 2, raw: true });   // 화단 앞 나무 테이블, 의자는 화단을 보고 앉는다
-    F("carrel", 7, 16, 1, 12, { turn: -Math.PI / 2, raw: true });   // 칸막이 바깥(서쪽) 면에 붙은 1인 칸막이 책상 12자리: 칸막이 너머 코워킹 존 쪽을 보고 앉는다
-    F("bigtable", 15, 16, 2, 12, { raw: true });   // 세로로 길게, 양쪽에 의자가 줄지어 있다
+    F("partition", 8, 14, 1, 12, { raw: true }); F("greenbox", 8, 14, 1, 12, { turn: Math.PI / 2, raw: true });
+    for (const y of [14, 17, 20, 23]) F("walltable", 9, y, 1, 2, { turn: Math.PI / 2, raw: true });   // 화단 앞 나무 테이블, 의자는 화단을 보고 앉는다
+    F("carrel", 7, 14, 1, 12, { turn: -Math.PI / 2, raw: true });   // 칸막이 바깥(서쪽) 면에 붙은 1인 칸막이 책상 12자리: 칸막이 너머 코워킹 존 쪽을 보고 앉는다
+    F("bigtable", 15, 14, 2, 12, { raw: true });   // 세로로 길게, 양쪽에 의자가 줄지어 있다
+    F("wbpost", 14, 13, 1, 1, { raw: true, board: "s" });   // 긴 테이블 북쪽 끝 서쪽 옆: 천장까지 이어진 굵은 나무 기둥(책상과 같은 나무), 남쪽 면에 함께 쓰는 화이트보드
+    F("wbwall", 9, 27, 4, 1, { raw: true, board: "n" });   // 코워킹 존 안 작은 강의실 쪽(남쪽 끝 줄): 나무로 된 직사각형 벽, 코워킹 쪽(북) 면에 큰 화이트보드. 양옆(7~8, 13~16)으로 작은 강의실 문까지 지나간다
     // 코워킹 존 맞은편: 하루들 부스(넓힌 뒤 좌표). 보라 매트 위에 뒷벽 현수막, 네 컷 만화를 세워 둔 카운터, 네 컷을 걸어 둔 이젤 둘. 코워킹 쪽(서쪽)을 본다
     Z(21, 18, 5, 7, "하루들 부스", "우리끼리 통하는 네컷만화, 하루들. 붓 꽂이에서 붓을 들고(F) 가운데 이젤을 누르면 다 같이 네컷을 그려요.", { tint: "#EFE7FB", raw: true });
     F("hbmat", 21, 18, 5, 7, { raw: true }); F("hbwall", 25, 18, 1, 7, { raw: true }); F("hbcounter", 23, 20, 1, 3, { raw: true });
@@ -167,12 +178,15 @@ export function makeFloor(f) {
     Z(19, 25, 15, 7, "캔틴", "간식과 음료를 꺼내 먹는 곳. 코치룸 벽을 따라 싱크대·정수기·냉장고가 있고, 흰 2인 책상과 6인 나무 테이블에 앉아 먹어요.", { tint: "#FFF4E0" });
     // 코치룸 벽에 붙여 90도 돌려 세운다(앞이 캔틴 쪽). 창가부터 냉장고 → 정수기 → 싱크대
     F("fridge", 33, 31, 1, 1, { turn: -Math.PI / 2 }); F("purifier", 33, 30, 1, 1, { turn: -Math.PI / 2 }); F("counter", 33, 27, 1, 3, { props: ["sink", "coffee"], turn: -Math.PI / 2 });
-    F("table", 20, 26, 2, 3); F("table", 25, 26, 2, 3);   // 6인 나무 테이블(세로)
-    for (const x of [20, 23, 26]) F("duo", x, 31, 1, 1);   // 1인용 흰 책상 + 의자 둘
-    for (const y of [26, 28]) F("duo", 29, y, 1, 1);
+    // 서쪽 끝(작은 강의실 벽 쪽): 식물이 우거진 벽돌 화단 한 줄, 그 앞에 쭉 이어진 벽돌 벤치(캔틴 쪽을 보고 앉는다). 넓힌 뒤 좌표(raw)
+    F("greenbox", 19, 31, 1, 7, { turn: Math.PI / 2, raw: true }); F("brickbench", 20, 31, 1, 7, { raw: true });
+    F("table", 21, 31, 2, 3, { raw: true, bench: "w" }); F("table", 21, 35, 2, 3, { raw: true, bench: "w" });   // 나무 테이블 둘을 벤치에 바짝 붙였다: 서쪽은 벤치에 앉고, 의자는 동쪽에만
+    for (const x of [26, 29]) for (const y of [32, 34, 36]) F("duo", x, y, 1, 1, { raw: true });   // 1인용 흰 책상 + 의자 둘
     R(34, 24, 13, 9, "코치룸", { doors: [{ s: "n", from: 3, len: 2 }, { s: "n", from: 9, len: 2 }] });
     Z(35, 25, 11, 7, "코치룸", "코치들이 일하는 오픈 데스크예요.");
-    F("desk", 36, 27, 4, 2); F("desk", 41, 27, 4, 2); F("storage", 36, 31, 9, 1);
+    // 개별 1인 책상이 남북으로 길게 세 줄(두 줄씩 마주 본다). 북쪽 문 앞(31)과 수납장 앞(36)은 지나다니는 길
+    for (const x of [36, 40, 44]) for (let y = 32; y <= 35; y++) { F("solodesk", x, y, 1, 1, { face: "e", raw: true }); F("solodesk", x + 1, y, 1, 1, { face: "w", raw: true }); }
+    F("storage", 36, 31, 9, 1);
     closed(47, 22, 9, 11, "서버실", "#E2E4EE"); for (const x of [49, 51, 53]) F("rack", x, 24, 1, 7);
   }
 
@@ -195,14 +209,13 @@ export function makeFloor(f) {
     Z(1, 11, 30, 1, "스타트랙 가는 길", "", { npc: false, tint: "#E4E3E0" });
     F("pillar", 9, 12, 1, 1);
     // 화면 뒤 빈 자리: 스테인리스 곡선 카운터가 나무 한 그루와 풀밭을 둘러싼다(화면 쪽 서쪽이 트였다)
-    F("arcplanter", 23, 14, 4, 4);
+    F("arcplanter", 18, 14, 4, 4);   // 원형 벤치 화단: 링 테이블 북서쪽 빈 자리(스타트랙 쪽)로
     // 스타트랙과 엘리베이터 홀 사이 복도(넓힌 뒤 좌표): 왼쪽은 붉은 벽돌 벽(점검문·소화전), 벽을 따라 걷는 길,
-    // 스타트랙 쪽엔 가운데 화분이 있는 스테인리스 링 테이블, 북쪽엔 바 스툴 높은 원탁, 벽에 기댄 바퀴 달린 화이트보드
+    // 스타트랙 쪽엔 가운데 화분이 있는 스테인리스 링 테이블, 북쪽엔 바 스툴 높은 원탁
     F("poster", 28, 22.5, 1, 1, { face: "w", at: 28.5 - .05 / S, raw: true });   // 스타트랙 쪽 벽돌 벽에도 모집 포스터
     F("walldeco", 27, 17, 1, 2, { item: "door", raw: true }); F("walldeco", 27, 21, 1, 1, { item: "hydrant", raw: true }); F("walldeco", 27, 24, 1, 2, { item: "door", raw: true });
-    F("whiteboard", 26, 14, 1, 1, { raw: true });
     F("ringtable", 22, 19, 3, 3, { raw: true });
-    F("hightable", 19, 15, 1, 1, { raw: true });   // 하이 테이블과 링 화단 사이 빈 자리
+    F("hightable", 16, 15, 1, 1, { raw: true });   // 원형 벤치 화단 서쪽(스타트랙 쪽) 옆
     // 계단 구멍과 안드로메다 같은 방 벽 사이: 벽에 등을 대고 구멍 너머 12층을 내려다보는 빈백 셋(계단 쪽 한 줄은 지나가는 길)
     for (const y of [4, 6, 8]) F("beanbag", 34, y, 1, 1, { yaw: -Math.PI / 2 });
     // 링 화단 너머: 철제 난간 두른 12층 계단
@@ -214,30 +227,33 @@ export function makeFloor(f) {
     F("counter", 45, 2, 1, 5, { face: "w", props: ["coffee", "sink", "micro"] }); F("island", 43, 3, 1, 4, { turn: -Math.PI / 2 });   /* 스툴은 서쪽, 카운터와 사이에 한 줄 통로 */ F("table", 38, 7, 3, 2);
     // 우물가(스타트랙 쪽에서 동쪽을 보면): 왼쪽(북)은 붉은 벽돌 벽에 움푹 들어간 4인 부스 셋, 가운데 통로,
     // 길쭉한 스테인리스 카운터가 서쪽 끝에서 둥글게 감싸고(창가 쪽은 트임), 안쪽 창가엔 나무 벤치와 원탁, 맨 끝 벽에 탕비 카운터
-    Z(14, 23, 20, 10, "우물가", "벽돌 벽에 쏙 들어간 4인 부스 둘과, 길쭉한 스테인리스 카운터 안 창가 벤치·원탁에 둘러앉는 곳. 끝 벽 탕비 카운터에서 커피를 받아 와요.", { tint: "#ECEBEA" });
-    for (const x of [18, 22]) F("booth4", x, 29, 4, 3, { raw: true });   // 스타트랙 화면 옆에서 남쪽으로 곧장 걸어가는 길은 막지 않는다(14~17 비움)
+    Z(14, 23, 20, 10, "우물가", "벽돌 벽에 쏙 들어간 4인 부스 셋과, 길쭉한 스테인리스 카운터 안 창가 벤치·원탁에 둘러앉는 곳. 끝 벽 탕비 카운터에서 커피를 받아 와요.", { tint: "#ECEBEA" });
+    for (const x of [18, 22, 26]) F("booth4", x, 29, 4, 3, { raw: true });   // 스타트랙 화면 옆에서 남쪽으로 곧장 걸어가는 길은 막지 않는다(14~17 비움)
     // 스타트랙 화면 옆에서 남쪽을 보면: 길게 뻗은 스테인리스 하이 테이블(동쪽에 바 스툴), 오른쪽(서) 벽엔 진회색 주방 수납장과 콘크리트 기둥·냉장고,
     // 왼쪽 앞으로 우물가 스테인리스 카운터의 둥근 끝이 살짝 보이고, 멀리 남쪽 창
     F("fridge", 14, 20, 1, 1, { turn: Math.PI / 2, tall: true, raw: true });   // 주방은 스타트랙 화면 바로 뒤(동쪽 면)에 붙어 동쪽을 본다
     F("kitchenrow", 14, 21, 1, 3, { raw: true }); F("pillar", 14, 24, 1, 1, { raw: true }); F("kitchenrow", 14, 25, 1, 4, { raw: true, upper: true });   // 화면을 따라 3칸 남쪽으로
     F("mcdesk", 13, 32, 2, 1, { raw: true });   // MC석: 객석 반타원 남쪽 끝(잘린 면)에 붙어 무대를 본다
     F("islandbar", 16, 21, 1, 6, { raw: true });   // 스타트랙 화면 바로 옆(동쪽)에서 시작해 남쪽으로 뻗는다
-    F("brickwall", 26, 29, 2, 1, { raw: true });
+    F("brickwall", 30, 29, 1, 1, { raw: true });   // 부스 셋 끝에 벽돌 벽 한 칸(31~32는 포커스 존 쪽으로 지나가는 길)
     F("stadium", 15, 33, 15, 6, { raw: true, a: 18, b: 27, cy: 36.2, r: 2.7 });   // 동쪽 끝 아래로 드나든다
     F("winbench", 18, 38, 9, 1, { raw: true });
     F("round", 19, 35, 2, 2, { raw: true }); F("round", 22, 34, 2, 2, { raw: true }); F("round", 25, 35, 2, 2, { raw: true });
     F("counter", 32, 34, 1, 3, { raw: true, face: "w", props: ["sink", "coffee", "micro"] }); F("purifier", 32, 37, 1, 1, { raw: true }); F("fridge", 32, 38, 1, 1, { raw: true });
-    // 은하수: 화장실 바로 아래 동쪽 끝, 세로로 긴 유리 회의실. 포커스 존 쪽으로 드나든다
-    R(51, 23, 5, 11, "은하수", { doors: [{ s: "w", from: 2, len: 2 }], planet: true });
-    Z(52, 24, 3, 9, "회의실 은하수", "화장실 옆 길쭉한 유리 회의실이에요.", { npc: false, tint: "#F4F2FA" });
-    F("tv", 54, 24, 1, 4, { face: "w" }); F("mtable", 53, 28, 1, 4);   // 문(서쪽) 맞은편 동쪽 벽에 모니터
+    // 은하수: 짧아진 화장실 바로 아래 동쪽 끝, 세로로 긴 유리 회의실(넓힌 뒤 좌표). 화장실 앞 통로 쪽(서쪽)으로 드나든다
+    R(51, 24, 5, 11, "은하수", { raw: true, doors: [{ s: "w", from: 2, len: 2 }], planet: true });
+    Z(52, 25, 3, 9, "회의실 은하수", "화장실 옆 길쭉한 유리 회의실이에요.", { npc: false, tint: "#F4F2FA", raw: true });
+    F("tv", 52, 33, 3, 1, { face: "n", raw: true }); F("mtable", 53, 28, 1, 4, { raw: true });   // 문(서쪽)으로 들어가 오른쪽 끝(남쪽) 벽에 모니터, 긴 테이블이 그쪽으로 뻗는다
+    // 은하수를 북쪽으로 당기고 남은 동남쪽 끝: 못 들어가는 창고
+    R(51, 35, 5, 5, "창고", { closed: true, raw: true }); Z(52, 36, 3, 3, "창고", "", { npc: false, tint: "#E6E5EC", raw: true }); F("crates", 52, 36, 2, 2, { raw: true });
     // 포커스 존: 은하수 옆 긴 방 하나. 창가(남)엔 긴 나무 하이 카운터와 높은 의자, 맞은편(북) 벽엔 키 큰 칸막이로 나눈 2인 페어 부스
-    R(33, 29, 19, 11, "포커스 존", { raw: true, doors: [{ s: "w", from: 1, len: 3 }, { s: "n", from: 5, len: 2 }, { s: "e", from: 2, len: 2 }] });
+    R(33, 29, 19, 11, "포커스 존", { raw: true, open: ["s", "e"], doors: [{ s: "w", from: 1, len: 3 }, { s: "n", from: 5, len: 2 }] });   // 동쪽 벽은 은하수·창고 벽을 같이 쓴다(겹쳐 그리면 깜빡인다)
     Z(34, 30, 17, 9, "포커스 존", "가운데 칸막이 부스에서 둘이 나란히 페어 프로그래밍을 하고, 창가 하이 카운터나 북쪽 벽을 따라 띄엄띄엄 놓인 등받이 높은 1인 소파에서 혼자 몰입해요.", { raw: true });
-    // 남북으로 세 띠: 북쪽 띠(30~32)는 띄엄띄엄 놓인 등받이 높은 1인 소파와 화이트보드, 가운데 띠(33~35)는 칸막이 페어 부스, 남쪽 띠(36~38)는 창가 하이 카운터
+    // 남북으로 세 띠: 북쪽 띠(30~33)는 띄엄띄엄 놓인 등받이 높은 1인 소파, 화이트보드, 그 앞 4인 나무 책상 셋, 가운데 띠(34~35)는 칸막이 페어 부스, 남쪽 띠(36~38)는 창가 하이 카운터
     for (const x of [34, 36, 41, 44, 47, 50]) F("pod", x, 30, 1, 1, { raw: true });   // 북쪽 벽을 따라 띄엄띄엄(38~39는 북쪽 문 앞)
     F("whiteboard", 39, 32, 1, 1, { raw: true });
-    for (const x of [34, 37, 42, 45, 48]) F("pairbooth", x, 33, 3, 2, { raw: true, back: true });   // 40~41은 띠 사이를 건너는 통로
+    for (const x of [34, 43, 47]) F("table", x, 32, 2, 1, { raw: true });   // 소파와 페어 부스 사이 4인 책상(양쪽에 둘씩), 북쪽 문 앞(36~42)은 비운다
+    for (const x of [34, 37, 42, 45, 48]) F("pairbooth", x, 34, 3, 2, { raw: true, back: true });   // 40~41은 띠 사이를 건너는 통로
     F("highbar", 34, 38, 17, 1, { raw: true });
   }
 
@@ -275,6 +291,17 @@ export const TOPS: Record<string, number> = {
   counter: .58, kitchenrow: .62, lowcounter: .62, island: .56, hightable: .66, mcdesk: .5, lectern: .66, pingpong: .66,
   greenbox: .55, planter: .3, plant: .36, crates: .5,
 };
+// 가구 하나가 막는 칸(격자). 들어가서 볼 때의 정밀 충돌(engine)도 이 칸 안에서만 모양을 깎는다
+export function furnCells(fl, o, set) {
+  if (o.kind === "screenwall") { // 16:9 화면은 높이에 맞춰 폭이 정해진다(engine screen169와 같은 셈): 보이는 폭만큼만 막는다
+    const along = (o.face === "w" ? o.h : o.w), len = along * S - .2, hh = Math.min(len * 9 / 16, o.big ? CEIL[fl.f] - .3 : 2.2), half = Math.min(len, hh * 16 / 9 * (o.wide || 1)) / S / 2, mid = along / 2;
+    for (let i = Math.floor(mid - half); i < Math.ceil(mid + half); i++) o.face === "w" ? set(o.x, o.y + i) : set(o.x + i, o.y);
+    return; }
+  if (o.kind === "pairbooth") { for (let i = 0; i < 3; i++) set(o.x + i, o.y); set(o.x, o.y + 1); return; }   // 책상 줄과 칸막이 옆 한 칸만 막는다(의자 자리는 열어 둔다)
+  if (o.kind === "booth4") { for (let i = 0; i < 2; i++) { set(o.x, o.y + i); set(o.x + 3, o.y + i); } set(o.x + 1, o.y); set(o.x + 2, o.y); return; }   // 벤치·테이블만 막고 부스 입구는 들어간다
+  if (o.kind === "stadium") { for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) if (stadiumWall(o, x + .5, y + .5)) set(x, y); return; }
+  if (WALK_THROUGH.has(o.kind)) return; for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) set(x, y);
+}
 export const WALK_THROUGH = new Set(["hbmat", "poster", "walldeco", "linelight", "bleacher", "arcbleacher", "flight", "brickdeck", "pebbles", "redsteps", "mirrorball", "trampoline", "ballpit"]);
 export const ELEV_SPAWN: [number, number] = [32.5, 15.5];   // 엘리베이터에서 내리는 자리(칸 한가운데)
 for (const fl of Object.values(FLOORS)) {
@@ -286,15 +313,7 @@ for (const fl of Object.values(FLOORS)) {
     for (let i = 0; i < r.h; i++) { if (!open("w", i)) set(r.x, r.y + i); if (!open("e", i)) set(r.x + r.w - 1, r.y + i); }
   }
   fl.wgrid = g.slice();
-  for (const o of fl.furn) {
-    if (o.kind === "screenwall") { // 16:9 화면은 높이에 맞춰 폭이 정해진다(engine screen169와 같은 셈): 보이는 폭만큼만 막는다
-      const along = (o.face === "w" ? o.h : o.w), len = along * S - .2, hh = Math.min(len * 9 / 16, o.big ? CEIL[fl.f] - .3 : 2.2), half = Math.min(len, hh * 16 / 9 * (o.wide || 1)) / S / 2, mid = along / 2;
-      for (let i = Math.floor(mid - half); i < Math.ceil(mid + half); i++) o.face === "w" ? set(o.x, o.y + i) : set(o.x + i, o.y);
-      continue; }
-    if (o.kind === "pairbooth") { for (let i = 0; i < 3; i++) set(o.x + i, o.y); set(o.x, o.y + 1); continue; }   // 책상 줄과 칸막이 옆 한 칸만 막는다(의자 자리는 열어 둔다)
-    if (o.kind === "booth4") { for (let i = 0; i < 2; i++) { set(o.x, o.y + i); set(o.x + 3, o.y + i); } set(o.x + 1, o.y); set(o.x + 2, o.y); continue; }   // 벤치·테이블만 막고 부스 입구는 들어간다
-    if (o.kind === "stadium") { for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) if (stadiumWall(o, x + .5, y + .5)) set(x, y); continue; }
-    if (WALK_THROUGH.has(o.kind)) continue; for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) set(x, y); }
+  for (const o of fl.furn) furnCells(fl, o, set);
   fl.grid = g;
   // 점프해서 올라설 수 있는 가구: 칸마다 윗면 높이. 올라설 수 없는 것과 겹친 칸은 0(벽처럼 막힌다)
   const top = new Float32Array(W * H);
@@ -335,11 +354,15 @@ export function flightHeight(o, x, y) {
   const n = flightSteps(o), t = o.dir === "e" ? (x - o.x) / o.w : (y - o.y) / o.h, i = Math.min(n - 1, Math.floor(t * n));
   return Math.max(.05, o.h0 + (o.h1 - o.h0) * (i + 1) / n);
 }
-// 가구 위에 올라선 높이(몸 한가운데 칸 기준). 0이면 바닥
-export const topAt = (fl, x, y) => { x = Math.floor(x); y = Math.floor(y); return x < 0 || y < 0 || x >= W || y >= H ? 0 : fl.top[y * W + x]; };
+// 가구 위에 올라선 높이. 0이면 바닥. 정밀 충돌이 있으면 몸이 걸친 윗면 중 가장 높은 곳, 없으면 몸 한가운데 칸
+export const topAt = (fl, x, y) => {
+  if (fl.fine) { let t = 0; bodyCells(x, y, (i) => { if (i >= 0 && fl.fine[i]) t = Math.max(t, fl.ftop[i]); }); return t; }
+  x = Math.floor(x); y = Math.floor(y); return x < 0 || y < 0 || x >= W || y >= H ? 0 : fl.top[y * W + x];
+};
 // 내가 지금 발 높이(feet)에서 (x, y)로 갈 수 있는지: 벽·못 오르는 가구는 막고, 오를 수 있는 가구는 발이 윗면 가까이 닿아야 올라선다
 export const CLIMB = .26;   // 그냥 걸어서 넘는 턱(객석 한 단 정도)
 export function canStand(fl, x, y, feet) {
+  if (fl.fine) { let ok = true; bodyCells(x, y, (i) => { if (ok && (i < 0 || fl.fine[i]) && (i < 0 || !fl.ftop[i] || fl.ftop[i] > feet + CLIMB)) ok = false; }); return ok; }
   for (const [cx, cy] of [[x - R_ME, y - R_ME], [x + R_ME, y - R_ME], [x - R_ME, y + R_ME], [x + R_ME, y + R_ME]]) {
     const tx = Math.floor(cx), ty = Math.floor(cy); if (tx < 0 || ty < 0 || tx >= W || ty >= H) return false;
     const i = ty * W + tx; if (!fl.grid[i]) continue; const t = fl.top[i]; if (!t || t > feet + CLIMB) return false;
@@ -368,9 +391,31 @@ export function applyLie(doll, lie) {
   if (lie) { r.rotation.set(-Math.PI / 2 + .3, lie.yaw, 0); r.position.x += Math.sin(lie.yaw) * .42; r.position.z += Math.cos(lie.yaw) * .42; r.position.y += .5; doll.blob.visible = false; }   // 빈백 위에 등을 기대고 비스듬히
   else if (r.rotation.x) { r.rotation.set(0, 0, 0); doll.blob.visible = true; }
 }
-export const fits = (fl, x, y) => !solid(fl, x - R_ME, y - R_ME) && !solid(fl, x + R_ME, y - R_ME) && !solid(fl, x - R_ME, y + R_ME) && !solid(fl, x + R_ME, y + R_ME);
-// 겹친 자리에서 가장 가까운, 걸어서 닿는 칸 한가운데
+export const fits = (fl, x, y) => {
+  if (fl.fine) { let ok = true; bodyCells(x, y, (i) => { if (i < 0 || fl.fine[i]) ok = false; }); return ok; }
+  return !solid(fl, x - R_ME, y - R_ME) && !solid(fl, x + R_ME, y - R_ME) && !solid(fl, x - R_ME, y + R_ME) && !solid(fl, x + R_ME, y + R_ME);
+};
+// (ax, ay)에서 (bx, by)까지 몸이 쓸고 지나가도 걸리지 않는지(몸 반지름보다 촘촘히 짚는다)
+export function sweep(fl, ax, ay, bx, by) {
+  const n = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / (R_ME * .8)));
+  for (let k = 0; k <= n; k++) if (!fits(fl, ax + (bx - ax) * k / n, ay + (by - ay) * k / n)) return false;
+  return true;
+}
+// 겹친 자리에서 가장 가까운, 걸어서 닿는 자리. 정밀 충돌이 있으면 칸 안을 촘촘히 뒤지고, 없으면 칸 한가운데
 export function nearestFree(fl, x, y) {
+  if (fl.fine) {
+    const R = fl.nreach, cx = Math.floor(x), cy = Math.floor(y);
+    if (cx >= 0 && cy >= 0 && cx < W && cy < H && R[cy * W + cx] && fits(fl, x, y) && sweep(fl, x, y, cx + .5, cy + .5)) return [x, y];
+    let best = null, bd = Infinity;
+    for (let rad = 0; rad < Math.max(W, H) && !(best && bd <= rad - 1); rad++) for (let ty = cy - rad; ty <= cy + rad; ty++) for (let tx = cx - rad; tx <= cx + rad; tx++) {
+      if (Math.max(Math.abs(tx - cx), Math.abs(ty - cy)) !== rad || tx < 0 || ty < 0 || tx >= W || ty >= H || !R[ty * W + tx]) continue;
+      for (let sy = 0; sy < 4; sy++) for (let sx = 0; sx < 4; sx++) {
+        const px = tx + (sx + .5) / 4, py = ty + (sy + .5) / 4, d = Math.hypot(px - x, py - y);
+        if (d < bd && fits(fl, px, py) && sweep(fl, px, py, tx + .5, ty + .5)) { bd = d; best = [px, py]; }
+      }
+    }
+    if (best) return best;
+  }
   if (fits(fl, x, y) && fl.reach[Math.floor(y) * W + Math.floor(x)]) return [x, y];
   let best = null, bd = Infinity;
   for (let rad = 0; rad < Math.max(W, H) && !best; rad++) for (let ty = Math.floor(y) - rad; ty <= Math.floor(y) + rad; ty++) for (let tx = Math.floor(x) - rad; tx <= Math.floor(x) + rad; tx++) {
@@ -380,3 +425,40 @@ export function nearestFree(fl, x, y) {
   return best || [...ELEV_SPAWN];
 }
 
+
+/* ════════════════ 정밀 충돌: 칸을 FN×FN으로 쪼갠 판 ════════════════ */
+// 들어가서 걸을 때는 칸 단위가 아니라 실제 그려진 모양(engine이 메시에서 깎는다)에 부딪힌다. 둥근 카운터·얇은 벽 옆 투명벽이 없다
+// fl.fine: 막힌 조각 1 · fl.ftop: 올라설 수 있는 윗면 높이(0이면 벽처럼 막힘). 없으면(배포 전 검사) 칸 격자로 돈다
+export const FN = 8, NW = W * FN, NH = H * FN;
+// 몸(반지름 R_ME 원)이 걸치는 조각마다 f(조각 번호). 판 밖이면 -1
+function bodyCells(x, y, f) {
+  const x0 = Math.floor((x - R_ME) * FN), x1 = Math.floor((x + R_ME) * FN), y0 = Math.floor((y - R_ME) * FN), y1 = Math.floor((y + R_ME) * FN), r2 = R_ME * R_ME;
+  for (let j = y0; j <= y1; j++) for (let i = x0; i <= x1; i++) {
+    const dx = x - clamp(x, i / FN, (i + 1) / FN), dy = y - clamp(y, j / FN, (j + 1) / FN);
+    if (dx * dx + dy * dy >= r2) continue;
+    f(i < 0 || j < 0 || i >= NW || j >= NH ? -1 : j * NW + i);
+  }
+}
+// 길찾기 판: 칸 한가운데에 설 수 있는지(walk), 옆 칸으로 걸어갈 수 있는지(ex: 동쪽, ey: 남쪽), 엘리베이터에서 닿는지(nreach)
+// 정밀 충돌이 없으면 칸 격자 그대로. 크루 배치·배포 전 검사는 칸 격자의 fl.reach를 쓴다
+export function buildNav(fl) {
+  const walk = new Uint8Array(W * H), ex = new Uint8Array(W * H), ey = new Uint8Array(W * H), nreach = new Uint8Array(W * H);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) walk[y * W + x] = fl.fine ? +fits(fl, x + .5, y + .5) : +!fl.grid[y * W + x];
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = y * W + x; if (!walk[i]) continue;
+    if (x + 1 < W && walk[i + 1]) ex[i] = fl.fine ? +sweep(fl, x + .5, y + .5, x + 1.5, y + .5) : 1;
+    if (y + 1 < H && walk[i + W]) ey[i] = fl.fine ? +sweep(fl, x + .5, y + .5, x + .5, y + 1.5) : 1;
+  }
+  Object.assign(fl, { walk, ex, ey });
+  const q = [Math.floor(ELEV_SPAWN[1]) * W + Math.floor(ELEV_SPAWN[0])]; nreach[q[0]] = 1;
+  for (let k = 0; k < q.length; k++) for (const n of navNext(fl, q[k])) if (!nreach[n]) { nreach[n] = 1; q.push(n); }
+  fl.nreach = nreach;
+}
+// 칸 i에서 걸어서 바로 갈 수 있는 옆 칸들
+export function navNext(fl, i) {
+  const out = [], x = i % W;
+  if (fl.ex[i]) out.push(i + 1); if (x > 0 && fl.ex[i - 1]) out.push(i - 1);
+  if (fl.ey[i]) out.push(i + W); if (i >= W && fl.ey[i - W]) out.push(i - W);
+  return out;
+}
+for (const fl of Object.values(FLOORS)) buildNav(fl);
