@@ -13,7 +13,7 @@ const STEP = { walk: 9.5, run: 15 }
 
 function DollView({ doll }: { doll: Doll }) {
   const motion = useRef<WalkMotion>({ phase: 0, amount: 0, sit: 0, swing: 0 })
-  const pose = useRef<AvatarPose>({ act: null, waving: false, air: false })
+  const pose = useRef<AvatarPose>({ act: null, waving: false, air: false, style: 0, actT: 0, noHead: false })
   const bob = useRef<THREE.Group>(null)
   useFrame((_, delta) => {
     const dt = Math.min(delta, 0.05), a = doll.anim, m = motion.current
@@ -21,7 +21,8 @@ function DollView({ doll }: { doll: Doll }) {
     if (a.air) m.phase = Math.PI / 2   // 점프: 다리를 앞뒤로 벌린 채
     else if (a.moving) m.phase += dt * (a.run ? STEP.run : STEP.walk)
     m.sit = THREE.MathUtils.damp(m.sit ?? 0, a.seated ? 1 : 0, 12, dt)
-    pose.current.act = a.act; pose.current.waving = a.waving; pose.current.air = a.air
+    m.sitH = a.seatH ?? 0.26
+    pose.current.act = a.act; pose.current.waving = a.waving; pose.current.air = a.air; pose.current.style = a.style; pose.current.actT = a.actT; pose.current.noHead = a.noHead
     if (bob.current) {
       bob.current.position.y = a.moving && !a.air && !a.seated ? Math.abs(Math.sin(m.phase)) * m.amount * 0.08 : 0
       bob.current.rotation.x = THREE.MathUtils.damp(bob.current.rotation.x, a.moving && a.run ? 0.14 : 0, 10, dt)

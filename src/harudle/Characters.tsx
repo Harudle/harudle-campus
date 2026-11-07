@@ -11,7 +11,7 @@ export type CharacterKind = 'harudle' | 'haru' | 'doodle'
 
 /** phase는 걸음 위치, amount는 0(서 있음)부터 1(걷는 중)까지의 세기다. */
 /** sit은 0(서 있음)에서 1(앉음)까지의 자세 값이고, swing은 붓을 휘두른 정도(0~1)다. */
-export type WalkMotion = { phase: number; amount: number; sit?: number; swing?: number }
+export type WalkMotion = { phase: number; amount: number; sit?: number; sitH?: number; swing?: number }
 
 type CharacterProps = {
   motion?: RefObject<WalkMotion>
@@ -81,8 +81,10 @@ export function useLegSwing(motion: RefObject<WalkMotion> | undefined, swing = 0
     if (!motion?.current) return
     const angle = Math.sin(motion.current.phase) * motion.current.amount * swing
     const sit = motion.current.sit ?? 0
-    if (left.current) left.current.rotation.x = THREE.MathUtils.lerp(angle, SEATED_LEG_ANGLE, sit)
-    if (right.current) right.current.rotation.x = THREE.MathUtils.lerp(-angle, SEATED_LEG_ANGLE, sit)
+    // 낮은 의자는 무릎을 앞으로 쭉, 바 스툴처럼 높은 자리는 다리를 아래로 늘어뜨린다(앉는 면 높이에 따라 사이)
+    const legAt = THREE.MathUtils.lerp(SEATED_LEG_ANGLE, -0.45, THREE.MathUtils.clamp(((motion.current.sitH ?? 0.26) - 0.3) / 0.3, 0, 1))
+    if (left.current) left.current.rotation.x = THREE.MathUtils.lerp(angle, legAt, sit)
+    if (right.current) right.current.rotation.x = THREE.MathUtils.lerp(-angle, legAt, sit)
   })
   return { left, right }
 }

@@ -92,6 +92,7 @@
 <div id="sideShow">
   <button type="button" id="showPeople" title="같이 있는 크루 보기" aria-label="같이 있는 크루 보기"><i class="dot"></i><em id="sideShowCnt">1</em>명</button>
   <button type="button" id="showChat" title="채팅 열기 (Enter)" aria-label="채팅 열기">💬 채팅<b id="sideShowBadge"></b></button>
+  <button type="button" id="chatPeek" hidden aria-live="polite"><b></b><span></span></button>
 </div>
 <aside id="side" aria-label="채팅과 크루">
   <button type="button" id="sideTab" aria-label="사이드바 접기/펼치기" title="사이드바 접기 (\)"><span class="chev">›</span><b id="sideTabBadge"></b></button>
@@ -132,7 +133,7 @@
 </aside>
 <section id="avPanel" hidden aria-label="내 캐릭터 꾸미기"><div class="avhead"><h4>내 캐릭터</h4><button type="button" class="btn" id="avDone">완료</button></div><div id="avBody"></div></section>
 <div id="lightbox" hidden><figure><img id="lbImg" alt=""><figcaption id="lbCap"></figcaption></figure></div>
-<section id="inv" hidden aria-label="인벤토리"><h4>인벤토리 <small>Tab으로 닫기 · 숫자로 바로 쓰기</small></h4><div id="invGrid"></div></section>
+<section id="inv" hidden aria-label="인벤토리"><h4>인벤토리</h4><div id="invGrid"></div></section>
 <div id="picker" hidden><div class="box"><h4>몇 층으로 갈까요?</h4><p class="pick-hint" style="margin:-4px 0 8px;font-size:12px;opacity:.7">숫자 1~4 · W/S로 고르고 F</p><div class="fl" id="pickList"></div><button class="btn ghost" id="pickClose" style="margin-top:10px;width:100%">그냥 있을게요</button></div></div>
 
 <!-- 모바일 전용: 왼쪽 조이스틱, 오른쪽 버튼 묶음 (터치 기기에서만 보인다) -->

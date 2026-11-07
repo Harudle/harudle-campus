@@ -8,8 +8,12 @@ export type DollAnim = {
   run: boolean
   air: boolean
   seated: boolean
-  act: 'draw' | 'wave' | 'heart' | 'laptop' | 'coffee' | 'dance' | 'gun' | null
+  seatH?: number
+  act: 'draw' | 'wave' | 'heart' | 'laptop' | 'coffee' | 'dance' | 'gun' | 'read' | null
   waving: boolean
+  style: number   // 춤 번호(0~9)
+  actT: number    // 동작을 시작한 뒤 흐른 시간(춤 팔을 엔진의 박자에 맞춘다)
+  noHead: boolean // 1인칭의 내 캐릭터: 카메라가 머리 안에 있으니 머리만 숨긴다
 }
 
 export type Doll = {
@@ -44,13 +48,16 @@ export function makeDoll(kind: Doll['kind'], config: AvatarConfig | null, blob: 
   let heading = 0
   const doll: Doll = {
     id: nextId++, kind, config, root, turn, blob, look: config,
-    anim: { moving: false, run: false, air: false, seated: false, act: null, waving: false },
+    anim: { moving: false, run: false, air: false, seated: false, act: null, waving: false, style: 0, actT: 0, noHead: false },
     update(dt, _t, moving, wantHeading, _seed = 0, waving = false, act = null, air = false, run = false) {
       if (wantHeading !== undefined && wantHeading !== null) heading = wantHeading
       turn.rotation.y += turnTo(turn.rotation.y, heading) * Math.min(1, dt * (kind === 'dog' ? 10 : 12))
       Object.assign(doll.anim, { moving, run, air, act, waving })
     },
-    setSeated(v) { doll.anim.seated = !!v },
+    setSeated(v: any) { // v: 앉은 자리({ h }) 또는 true/false. 높은 자리면 그만큼 몸을 올리고, 다리는 높이에 맞게 굽힌다
+      doll.anim.seated = !!v; doll.anim.seatH = v && typeof v === 'object' && v.h != null ? v.h : 0.26
+      if (v) root.position.y += Math.max(0, doll.anim.seatH - 0.26)
+    },
   }
   live.set(doll.id, doll); changed()
   return doll

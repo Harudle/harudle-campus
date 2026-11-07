@@ -24,8 +24,13 @@ body{background:var(--ground);color:var(--ink);font-family:var(--body);overflow:
 .name-tag{font-family:var(--hand);font-weight:700;font-size:14px;background:rgba(255,255,255,.92);border-radius:8px;padding:0 6px}
 .name-tag.me{background:var(--brand);color:var(--brand-strong);border:1.5px solid var(--ink)}
 .name-tag.peer{background:#E6F3EB}
-.bub{font-family:var(--hand);font-size:17px;background:var(--paper);border:2px solid var(--ink);border-radius:14px 14px 14px 4px;padding:2px 10px;max-width:220px;overflow:hidden;text-overflow:ellipsis}
-.bub.hint{background:var(--brand-weak);font-size:15px}
+.bub{font-family:var(--hand);font-size:20px;background:var(--paper);border:2px solid var(--ink);border-radius:16px 16px 16px 5px;padding:4px 13px;max-width:280px;overflow:hidden;text-overflow:ellipsis}
+.bub.hint{background:var(--brand-weak);font-size:15px;padding:2px 10px;border-radius:14px 14px 14px 4px}
+.zzz{font-family:var(--hand);font-weight:700;color:#fff;-webkit-text-stroke:1.5px var(--ink);paint-order:stroke fill;pointer-events:none}
+.zzz i{display:inline-block;font-style:normal;animation:zzz 2.4s ease-in-out infinite;opacity:0}
+.zzz i:nth-child(1){font-size:14px;animation-delay:0s}.zzz i:nth-child(2){font-size:18px;animation-delay:.6s}.zzz i:nth-child(3){font-size:23px;animation-delay:1.2s}
+@keyframes zzz{0%{opacity:0;transform:translateY(6px)}25%,65%{opacity:1}100%{opacity:0;transform:translateY(-10px)}}
+@media (prefers-reduced-motion:reduce){.zzz i{animation:none;opacity:1}}
 .hud{position:fixed;z-index:5;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .chip{background:var(--paper);border:2px solid var(--ink);border-radius:14px 16px 13px 15px;padding:6px 12px;box-shadow:2px 3px 0 var(--ink);font-family:var(--hand);font-size:18px;line-height:1.1;color:var(--ink)}
 button.chip{cursor:pointer}
@@ -65,7 +70,8 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--brand);outline-
 #camBtns{right:max(12px,env(safe-area-inset-right,0px));bottom:calc(70px + env(safe-area-inset-bottom,0px));flex-direction:column}
 #camBtns button{width:40px;height:40px;padding:0;font-size:20px}
 #camBtns #viewBtn{width:auto;padding:0 12px;font-size:14px;font-weight:700;background:var(--yellow,#FFD43B)}
-#act{position:fixed;z-index:6;left:50%;transform:translateX(-50%);bottom:calc(120px + env(safe-area-inset-bottom,0px))}
+#act{position:fixed;z-index:6;left:50%;transform:translateX(-50%);bottom:calc(120px + env(safe-area-inset-bottom,0px));font-size:24px;padding:10px 22px;border-width:3px;border-radius:16px;box-shadow:3px 4px 0 var(--ink);display:flex;align-items:center;gap:10px}/* 할 수 있는 일은 이 버튼 하나로만 알린다(머리 위 말풍선 없이) */
+body:not(.touch) #act::before{content:"F";font-family:var(--body);font-size:16px;font-weight:700;min-width:28px;height:28px;display:grid;place-items:center;background:var(--paper);color:var(--ink);border:2px solid var(--ink);border-radius:8px;box-shadow:0 2px 0 var(--ink)}
 #panel{position:fixed;z-index:20;top:0;right:0;bottom:0;width:min(420px,100%);background:var(--paper);border-left:3px solid var(--ink);display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);transform:translateX(105%);transition:transform .28s ease;-webkit-user-select:text;user-select:text}
 #panel.open{transform:none}
 #avPanel{position:fixed;z-index:22;top:calc(64px + env(safe-area-inset-top,0px));left:12px;width:min(340px,calc(100% - 24px));max-height:calc(100% - 150px);overflow:auto;background:var(--paper);border:3px solid var(--ink);border-radius:18px;box-shadow:3px 4px 0 var(--ink);padding:12px 14px;font-family:var(--hand)}
@@ -337,4 +343,19 @@ body.sideTucked:not(.touch) #zoneToast{left:50%}
 #sideShow b{min-width:17px;padding:0 5px;border-radius:999px;background:#F15B5B;color:#fff;font:700 10.5px/1.6 "Pretendard",sans-serif;display:none}
 #sideShow b.on{display:inline-block}
 body.sideTucked:not(.touch) #sideShow{display:flex}
+/* 새 채팅 알림(사이드바를 접었을 때): 버튼이 톡 튀고 배지가 팝, 아래에 보낸 사람·내용 말풍선. 안 읽은 게 있으면 테두리가 은은하게 깜빡인다 */
+#sideShow{align-items:flex-start}
+#showChat.ping{animation:chatPing .6s cubic-bezier(.3,1.6,.5,1)}
+#showChat.ping b.on{animation:badgePop .45s cubic-bezier(.3,1.8,.5,1)}
+#showChat.hasNew{border-color:rgba(241,91,91,.55);animation:chatGlow 1.8s ease-in-out infinite}
+#showChat.hasNew.ping{animation:chatPing .6s cubic-bezier(.3,1.6,.5,1),chatGlow 1.8s ease-in-out .6s infinite}
+@keyframes chatPing{0%{transform:scale(1)}30%{transform:scale(1.12) rotate(-3deg)}55%{transform:scale(.96) rotate(2deg)}100%{transform:none}}
+@keyframes badgePop{0%{transform:scale(.2)}100%{transform:scale(1)}}
+@keyframes chatGlow{0%,100%{box-shadow:0 6px 18px rgba(40,24,90,.12),0 0 0 0 rgba(241,91,91,.35)}50%{box-shadow:0 6px 18px rgba(40,24,90,.12),0 0 0 6px rgba(241,91,91,0)}}
+#sideShow #chatPeek{position:absolute;top:44px;right:0;height:auto;max-width:280px;padding:8px 12px;display:block;text-align:left;border-radius:12px 4px 12px 12px;line-height:1.4;
+  font-weight:500;opacity:0;transform:translateY(-6px);transition:opacity .2s,transform .2s;pointer-events:none}
+#sideShow #chatPeek.on{opacity:1;transform:none;pointer-events:auto}
+#sideShow #chatPeek b{display:block;min-width:0;padding:0;background:none;color:#7B5BD6;font:700 11.5px "Pretendard",sans-serif;border-radius:0}
+#sideShow #chatPeek span{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-all}
+@media (prefers-reduced-motion:reduce){#showChat.ping,#showChat.ping b.on,#showChat.hasNew{animation:none}#sideShow #chatPeek{transition:none}}
 #side.tucked #sideTab{display:none}
