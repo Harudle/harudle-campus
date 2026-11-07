@@ -55,11 +55,30 @@ async function feed() {
   return feedCache.pending;
 }
 
+// 피드 하나가 있는지(헤드셋 해금 확인). 확인한 것은 기억해 두고, 하루들이 응답하지 않으면 있다고 본다
+const feedSeen = new Map();
+async function feedExists(id) {
+  if (feedSeen.has(id)) return feedSeen.get(id);
+  try {
+    const res = await fetch(`${HARUDLE}/api/v1/feeds/${id}`, { headers: { accept: "application/json", "user-agent": "wooteco-metaverse/1.0" }, signal: AbortSignal.timeout(5000) });
+    if (res.status === 404) { feedSeen.set(id, false); return false; }
+    if (!res.ok) return true;
+    feedSeen.set(id, true); if (feedSeen.size > 5000) feedSeen.clear(); return true;
+  } catch { return true; }
+}
+
 /* ───────── HTTP ───────── */
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");
   try {
     if (url.pathname === "/healthz") { res.writeHead(200, { "content-type": "text/plain", "cache-control": "no-store" }); return res.end(`ok ${VERSION}`); }
+    if (url.pathname === "/api/feed-check") {   // 헤드셋 해금: 붙여넣은 하루들 피드가 진짜 있는지
+      const id = url.searchParams.get("id") || "";
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) { res.writeHead(400, { "content-type": "application/json" }); return res.end('{"ok":false}'); }
+      const ok = await feedExists(id);
+      res.writeHead(ok ? 200 : 404, { "content-type": "application/json", "cache-control": "no-store" });
+      return res.end(JSON.stringify({ ok }));
+    }
     if (url.pathname === "/api/feed") {
       const body = await feed();
       res.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
@@ -91,7 +110,7 @@ function sanitize(p) {
   return {
     f: [11, 12, 13, 14].includes(p.f) ? p.f : 11, x: num(p.x, 0, 56), y: num(p.y, 0, 40), u: num(p.u, 0, 2), h: num(p.h, -7, 7),
     m: p.m ? 1 : 0, r: p.r ? 1 : 0, look: Math.floor(num(p.look, 0, 99)), jc: Math.floor(num(p.jc, 0, 1e9)), ac: Math.floor(num(p.ac, 0, 1e9)),
-    br: p.br ? 1 : 0, bc: typeof p.bc === "string" && /^#[0-9a-f]{6}$/i.test(p.bc) ? p.bc : null, l: p.l ? 1 : 0, ly: num(p.ly, -7, 7), st: p.st ? 1 : 0, av: typeof p.av === "string" && /^[0-9a-z]{7}([0-9A-F]{6}){6}$/.test(p.av) ? p.av : null, an: ["draw", "wave", "heart", "laptop", "coffee", "dance", "gun"].includes(p.an) ? p.an : null, lp: p.lp ? 1 : 0, gn: p.gn ? 1 : 0, fk: p.fk ? 1 : 0, hc: Math.floor(num(p.hc, 0, 1e9)), hd: num(p.hd, -50, 50), dn: p.dn ? 1 : 0, fc: Math.floor(num(p.fc, 0, 1e9)), fh: num(p.fh, -50, 50), as: Math.floor(num(p.as, 0, 1e7)), rm: clean(p.rm, 40), 
+    br: p.br ? 1 : 0, bc: typeof p.bc === "string" && /^#[0-9a-f]{6}$/i.test(p.bc) ? p.bc : null, l: p.l ? 1 : 0, ly: num(p.ly, -7, 7), st: p.st ? 1 : 0, av: typeof p.av === "string" && /^[0-9a-z]{7}([0-9A-F]{6}){6}[0-9a-z]?$/.test(p.av) ? p.av : null, an: ["draw", "wave", "heart", "laptop", "coffee", "dance", "gun"].includes(p.an) ? p.an : null, lp: p.lp ? 1 : 0, gn: p.gn ? 1 : 0, fk: p.fk ? 1 : 0, hc: Math.floor(num(p.hc, 0, 1e9)), hd: num(p.hd, -50, 50), dn: p.dn ? 1 : 0, fc: Math.floor(num(p.fc, 0, 1e9)), fh: num(p.fh, -50, 50), as: Math.floor(num(p.as, 0, 1e7)), rm: clean(p.rm, 40), 
   };
 }
 /* ───────── 하루들 부스 공유 이젤: 획(stroke)을 모아 두고 모두에게 나눈다 ─────────

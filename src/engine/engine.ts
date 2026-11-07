@@ -3,8 +3,9 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
-import { AVATAR_COLOR_PARTS, AVATAR_COLORS, AVATAR_OPTIONS, AVATAR_PRESETS, sanitizeAvatar, type AvatarConfig } from "../harudle/avatarData";
+import { AVATAR_COLOR_PARTS, AVATAR_COLORS, AVATAR_OPTIONS, AVATAR_PRESETS, LOCKED_OPTIONS, sanitizeAvatar, type AvatarConfig } from "../harudle/avatarData";
 import { dropDoll, makeDoll } from "./dolls";
+import { avatarPreview } from "../scene/avatarPreviewStore";
 import recruitPosterUrl from "../assets/recruit-poster-2026.png";
 import comicWinterUrl from "../assets/booth/comic-winter.jpg";
 import comicCastellaUrl from "../assets/booth/comic-castella.jpg";
@@ -1140,24 +1141,26 @@ const accHex = (c) => new THREE.Color(c).getHex();
 // ─── 하루들 캐릭터: 모양은 Harudle/harudle-world의 <Avatar>·<Doodle>을 그대로 쓴다 (src/harudle) ───
 // 엔진은 자리·방향·자세만 맡고, 그리는 일은 src/scene/Dolls.tsx가 한다.
 const AV: Record<string, string[]> = Object.fromEntries(Object.entries(AVATAR_OPTIONS).map(([k, opts]) => [k, opts.map((o) => o.value)]));
-const PART_LABELS = { head: "머리", face: "표정", eyewear: "안경", outfit: "옷", neck: "목", bag: "가방", held: "손에 든 것" };   // 하루들 월드 AvatarCustomizer와 같은 이름
+const PART_LABELS = { head: "머리", ear: "귀", face: "표정", eyewear: "안경", outfit: "옷", neck: "목", bag: "가방", held: "손에 든 것" };   // 하루들 월드 AvatarCustomizer와 같은 이름
 const AV_LABEL: Record<string, Record<string, string>> = Object.fromEntries(Object.entries(AVATAR_OPTIONS).map(([k, opts]) => [k, { _: PART_LABELS[k], ...Object.fromEntries(opts.map((o) => [o.value, o.label])) }]));
 const AV_COLORS = AVATAR_COLORS.map((c) => c.value as string);
 const AV_SKINS = AVATAR_COLORS.filter((c) => c.label.startsWith("피부") && c.label !== "피부 4").map((c) => c.value as string);
 const AV_COLOR_PARTS = AVATAR_COLOR_PARTS.map((p) => [p.key, p.label] as const);
-const AV_PARTS = Object.keys(AV);
+const AV_PARTS = ["head", "ear", ...Object.keys(AV).filter((k) => k !== "head" && k !== "ear")];   // 꾸미기 창 순서: 머리 장식 바로 아래 귀 장식
+const AV_CODE_PARTS = ["head", "face", "eyewear", "outfit", "neck", "bag", "held"];   // 보내는 글자 앞 7개(예전 그대로). 귀처럼 나중에 생긴 부위는 색 뒤에 붙인다
+const AV_EXTRA_PARTS = ["ear"];
 const AV_PRESETS = AVATAR_PRESETS.map((p) => [p.label, p.config] as const);
 const DEFAULT_AV: AvatarConfig = AVATAR_PRESETS[0].config;
-// 다른 크루에게 보낼 43글자: 부위 7개(한 글자씩) + 색 6개(16진수 여섯 글자씩, 직접 고른 색도 된다)
-const avEncode = (c: AvatarConfig) => AV_PARTS.map((p) => Math.max(0, AV[p].indexOf(c[p])).toString(36)).join("") + AV_COLOR_PARTS.map(([k]) => (c[k] || "#FFFFFF").slice(1).toUpperCase()).join("");
+// 다른 크루에게 보낼 44글자: 부위 7개(한 글자씩) + 색 6개(16진수 여섯 글자씩, 직접 고른 색도 된다) + 귀 장식 한 글자(없으면 예전 43글자로 읽는다)
+const avEncode = (c: AvatarConfig) => AV_CODE_PARTS.map((p) => Math.max(0, AV[p].indexOf(c[p])).toString(36)).join("") + AV_COLOR_PARTS.map(([k]) => (c[k] || "#FFFFFF").slice(1).toUpperCase()).join("") + AV_EXTRA_PARTS.map((p) => Math.max(0, AV[p].indexOf(c[p])).toString(36)).join("");
 function avDecode(s: unknown): AvatarConfig | null {
-  if (typeof s !== "string" || !/^[0-9a-z]{7}([0-9A-F]{6}){6}$/.test(s)) return null;
-  return sanitizeAvatar({ ...Object.fromEntries(AV_PARTS.map((p, i) => [p, AV[p][parseInt(s[i], 36)]])), ...Object.fromEntries(AV_COLOR_PARTS.map(([k], i) => [k, "#" + s.slice(7 + i * 6, 13 + i * 6)])) });
+  if (typeof s !== "string" || !/^[0-9a-z]{7}([0-9A-F]{6}){6}[0-9a-z]?$/.test(s)) return null;
+  return sanitizeAvatar({ ...Object.fromEntries(AV_CODE_PARTS.map((p, i) => [p, AV[p][parseInt(s[i], 36)]])), ...Object.fromEntries(AV_COLOR_PARTS.map(([k], i) => [k, "#" + s.slice(7 + i * 6, 13 + i * 6)])), ...Object.fromEntries(AV_EXTRA_PARTS.map((p, i) => [p, AV[p][parseInt(s[43 + i] || "0", 36)]])) });
 }
 // 하루들 월드 randomAvatar와 같은 규칙 (피부는 밝은 색에서만). 크루는 닉네임으로 정해져 누가 봐도 같은 모습
 function avRandom(r = Math.random): AvatarConfig {
   const pick = <T,>(a: readonly T[]) => a[Math.floor(r() * a.length)], c: Record<string, string> = {};
-  for (const p of AV_PARTS) c[p] = pick(AV[p]);
+  for (const p of AV_PARTS) c[p] = pick(AV[p].filter((v) => !LOCKED_OPTIONS[p]?.includes(v)));   // 잠긴 장식은 랜덤으로 나오지 않는다
   for (const [k] of AV_COLOR_PARTS) c[k] = pick(AV_COLORS);
   c.skinColor = pick(AV_SKINS); return sanitizeAvatar(c);
 }
@@ -1798,7 +1801,25 @@ function ezUndo() { const S = ezState(); for (let i = S.strokes.length - 1; i >=
 function ezRedoOne() { const S = ezState(), id = S.redo.pop(), st = id && S.strokes.find((x) => x.id === id); if (st) { st.h = 0; netSend({ t: "ez", b: S.b, k: "redo", u: S.uid }); ezRedraw(true); } }
 // 바로가기: harudle.com · 인스타그램. 누르거나(클릭·탭) 앞에서 F → 새 탭
 const linkBoards: THREE.Mesh[] = [];
-function openLink(url) { if (locked()) document.exitPointerLock(); window.open(url, "_blank", "noopener"); showToast("새 탭으로 열었어요", url.replace(/^https:\/\/(www\.)?/, "").replace(/\/$/, ""), 2000); }
+function openLink(url) { if (locked()) document.exitPointerLock(); window.open(url, "_blank", "noopener"); showToast("새 탭으로 열었어요", url.replace(/^https:\/\/(www\.)?/, "").replace(/\/$/, ""), 2000);
+  if (url.includes("instagram.com") && !unlocked("airpods")) { LS.set("ww.unlock.airpods", "1"); renderAvPanel(); setTimeout(() => showToast("🎧 에어팟이 풀렸어요!", "캐릭터 외형 수정 › 귀에서 골라 보세요.", 4200), 1200); }   // 하루들 부스 인스타그램 바로가기를 한 번 열면 해금
+  else if (url.startsWith("https://www.harudle.com") && !unlocked("headset")) setTimeout(() => showToast("네컷만화를 피드에 올려 보세요", "올린 피드 링크를 캐릭터 외형 수정 › 귀 › 🔒 헤드셋에 붙여넣으면 헤드셋이 풀려요.", 5200), 1200);
+}
+// 잠긴 장식(LOCKED_OPTIONS): 이 브라우저에서 풀었는지. 푸는 방법은 장식마다 다르다
+const unlocked = (v) => LS.get(`ww.unlock.${v}`) === "1";
+const LOCK_TIPS = { airpods: "하루들 이벤트 부스를 찾아가 인스타그램 팔로우하면 해금돼요", headset: "하루들 이벤트 부스에서 '네컷만화 만들러 가기'로 만화를 만들어 피드에 올린 뒤, 그 링크를 붙여넣으면 해금돼요" };
+// 헤드셋: 하루들 피드 링크를 붙여넣으면 서버가 하루들에 그 피드가 있는지 물어보고 푼다(서버가 없으면 링크 모양만 본다)
+const FEED_LINK = /^https?:\/\/(?:www\.)?harudle\.com\/feeds\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:[/?#]|$)/i;
+const avUnlock = { open: false, link: "", msg: "", busy: false };
+async function tryFeedUnlock() {
+  const m = FEED_LINK.exec(avUnlock.link.trim()); if (!m) { avUnlock.msg = "하루들 피드 링크(https://www.harudle.com/feeds/…)를 붙여넣어 주세요."; renderAvPanel(); return; }
+  avUnlock.busy = true; avUnlock.msg = "피드를 확인하는 중…"; renderAvPanel();
+  let ok = true; try { const r = await fetch(`/api/feed-check?id=${m[1]}`); if (r.status === 404) ok = false; } catch { }
+  avUnlock.busy = false;
+  if (!ok) { avUnlock.msg = "그 피드를 찾을 수 없어요. 피드에 올린 뒤 공유 링크를 다시 붙여넣어 주세요."; renderAvPanel(); return; }
+  LS.set("ww.unlock.headset", "1"); avUnlock.open = false; avUnlock.msg = ""; setMyAv({ ...myAv, ear: "headset" });
+  showToast("🎧 헤드셋이 풀렸어요!", "에어팟 맥스를 바로 껴 봤어요. 귀에서 언제든 바꿀 수 있어요.", 4200);
+}
 const siteTex = canvasTex(512, 512, (g, w, h) => {
   const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, "#EFE7FB"); gr.addColorStop(1, "#C9B8F0"); g.fillStyle = gr; g.fillRect(0, 0, w, h);
   g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = "#111118"; g.font = `800 92px "Pretendard","Apple SD Gothic Neo",sans-serif`; g.fillText("Harudle", w / 2, 150);
@@ -1974,6 +1995,7 @@ addEventListener("keydown", (e) => {
     if (!profile.hidden) { closeProfile(); return; }
     if (!lb.hidden) { lb.hidden = true; return; }   // 크게 본 사진부터 한 겹씩 닫는다(뒤의 크루 피드는 그대로)
     // 창(크루 피드·캐릭터 꾸미기 등)을 닫을 때도 설정창과 같이: 바로 고정하면 같은 Esc에 풀려 설정창이 떴다 → 다음 키에서 고정한다
+    if (closeColorPop()) return;   // 색 고르는 창이 떠 있으면 그것부터 닫는다
     const was = uiOpen(); holdLock = true; closePanel(); picker.hidden = true; inv.hidden = true; closeAvPanel(); lb.hidden = true; holdLock = false;
     if (was) { menuQuietUntil = performance.now() + 800; relockOnKey = true; return; }
     if (!TOUCH && !sideTucked) { tuckSide(true); return; }   // 사이드바가 열려 있으면 먼저 접는다
@@ -2280,28 +2302,58 @@ guide.addEventListener("click", (e) => { if (e.target === guide) closeGuide(); }
 // 걷기만 하고 달려 본 적이 없으면 한 번 알려 준다
 let walkFor = 0, runTipShown = false;
 const actBtn = document.getElementById("act"); actBtn.onclick = interact;
-function setMyAv(c) { myAv = { ...c }; LS.set("ww.avatar", avEncode(myAv)); const vis = meDoll.root.visible; dropDoll(meDoll); meDoll = makeChar(myAv); meDoll.root.visible = vis; scene.add(meDoll.root); sendPresence(true); renderAvPanel(); }
+function setMyAv(c) { myAv = { ...c }; LS.set("ww.avatar", avEncode(myAv)); const vis = meDoll.root.visible; dropDoll(meDoll); meDoll = makeChar(myAv); meDoll.root.visible = vis; scene.add(meDoll.root); sendPresence(true); renderAvPanel(); avatarPreview.set({ config: { ...DEFAULT_AV, ...myAv } }); }
 // 캐릭터 꾸미기 (하루들 월드의 AvatarCustomizer와 같은 항목)
 const avPanel = document.getElementById("avPanel"); let avColorPart = "headColor", avCamBack = null;
 function renderAvPanel() {
   if (avPanel.hidden) return;
-  const rows = AV_PARTS.map((part) => `<div class="avrow"><b>${AV_LABEL[part]._}</b><div class="avchips">${AV[part].map((v) => `<button type="button" data-part="${part}" data-v="${v}" aria-pressed="${myAv[part] === v}">${AV_LABEL[part][v]}</button>`).join("")}</div></div>`).join("");
-  const tabs = AV_COLOR_PARTS.map(([k, l]) => `<button type="button" data-cpart="${k}" aria-pressed="${avColorPart === k}">${l}</button>`).join("");
-  const sw = (avColorPart === "skinColor" ? AV_SKINS.concat(AV_COLORS.filter((c) => !AV_SKINS.includes(c))) : AV_COLORS).map((c) => `<button type="button" class="sw" data-color="${c}" style="background:${c}" aria-label="${c}" aria-pressed="${myAv[avColorPart] === c}"></button>`).join("");
-  document.getElementById("avBody").innerHTML = `<div class="avchips presets">${AV_PRESETS.map(([l], i) => `<button type="button" data-preset="${i}">${l}</button>`).join("")}<button type="button" data-random="1">랜덤</button></div>${rows}<div class="avrow"><b>색</b><div class="avchips">${tabs}</div><div class="swatches">${sw}</div><label class="custom">직접 고르기 <input type="color" data-custom="1" value="${String(myAv[avColorPart]).toLowerCase()}"></label></div>`;
+  const chip = (part, v) => LOCKED_OPTIONS[part]?.includes(v) && !unlocked(v)
+    ? `<button type="button" class="locked" data-lock="${v}" data-tip="${LOCK_TIPS[v]}" aria-disabled="true" aria-label="${AV_LABEL[part][v]} (잠김) · ${LOCK_TIPS[v]}">🔒 ${AV_LABEL[part][v]}</button>`
+    : `<button type="button" data-part="${part}" data-v="${v}" aria-pressed="${myAv[part] === v}">${AV_LABEL[part][v]}</button>`;
+  const esc = (t) => t.replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]);
+  const unlockBox = avUnlock.open && !unlocked("headset") ? `<div class="avunlock"><p>${LOCK_TIPS.headset}</p><div class="row"><input id="avFeedLink" type="url" inputmode="url" autocomplete="off" placeholder="https://www.harudle.com/feeds/…" value="${esc(avUnlock.link)}"><button type="button" class="btn" data-unlock-go="1"${avUnlock.busy ? " disabled" : ""}>확인</button></div>${avUnlock.msg ? `<p class="msg">${esc(avUnlock.msg)}</p>` : ""}</div>` : "";
+  // 색을 고를 수 있는 부위는 줄 이름 옆에 지금 색 동그라미 버튼: 누르면 옆에 색 고르는 창이 뜬다
+  const cbtn = (k) => `<button type="button" class="cbtn" data-cpart="${k}" style="--c:${myAv[k]}" aria-expanded="${avColorOpen && avColorPart === k}" aria-label="${AV_COLOR_NAME[k]} 색 고르기" title="${AV_COLOR_NAME[k]} 색 고르기"></button>`;
+  const head = (label, part) => `<b>${label}${PART_COLOR[part] ? cbtn(PART_COLOR[part]) : ""}</b>`;
+  const rows = AV_PARTS.map((part) => `<div class="avrow">${head(AV_LABEL[part]._, part)}<div class="avchips">${AV[part].map((v) => chip(part, v)).join("")}</div>${part === "ear" ? unlockBox : ""}</div>`).join("");
+  document.getElementById("avBody").innerHTML = `<div class="avchips presets">${AV_PRESETS.map(([l], i) => `<button type="button" data-preset="${i}">${l}</button>`).join("")}<button type="button" data-random="1">랜덤</button></div>${rows}<div class="avrow"><b>피부${cbtn("skinColor")}</b></div>`;
+  renderColorPop();
 }
-avPanel.addEventListener("change", (e) => { const t = e.target as HTMLInputElement; if (t.dataset.custom) setMyAv({ ...myAv, [avColorPart]: t.value.toUpperCase() }); });
+// 부위별 색 고르는 창: PC는 캐릭터 미리보기 바로 아래(같은 폭)에 붙어 뜬다 · 폰은 아래 시트 바로 위
+const PART_COLOR = { head: "headColor", outfit: "outfitColor", neck: "neckColor", bag: "bagColor", held: "heldColor" };
+const AV_COLOR_NAME = Object.fromEntries(AV_COLOR_PARTS);
+let avColorOpen = false;
+const avColorPop = document.createElement("section"); avColorPop.id = "avColorPop"; avColorPop.hidden = true; avColorPop.setAttribute("aria-label", "색 고르기"); document.body.append(avColorPop);
+function renderColorPop() {
+  const open = avColorOpen && !avPanel.hidden, btn = open && avPanel.querySelector(`.cbtn[data-cpart="${avColorPart}"]`) as HTMLElement;
+  avColorPop.hidden = !btn; if (!btn) return;
+  const cur = String(myAv[avColorPart]).toUpperCase();
+  const sw = (avColorPart === "skinColor" ? AV_SKINS.concat(AV_COLORS.filter((c) => !AV_SKINS.includes(c))) : AV_COLORS).map((c) => `<button type="button" class="sw" data-color="${c}" style="background:${c}" aria-label="${c}" aria-pressed="${cur === c}"></button>`).join("");
+  avColorPop.innerHTML = `<div class="cphead"><h5>${AV_COLOR_NAME[avColorPart]} 색</h5><button type="button" class="x" data-cclose="1" aria-label="닫기">×</button></div><div class="swatches">${sw}</div><label class="custom">직접 고르기 <input type="color" data-custom="1" value="${cur.toLowerCase()}"></label>`;
+  const pv = document.getElementById("avPreview");
+  if (!narrow() && pv && !pv.hidden) { const r = pv.getBoundingClientRect(); avColorPop.style.left = `${r.left}px`; avColorPop.style.top = `${r.bottom + 10}px`; avColorPop.style.width = `${r.width}px`; }
+  else { avColorPop.style.left = ""; avColorPop.style.top = ""; avColorPop.style.width = ""; }
+}
+function closeColorPop() { if (!avColorOpen) return false; avColorOpen = false; renderAvPanel(); return true; }
+avColorPop.addEventListener("click", (e) => { const b = (e.target as HTMLElement).closest("button"); if (!b) return; if (b.dataset.cclose) closeColorPop(); else if (b.dataset.color) setMyAv({ ...myAv, [avColorPart]: b.dataset.color }); });
+avColorPop.addEventListener("change", (e) => { const t = e.target as HTMLInputElement; if (t.dataset.custom) setMyAv({ ...myAv, [avColorPart]: t.value.toUpperCase() }); });
+addEventListener("pointerdown", (e) => { if (avColorOpen && !avColorPop.contains(e.target as Node) && !(e.target as HTMLElement).closest?.(".cbtn")) closeColorPop(); }, true);   // 바깥을 누르면 닫는다
+addEventListener("resize", () => { if (avColorOpen) renderColorPop(); });
+avPanel.addEventListener("input", (e) => { const t = e.target as HTMLInputElement; if (t.id === "avFeedLink") avUnlock.link = t.value; });
+avPanel.addEventListener("keydown", (e) => { if ((e.target as HTMLElement).id === "avFeedLink" && e.key === "Enter") { e.preventDefault(); tryFeedUnlock(); } });
 avPanel.addEventListener("click", (e) => {
   const b = (e.target as HTMLElement).closest("button"); if (!b) return;
   if (b.id === "avDone") return closeAvPanel();
+  if (b.dataset.unlockGo) return void tryFeedUnlock();
+  if (b.dataset.lock === "headset") { avUnlock.open = !avUnlock.open; renderAvPanel(); if (avUnlock.open) (document.getElementById("avFeedLink") as HTMLInputElement)?.focus(); return; }   // 헤드셋: 피드 링크 붙여넣는 칸을 연다
+  if (b.dataset.lock) return showToast("🔒 아직 잠겨 있어요", LOCK_TIPS[b.dataset.lock], 3200);   // 터치에선 호버가 없으니 눌렀을 때도 알려 준다
   if (b.dataset.part) setMyAv({ ...myAv, [b.dataset.part]: b.dataset.v });
-  else if (b.dataset.cpart) { avColorPart = b.dataset.cpart; renderAvPanel(); }
-  else if (b.dataset.color) setMyAv({ ...myAv, [avColorPart]: b.dataset.color });
+  else if (b.dataset.cpart) { avColorOpen = !(avColorOpen && avColorPart === b.dataset.cpart); avColorPart = b.dataset.cpart; renderAvPanel(); }   // 같은 버튼을 다시 누르면 닫는다
   else if (b.dataset.preset) setMyAv(AV_PRESETS[+b.dataset.preset][1]);
   else if (b.dataset.random) setMyAv(avRandom());
 });
-function openAvPanel() { if (locked()) document.exitPointerLock(); avPanel.hidden = false; renderAvPanel(); if (!inside()) { avCamBack = cam.distT; cam.distT = 6; cam.yawT = me.h; cam.pitchT = .5; } /* 얼굴이 보이게 앞쪽에서 */ document.getElementById("avDone").focus(); }
-function closeAvPanel() { const was = !avPanel.hidden; avPanel.hidden = true; if (was) syncCursor(); if (avCamBack !== null) { cam.distT = avCamBack; avCamBack = null; } }
+function openAvPanel() { if (locked()) document.exitPointerLock(); avPanel.hidden = false; renderAvPanel(); avatarPreview.set({ open: true, config: { ...DEFAULT_AV, ...myAv } }); if (!inside()) { avCamBack = cam.distT; cam.distT = 6; cam.yawT = me.h; cam.pitchT = .5; } /* 얼굴이 보이게 앞쪽에서 */ document.getElementById("avDone").focus(); }
+function closeAvPanel() { const was = !avPanel.hidden; avPanel.hidden = true; avColorOpen = false; renderColorPop(); avatarPreview.set({ open: false }); if (was) syncCursor(); if (avCamBack !== null) { cam.distT = avCamBack; avCamBack = null; } }
 /* ───── Esc 설정창: 프로필 수정 · 캐릭터 외형 수정 ───── */
 const menu = document.getElementById("menu"), profile = document.getElementById("profile"), profileName = $<HTMLInputElement>("profileName");
 let menuAt = 0, renameMe: ((v: string) => void) | null = null, myNameNow = () => "";

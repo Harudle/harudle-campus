@@ -82,11 +82,39 @@ body:not(.touch) #act::before{content:"F";font-family:var(--body);font-size:16px
 .avchips button{font:inherit;font-size:14px;border:1.5px solid var(--ink);border-radius:999px;background:#fff;padding:3px 10px;cursor:pointer;color:var(--ink)}
 .avchips button[aria-pressed="true"]{background:#B9A6EC;font-weight:700}
 .avchips.presets button{background:#FFF6C7}
+#avPanel .avunlock{margin-top:8px;padding:8px 10px;border:2px dashed var(--ink);border-radius:12px;background:#FFF6C7;font-size:13.5px;line-height:1.4}
+#avPanel .avunlock p{margin:0 0 6px}
+#avPanel .avunlock .row{display:flex;gap:6px}
+#avPanel .avunlock input{flex:1;min-width:0;font:13px var(--body);border:1.5px solid var(--ink);border-radius:8px;padding:5px 8px;background:#fff;-webkit-user-select:text;user-select:text}
+#avPanel .avunlock .btn{font-size:15px;padding:3px 12px}
+#avPanel .avunlock .msg{margin:6px 0 0;color:#B4233A}
+.avchips button.locked{position:relative;background:#EEECF2;color:var(--muted);border-style:dashed;cursor:help}
+.avchips button.locked:hover::after,.avchips button.locked:focus-visible::after{content:attr(data-tip);position:absolute;left:50%;bottom:calc(100% + 8px);transform:translateX(-50%);width:max-content;max-width:190px;white-space:normal;font-size:13px;line-height:1.35;background:var(--ink);color:#fff;border-radius:10px;padding:6px 10px;z-index:3;pointer-events:none}
+.avchips button.locked:hover::before,.avchips button.locked:focus-visible::before{content:"";position:absolute;left:50%;bottom:calc(100% + 2px);transform:translateX(-50%);border:6px solid transparent;border-top-color:var(--ink);border-bottom:0;z-index:3}
 .swatches{display:grid;grid-template-columns:repeat(11,1fr);gap:5px;margin-top:8px}
+/* 줄 이름 옆 색 동그라미 버튼과, 누르면 옆에 뜨는 색 고르는 창 */
+.avrow>b .cbtn{display:inline-block;vertical-align:middle;width:22px;height:22px;margin-left:8px;border-radius:50%;border:2px solid var(--ink);background:var(--c);box-shadow:0 0 0 2px #fff inset,1px 1px 0 var(--ink);cursor:pointer;padding:0}
+.avrow>b .cbtn[aria-expanded="true"]{outline:3px solid #B9A6EC;outline-offset:1px}
+#avColorPop{position:fixed;z-index:23;width:236px;background:var(--paper);border:3px solid var(--ink);border-radius:16px;box-shadow:3px 4px 0 var(--ink);padding:10px 12px 12px;font-family:var(--hand)}
+#avColorPop[hidden]{display:none!important}
+#avColorPop .cphead{display:flex;align-items:center;justify-content:space-between}
+#avColorPop h5{margin:0;font-size:17px}
+#avColorPop .x{border:0;background:none;font-size:22px;line-height:1;cursor:pointer;color:var(--ink);padding:0 2px}
+#avColorPop .swatches{grid-template-columns:repeat(8,1fr);gap:6px}
+#avColorPop .custom{display:inline-flex;align-items:center;gap:6px;margin-top:10px;font-size:14px;border:1.5px solid var(--ink);border-radius:999px;padding:2px 10px;background:#fff}
+#avColorPop .custom input{width:22px;height:22px;border:0;padding:0;background:none;cursor:pointer}
+@media (max-width:640px){#avColorPop{left:12px;right:12px;width:auto;bottom:calc(60% + 10px)}#avColorPop .swatches{grid-template-columns:repeat(11,1fr);gap:5px}body:has(#avColorPop:not([hidden])) #avPreview{display:none!important}}
 .swatches .sw{aspect-ratio:1;border:1.5px solid var(--ink);border-radius:50%;cursor:pointer;padding:0}
 .swatches .sw[aria-pressed="true"]{outline:3px solid var(--ink);outline-offset:1px}
 #avPanel .custom{display:inline-flex;align-items:center;gap:6px;margin-top:8px;font-size:14px;border:1.5px solid var(--ink);border-radius:999px;padding:2px 10px;background:#fff}
 #avPanel .custom input{width:22px;height:22px;border:0;padding:0;background:none;cursor:pointer}
+/* 꾸미기 창 바로 오른쪽 미리보기 카드(폰에선 위쪽 빈자리에) */
+#avPreview{position:fixed;z-index:22;top:calc(64px + env(safe-area-inset-top,0px));left:calc(12px + min(340px,calc(100% - 24px)) + 12px);width:260px;background:var(--brand-weak);border:3px solid var(--ink);border-radius:18px;box-shadow:3px 4px 0 var(--ink);padding:8px 8px 6px;font-family:var(--hand)}
+#avPreview[hidden]{display:none!important}
+#avPreview .avpv-stage{height:320px;border-radius:12px;background:radial-gradient(circle at 50% 70%,#fff 0,#fff 30%,var(--brand-weak) 72%);cursor:grab;touch-action:none}
+#avPreview .avpv-stage:active{cursor:grabbing}
+#avPreview .avpv-cap{margin:4px 0 0;text-align:center;font-size:14px;color:var(--muted)}
+@media (max-width:640px){#avPreview{left:50%;transform:translateX(-50%);width:min(200px,60%);padding:6px}#avPreview .avpv-stage{height:min(200px,calc(40vh - 90px))}#avPreview .avpv-cap{display:none}}
 @media (max-width:640px){#avPanel{top:auto;bottom:0;left:0;width:100%;max-height:60%;border-radius:20px 20px 0 0;border-bottom:0}}
 @media (max-width:640px){#panel{top:auto;width:100%;height:78%;border-left:0;border-top:3px solid var(--ink);border-radius:22px 22px 0 0;transform:translateY(105%)}#hint{border:1.5px solid var(--ink);display:none}}
 .ph{display:flex;gap:12px;align-items:center;padding:16px 16px 10px;padding-right:max(16px,env(safe-area-inset-right,0px));border-bottom:2px dashed var(--line)}

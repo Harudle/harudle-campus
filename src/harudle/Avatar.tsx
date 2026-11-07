@@ -206,6 +206,117 @@ function Headwear({ kind, color, skinColor }: { kind: AvatarConfig['head']; colo
   return null
 }
 
+/** 귀 장식(머리 장식과 함께 낀다). 머리 그룹 안, 머리 가운데가 원점 */
+function Earwear({ kind }: { kind: AvatarConfig['ear'] }) {
+  if (kind === 'headset') return <AirPodsMax />
+  if (kind !== 'airpods') return null
+  // 에어팟(4세대) 착용 모습: 둥근 이어버드가 귓구멍에 쏙 들어가 있고, 바깥 면 위쪽에 세로로 긴 검은 알약 모양 통풍구,
+  // 스템은 아래로 내려오며 얼굴 쪽(앞)으로 25도쯤 기울고, 끝면엔 작은 검은 마이크 구멍. 색은 진짜처럼 늘 하얀 유광
+  return (
+    <group>
+      {[-1, 1].map((side) => (
+        <group key={side} position={[side * (HEAD_RADIUS - 0.014), -0.025, 0.025]} rotation={[-0.44, 0, side * 0.06]} scale={0.78}>
+          <mesh scale={[0.8, 1, 1.05]} castShadow>
+            <sphereGeometry args={[0.05, 16, 12]} />
+            <Skin color="#F8F8F6" thickness={1} />
+          </mesh>
+          <mesh position={[side * 0.039, 0.008, 0.004]} scale={[0.35, 1, 1]}>
+            <capsuleGeometry args={[0.009, 0.026, 4, 10]} />
+            <meshBasicMaterial color={INK} />
+          </mesh>
+          <mesh position={[side * 0.008, -0.092, 0.006]} castShadow>
+            <capsuleGeometry args={[0.016, 0.12, 4, 10]} />
+            <Skin color="#F8F8F6" thickness={1} />
+          </mesh>
+          <mesh position={[side * 0.008, -0.168, 0.006]}>
+            <sphereGeometry args={[0.006, 8, 6]} />
+            <meshBasicMaterial color={INK} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  )
+}
+
+// 에어팟 맥스(실버): 하얀 캐노피 프레임이 머리 위를 넘고(양 가장자리는 굵은 흰 테, 가운데는 니트 메시),
+// 프레임 끝의 흰 칼라에서 반짝이는 스테인리스 텔레스코픽 암이 내려와 이어컵 위 가운데에 꽂힌다.
+// 이어컵은 둥근 사각(스쿼클) 알루미늄 덩어리, 머리 쪽엔 같은 모양의 니트 메시 쿠션.
+// 오른쪽 이어컵 윗면 앞쪽에 디지털 크라운, 뒤쪽에 소음 조절 버튼, 바깥 면 아래쪽에 작은 상태 표시등 틈. 캐릭터의 오른쪽은 -x(앞이 +z)
+const MAX_ALU = '#E3E5E8', MAX_FRAME = '#F6F6F4', MAX_STEEL = '#C7CBD1', MAX_KNIT = '#E4E5E7', MAX_CUSHION = '#D6D7DA'
+function AirPodsMax() {
+  const top = 0.16, r = HEAD_RADIUS + 0.085, cupY = -0.07, cupH = 0.27, cupX = HEAD_RADIUS + 0.09
+  return (
+    <group>
+      {/* 캐노피: 위가 살짝 납작한 아치. 앞뒤 가장자리 흰 테 + 그 사이 니트 메시 */}
+      <group position-y={top} scale={[1, 0.88, 1]}>
+        {[-1, 1].map((z) => (
+          <mesh key={z} position-z={z * 0.065} castShadow>
+            <torusGeometry args={[r, 0.02, 10, 48, Math.PI]} />
+            <Skin color={MAX_FRAME} thickness={1} />
+          </mesh>
+        ))}
+        <mesh scale={[1, 1, 5.2]}>
+          <torusGeometry args={[r - 0.004, 0.012, 6, 48, Math.PI]} />
+          <Skin color={MAX_KNIT} thickness={0.8} />
+        </mesh>
+      </group>
+      {[-1, 1].map((side) => (
+        <group key={side}>
+          {/* 프레임 끝 흰 칼라 + 스테인리스 링, 그 아래로 반짝이는 암 */}
+          <mesh position={[side * r, top - 0.03, 0]}>
+            <cylinderGeometry args={[0.026, 0.024, 0.07, 14]} />
+            <Skin color={MAX_FRAME} thickness={1} />
+          </mesh>
+          <mesh position={[side * r, top - 0.07, 0]}>
+            <cylinderGeometry args={[0.02, 0.02, 0.012, 14]} />
+            <meshStandardMaterial color={MAX_STEEL} metalness={0.9} roughness={0.2} />
+          </mesh>
+          <mesh position={[side * (r + cupX) / 2, (top - 0.07 + cupY + cupH / 2) / 2, 0]} rotation-z={side * Math.atan2(cupX - r, top - 0.07 - cupY - cupH / 2)}>
+            <cylinderGeometry args={[0.011, 0.011, top - 0.07 - cupY - cupH / 2 + 0.02, 10]} />
+            <meshStandardMaterial color={MAX_STEEL} metalness={0.95} roughness={0.15} />
+          </mesh>
+          <group position={[side * cupX, cupY, 0.005]}>
+            {/* 이어컵: 둥근 사각 알루미늄, 윗면 가운데 암이 꽂히는 작은 경첩 */}
+            <RoundedBox args={[0.1, cupH, 0.22]} radius={0.048} smoothness={4} castShadow>
+              <Skin color={MAX_ALU} thickness={1.2} />
+            </RoundedBox>
+            <mesh position-y={cupH / 2 + 0.004}>
+              <cylinderGeometry args={[0.018, 0.022, 0.014, 14]} />
+              <meshStandardMaterial color={MAX_STEEL} metalness={0.9} roughness={0.2} />
+            </mesh>
+            {/* 머리 쪽 니트 메시 쿠션(이어컵보다 살짝 작고 도톰하다) */}
+            <RoundedBox args={[0.05, cupH - 0.02, 0.2]} radius={0.024} smoothness={3} position-x={-side * 0.068}>
+              <Skin color={MAX_CUSHION} thickness={0.9} />
+            </RoundedBox>
+            {/* 바깥 면 아래쪽 상태 표시등 틈 */}
+            <mesh position={[side * 0.051, -cupH * 0.3, 0.06]} rotation-z={Math.PI / 2} rotation-y={side * Math.PI / 2}>
+              <capsuleGeometry args={[0.003, 0.014, 2, 6]} />
+              <meshBasicMaterial color={INK} />
+            </mesh>
+            {side < 0 && (
+              <>
+                {/* 디지털 크라운(앞) · 소음 조절 버튼(뒤) */}
+                <mesh position={[0, cupH / 2 + 0.008, 0.06]}>
+                  <cylinderGeometry args={[0.022, 0.022, 0.022, 20]} />
+                  <meshStandardMaterial color={MAX_STEEL} metalness={0.9} roughness={0.25} />
+                </mesh>
+                <mesh position={[0, cupH / 2 + 0.02, 0.06]}>
+                  <cylinderGeometry args={[0.018, 0.022, 0.004, 20]} />
+                  <meshStandardMaterial color="#E9EBEE" metalness={0.6} roughness={0.35} />
+                </mesh>
+                <mesh position={[0, cupH / 2 + 0.002, -0.06]} rotation-x={Math.PI / 2}>
+                  <capsuleGeometry args={[0.008, 0.035, 4, 8]} />
+                  <meshStandardMaterial color={MAX_STEEL} metalness={0.8} roughness={0.3} />
+                </mesh>
+              </>
+            )}
+          </group>
+        </group>
+      ))}
+    </group>
+  )
+}
+
 function Outfit({ kind, color }: { kind: AvatarConfig['outfit']; color: string }) {
   if (kind === 'tunic') {
     return (
@@ -516,6 +627,7 @@ export function Avatar({ config, motion, pose }: AvatarProps) {
         <FaceFeatures face={config.face} />
         <Eyewear kind={config.eyewear} />
         <Headwear kind={config.head} color={config.headColor} skinColor={config.skinColor} />
+        <Earwear kind={config.ear} />
       </group>
     </group>
   )
