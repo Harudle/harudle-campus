@@ -3,6 +3,7 @@
 // - dist/ 정적 파일 (npm run build 결과, 저장소에 함께 올린다)
 // - GET /api/feed : 하루들 공개 피드를 작성자별로 묶어 중계 (4분 캐시)
 // - WS  /ws       : 같은 캠퍼스에 있는 크루 위치·말풍선·스킬 공유
+// - 14층 하루들 월드: /world/(dist), WS /world/ws, 월드 API (dist-server/world.mjs, world/server/campus.ts)
 import http from "node:http";
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
@@ -19,6 +20,10 @@ const HARUDLE = "https://www.harudle.com";
 const FEED_TTL = 4 * 60 * 1000;   // 하루들 이미지 주소는 15분 뒤 만료되므로 그보다 짧게
 const PER_AUTHOR = 6;
 const weather = createWeatherService();
+const APP_DIR = fileURLToPath(new URL(".", import.meta.url));
+// 월드 DB는 배포(git reset)에도 지워지지 않는 .data/world에 둔다
+const WORLD_DATA_DIR = process.env.WORLD_DATA_DIR || join(APP_DIR, ".data", "world");
+const WORLD_ORIGINS = (process.env.WORLD_ORIGINS || "https://campus.harudle.com,http://localhost:8080,http://localhost:3000,http://127.0.0.1:8080,http://127.0.0.1:3000").split(",").map((o) => o.trim()).filter(Boolean);
 
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css; charset=utf-8", ".woff2": "font/woff2", ".json": "application/json", ".png": "image/png", ".svg": "image/svg+xml", ".ico": "image/x-icon" };
 
@@ -70,6 +75,7 @@ async function feedExists(id) {
 }
 
 /* ───────── HTTP ───────── */
+let world = null;   // 14층 하루들 월드 (아래에서 켠다)
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");
   try {
@@ -92,6 +98,7 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
       return res.end(body);
     }
+    if (world?.handle(req, res)) return;
     let path = normalize(decodeURIComponent(url.pathname)).replace(/^(\.\.[/\\])+/, "");
     if (path.endsWith("/")) path += "index.html";
     const file = join(ROOT, path);
@@ -107,8 +114,22 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
+/* ───────── 14층 하루들 월드 ───────── */
+// Node 22.13 이상(node:sqlite)이 필요하다. 켜지 못해도 캠퍼스는 그대로 돌고, 14층은 연결 안 됨으로 보인다
+try {
+  const { startWorld } = await import("./dist-server/world.mjs");
+  world = startWorld(server, { dataDir: WORLD_DATA_DIR, allowedOrigins: WORLD_ORIGINS, trustProxy: process.env.NODE_ENV === "production" });
+  console.log("[world] 14층 하루들 월드 켜짐");
+} catch (e) { console.error(`[world] 14층 하루들 월드를 켜지 못했어요 (Node ${process.version})`, e.message); }
+
 /* ───────── 실시간 접속 ───────── */
-const wss = new WebSocketServer({ server, path: "/ws", maxPayload: 4096 });
+// /world/ws는 하루들 월드가 받으므로, 캠퍼스는 /ws만 직접 골라 받는다
+const wss = new WebSocketServer({ noServer: true, maxPayload: 4096 });
+server.on("upgrade", (req, socket, head) => {
+  const { pathname } = new URL(req.url, "http://x");
+  if (pathname === "/ws") wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
+  else if (!(world && pathname === "/world/ws")) socket.destroy();
+});
 const peers = new Map();   // id -> { ws, name, presence }
 let seq = 0, dirty = false;
 const clean = (s, n) => (typeof s === "string" ? s.replace(/[\u0000-\u001f]/g, "").slice(0, n) : "");
@@ -215,6 +236,7 @@ function drain(reason) {
   server.close(() => process.exit(0));                       // 새 연결은 받지 않고, 처리 중인 요청은 마저 끝낸다
   const bye = JSON.stringify({ t: "bye" });                  // 접속 중인 크루는 곧바로 새 워커로 다시 붙는다
   for (const { ws } of peers.values()) { try { ws.send(bye); ws.close(1012, "restart"); } catch { } }
+  try { world?.close(); } catch (e) { console.error("[world] close", e.message); }
   setTimeout(() => process.exit(0), 10000).unref();          // 오래 붙잡힌 연결이 있어도 10초 뒤엔 끝낸다
 }
 process.on("message", (m) => { if (m && m.t === "drain") drain("new version ready"); });

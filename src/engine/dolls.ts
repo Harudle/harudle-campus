@@ -18,7 +18,8 @@ export type DollAnim = {
 
 export type Doll = {
   id: number
-  kind: 'avatar' | 'dog'
+  /** harudle·haru는 14층 특종 가판대의 하루들 기자와 손 흔드는 하루(움직이지 않는다) */
+  kind: 'avatar' | 'dog' | 'harudle' | 'haru'
   config: AvatarConfig | null
   root: THREE.Group
   turn: THREE.Group

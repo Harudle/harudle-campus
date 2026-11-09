@@ -1,0 +1,196 @@
+/* 캠퍼스: 월드 폴더의 클래스만 읽는다. */
+@import 'tailwindcss' source('..');
+
+@theme {
+  --color-haru-50: #f8f6ff;
+  --color-haru-100: #ede7ff;
+  --color-haru-200: #d9cefc;
+  --color-haru-500: #8b6fe8;
+  --color-haru-600: #7355da;
+  --color-haru-800: #4a3596;
+  --color-ink: #2b2140;
+  --color-paper: #fffdf7;
+  --color-butter: #ffd97a;
+  --font-display: 'Jua', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  --font-body: 'Gowun Dodum', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  overflow: hidden;
+  background: var(--color-haru-50);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  word-break: keep-all;
+  /* 두 번 눌러 확대와 당겨서 새로고침이 걷기 조작을 방해하지 않게 한다. */
+  touch-action: manipulation;
+  overscroll-behavior: none;
+}
+
+.scoop-dialog {
+  margin: auto;
+  width: min(920px, calc(100% - 2rem));
+  max-width: none;
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  border: 3px solid var(--color-ink);
+  border-radius: 6px;
+  box-shadow: 10px 10px 0 var(--color-haru-600);
+}
+
+.scoop-dialog::backdrop {
+  background: rgb(43 33 64 / 0.45);
+  backdrop-filter: blur(3px);
+}
+
+/* 옛날 영화처럼 신문이 빙글빙글 돌며 날아오는 등장 효과 */
+.scoop-dialog[open] {
+  animation: paper-spin 620ms cubic-bezier(0.2, 0.85, 0.3, 1.05);
+}
+
+.scoop-dialog[open]::backdrop {
+  animation: backdrop-in 300ms ease-out;
+}
+
+@keyframes paper-spin {
+  from {
+    opacity: 0;
+    transform: scale(0.08) rotate(-720deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* 퀴즈 정답 폭죽. 값은 조각마다 인라인 변수로 넣는다. */
+.quiz-confetti {
+  position: absolute;
+  top: -5%;
+  width: 10px;
+  height: 16px;
+  border-radius: 2px;
+  animation: quiz-confetti-fall var(--duration) cubic-bezier(0.25, 0.6, 0.5, 1) var(--delay) both;
+}
+
+@keyframes quiz-confetti-fall {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  to {
+    opacity: 0;
+    transform: translate3d(var(--drift), 105dvh, 0) rotate(var(--spin));
+  }
+}
+
+.quiz-shake {
+  animation: quiz-shake 360ms ease-in-out;
+}
+
+@keyframes quiz-shake {
+  20%,
+  60% {
+    transform: translateX(-6px);
+  }
+  40%,
+  80% {
+    transform: translateX(6px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quiz-confetti {
+    display: none;
+  }
+  .quiz-shake {
+    animation: none;
+  }
+  .scoop-dialog[open],
+  .scoop-dialog[open]::backdrop {
+    animation: none;
+  }
+}
+
+/* 그림 속으로 들어가는 순간 화면이 빨려 들어오듯 펼쳐진다. */
+.painting-game[open] {
+  animation: painting-in 420ms ease-out;
+}
+
+@keyframes painting-in {
+  from {
+    opacity: 0;
+    transform: scale(0.55);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .painting-game[open] {
+    animation: none;
+  }
+}
+
+/* 하루들 휴대폰. 넓은 화면에서는 폰 모양 테두리 안에, 휴대폰에서는 화면 가득 띄운다. */
+.harudle-phone-dialog {
+  margin: auto;
+  width: min(410px, calc(100% - 2rem));
+  height: min(860px, calc(100dvh - 2rem));
+  max-width: none;
+  max-height: none;
+  padding: 8px 10px 12px;
+  overflow: hidden;
+  background: var(--color-ink);
+  border: 3px solid var(--color-ink);
+  border-radius: 36px;
+  box-shadow: 10px 10px 0 var(--color-haru-600);
+}
+
+.harudle-phone-dialog::backdrop {
+  background: rgb(43 33 64 / 0.45);
+  backdrop-filter: blur(3px);
+}
+
+.harudle-phone-dialog[open] {
+  animation: phone-rise 360ms cubic-bezier(0.2, 0.85, 0.3, 1.05);
+}
+
+@keyframes phone-rise {
+  from {
+    opacity: 0;
+    transform: translateY(40px) scale(0.92);
+  }
+}
+
+@media (max-width: 480px) {
+  .harudle-phone-dialog {
+    width: 100%;
+    height: 100dvh;
+    padding: calc(env(safe-area-inset-top) + 6px) 6px calc(env(safe-area-inset-bottom) + 6px);
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .harudle-phone-dialog[open] {
+    animation: none;
+  }
+}
