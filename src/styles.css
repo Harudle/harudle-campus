@@ -264,6 +264,8 @@ body.touch.chatting #topRight,body.touch.peopleOpen #topRight{display:none}
 .modal .plabel{display:grid;gap:6px;font-size:14px}
 .modal .plabel input{font:inherit;font-size:16px;padding:8px 10px;border:2px solid var(--ink);border-radius:10px}
 .modal .prow{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
+.modal .macct{margin:-4px 0 12px;font-size:14px;opacity:.8}
+.modal .lreason{margin:0 0 4px;font-size:16px}
 
 /* ───── 설정창 조작법 탭: 두 줄로 간단하게 ───── */
 .mkeys ul.glist{list-style:none;padding:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px 14px;font-size:15px;margin:0}
