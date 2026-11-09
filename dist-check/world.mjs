@@ -462,6 +462,15 @@ var solid = (fl, x, y) => {
   return x < 0 || y < 0 || x >= W || y >= H || fl.grid[y * W + x] === 1;
 };
 var inRect = (r, x, y) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
+function roomKeyAt(f, x, y) {
+  const floor = FLOORS[f];
+  if (!floor || !Number.isFinite(x) || !Number.isFinite(y)) return "";
+  let best = null;
+  for (const z of floor.zones || []) {
+    if (/강의실|회의실|페어룸|상담실/.test(z.name) && inRect(z, x, y) && (!best || z.w * z.h < best.w * best.h)) best = z;
+  }
+  return best ? `${f}:${best.name}` : "";
+}
 var STEP = 0.13;
 var bleacherLevel = (o, i) => Math.floor((o.down ? (o.axis === "y" ? o.h : o.w) - 1 - i : i) / (o.axis === "y" ? 2 : 1));
 var ARC_STEP = 0.22;
@@ -671,6 +680,7 @@ export {
   navNext,
   nearestFree,
   rng,
+  roomKeyAt,
   solid,
   stadiumWall,
   sweep,

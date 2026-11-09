@@ -16,10 +16,12 @@
     "node": ">=18"
   },
   "dependencies": {
-    "ws": "8.18.0"
+    "livekit-server-sdk": "2.18.0",
+    "ws": "8.22.2"
   },
   "license": "MIT",
   "devDependencies": {
+    "@daily-co/daily-js": "0.95.0",
     "@react-three/drei": "10.7.9",
     "@react-three/fiber": "9.8.2",
     "@types/react": "^19.3.0",
@@ -28,6 +30,7 @@
     "@types/three": "0.187.0",
     "@vitejs/plugin-react": "^6.2.1",
     "esbuild": "*",
+    "livekit-client": "2.23.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "suncalc": "^2.1.3",

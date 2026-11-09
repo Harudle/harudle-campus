@@ -11,8 +11,16 @@ import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import { createWeatherService } from "./weather.js";
+import { randomBytes } from "node:crypto";
+import { roomKeyAt } from "./dist-check/world.mjs";
+import { createMediaService, mediaArea, canShareInRoom } from "./server/media/index.js";
+import { createSwitchCoordinator } from "./server/media/switch-coordinator.js";
+import { createCloudflareTestService } from "./server/media/cloudflare-test.js";
+import { createMeetingRegistry } from "./server/media/meeting-registry.js";
+import { createMediaAdmission, mediaClientAddress } from "./server/media/admission.js";
 
 const PORT = Number(process.env.PORT || 80);
+const BIND_HOST = process.env.CAMPUS_BIND_HOST || undefined;
 const VERSION = (process.env.APP_VERSION || "dev").slice(0, 12);
 const ROOT = join(fileURLToPath(new URL(".", import.meta.url)), "dist");
 const HARUDLE = "https://www.harudle.com";
@@ -108,9 +116,49 @@ const server = http.createServer(async (req, res) => {
 });
 
 /* ───────── 실시간 접속 ───────── */
-const wss = new WebSocketServer({ server, path: "/ws", maxPayload: 4096 });
+const cloudflareTestMode = ["cloudflare-test", "auto-test", "managed-draft"].includes(process.env.MEDIA_PROVIDER);
+const requiredOrigin = process.env.CAMPUS_PUBLIC_ORIGIN || "";
+if (requiredOrigin) {
+  const parsed = new URL(requiredOrigin);
+  if (parsed.protocol !== "https:" || parsed.origin !== requiredOrigin || parsed.username || parsed.password) throw new Error("invalid_campus_origin");
+}
+if (process.env.NODE_ENV === "production" && process.env.MEDIA_PROVIDER === "managed-draft" && !requiredOrigin) throw new Error("invalid_campus_origin");
+const wss = new WebSocketServer({ server, path: "/ws", maxPayload: cloudflareTestMode ? 131072 : 4096, verifyClient: ({ origin }) => !requiredOrigin || origin === requiredOrigin });
 const peers = new Map();   // id -> { ws, name, presence }
+const admission = process.env.MEDIA_PROVIDER === "managed-draft" ? createMediaAdmission({ peers, maxParticipants: Number(process.env.MEDIA_MAX_PARTICIPANTS || 20), perAddressPerMinute: Number(process.env.MEDIA_JOIN_PER_IP_PER_MINUTE || 12) }) : null;
+const mediaSwitch = createSwitchCoordinator(peers, process.env.MEDIA_PROVIDER === "managed-draft" ? 2000 : 15000);
+let managedStack = null;
+if (process.env.MEDIA_PROVIDER === "managed-draft") {
+  try {
+    const { createManagedMediaStack } = await import("./server/media/managed-stack.js");
+    managedStack = createManagedMediaStack(process.env, peers, { notifySwitch: (change) => mediaSwitch.prepare(change) });
+  } catch (error) {
+    const reason = /^[a-z_]+$/.test(error?.message || "") ? error.message : "unavailable";
+    console.error(`[media-managed] unavailable: ${reason}`);
+  }
+}
+const cloudflareTest = process.env.MEDIA_PROVIDER === "managed-draft" ? managedStack?.cloudflare : cloudflareTestMode ? createCloudflareTestService(process.env, peers) : null;
+// 운영에서는 예약과 복구가 없는 단순 제공자를 실수로 켜지 않는다.
+const unmanagedProduction = process.env.NODE_ENV === "production" && process.env.MEDIA_PROVIDER !== "managed-draft";
+const mediaService = unmanagedProduction ? { configured: false } : process.env.MEDIA_PROVIDER === "managed-draft" ? managedStack?.router || { configured: false } : process.env.MEDIA_PROVIDER === "cloudflare-test" ? cloudflareTest : createMediaService(process.env, { onSwitch: (change) => mediaSwitch.prepare(change), cloudflareTest });
+// 운영에서는 사용량 DB에 회의 목록을 함께 저장한다. 로컬 시험은 메모리만 사용한다.
+let meetings = null;
+if (process.env.NODE_ENV === "production" && process.env.MEDIA_PROVIDER === "managed-draft" && process.env.MEDIA_MEETINGS !== "persistent") throw new Error("invalid_meeting_config");
+if (process.env.MEDIA_MEETINGS === "persistent") {
+  if (process.env.MEDIA_PROVIDER !== "managed-draft" || process.env.MEDIA_SINGLE_HOST !== "1") throw new Error("invalid_meeting_config");
+  const { openPersistentMeetings } = await import("./server/media/persistent-meetings.js");
+  meetings = openPersistentMeetings({ path: process.env.MEDIA_STATE_PATH });
+} else if (process.env.MEDIA_MEETINGS_TEST === "local-only" && BIND_HOST === "127.0.0.1") meetings = createMeetingRegistry();
+const workerId = randomBytes(6).toString("hex");
 let seq = 0, dirty = false;
+function retireMedia(peer) {
+  const key = peer.mediaLease; peer.mediaLease = null;
+  if (!key || !managedStack) return peer.mediaRelease || Promise.resolve();
+  const work = Promise.resolve(peer.mediaRelease).catch(() => {}).then(() => managedStack.router.releaseLivekit(key));
+  peer.mediaRelease = work;
+  void work.finally(() => { if (peer.mediaRelease === work) peer.mediaRelease = null; }).catch(() => {});
+  return work;
+}
 const clean = (s, n) => (typeof s === "string" ? s.replace(/[\u0000-\u001f]/g, "").slice(0, n) : "");
 function sanitize(p) {
   if (!p || typeof p !== "object") return null;
@@ -118,7 +166,7 @@ function sanitize(p) {
   return {
     f: [11, 12, 13, 14].includes(p.f) ? p.f : 11, x: num(p.x, 0, 56), y: num(p.y, 0, 40), u: num(p.u, 0, 2), h: num(p.h, -7, 7),
     m: p.m ? 1 : 0, r: p.r ? 1 : 0, look: Math.floor(num(p.look, 0, 99)), jc: Math.floor(num(p.jc, 0, 1e9)), ac: Math.floor(num(p.ac, 0, 1e9)),
-    br: p.br ? 1 : 0, bc: typeof p.bc === "string" && /^#[0-9a-f]{6}$/i.test(p.bc) ? p.bc : null, l: p.l ? 1 : 0, ly: num(p.ly, -7, 7), st: p.st ? 1 : 0, av: typeof p.av === "string" && /^[0-9a-z]{7}([0-9A-F]{6}){6}[0-9a-z]?$/.test(p.av) ? p.av : null, an: ["draw", "wave", "heart", "laptop", "coffee", "dance", "gun"].includes(p.an) ? p.an : null, lp: p.lp ? 1 : 0, gn: p.gn ? 1 : 0, fk: p.fk ? 1 : 0, hc: Math.floor(num(p.hc, 0, 1e9)), hd: num(p.hd, -50, 50), dn: p.dn ? 1 : 0, fc: Math.floor(num(p.fc, 0, 1e9)), fh: num(p.fh, -50, 50), as: Math.floor(num(p.as, 0, 1e7)), rm: clean(p.rm, 40), 
+    br: p.br ? 1 : 0, bc: typeof p.bc === "string" && /^#[0-9a-f]{6}$/i.test(p.bc) ? p.bc : null, l: p.l ? 1 : 0, ly: num(p.ly, -7, 7), st: p.st ? 1 : 0, av: typeof p.av === "string" && /^[0-9a-z]{7}([0-9A-F]{6}){6}[0-9a-z]?$/.test(p.av) ? p.av : null, an: ["draw", "wave", "heart", "laptop", "coffee", "dance", "gun"].includes(p.an) ? p.an : null, lp: p.lp ? 1 : 0, gn: p.gn ? 1 : 0, fk: p.fk ? 1 : 0, hc: Math.floor(num(p.hc, 0, 1e9)), hd: num(p.hd, -50, 50), dn: p.dn ? 1 : 0, fc: Math.floor(num(p.fc, 0, 1e9)), fh: num(p.fh, -50, 50), as: Math.floor(num(p.as, 0, 1e7)), rm: roomKeyAt([11, 12, 13, 14].includes(p.f) ? p.f : 11, num(p.x, 0, 56), num(p.y, 0, 40)),
   };
 }
 /* ───────── 하루들 부스 공유 이젤: 획(stroke)을 모아 두고 모두에게 나눈다 ─────────
@@ -168,7 +216,17 @@ function chatMessage(pid, m) {
   if (m.k === "all") { chatAll.push(msg); if (chatAll.length > 200) chatAll.splice(0, chatAll.length - 200); chatDirty = true; for (const pp of peers.values()) sendTo(pp); }
   else if (m.k === "near") {
     const rm = me.presence?.rm || ""; let n = 0;
-    for (const [qid, pp] of peers) { const q = pp.presence; if (!q || q.f !== p.f || (q.rm || "") !== rm) continue; if (!rm && Math.hypot(q.x - p.x, q.y - p.y) > NEAR) continue; if (qid !== pid) n++; sendTo(pp); }
+    if (meetings && canShareInRoom(p) && me.meetingId && (me.meetingArea !== mediaArea(p) || !meetings.contains(mediaArea(p), me.meetingId))) {
+      me.ws.send(JSON.stringify({ t: "chat", k: "sys", text: "회의가 끝났어요. 회의를 다시 선택해 주세요." })); return;
+    }
+    const scope = meetings && canShareInRoom(p) && me.meetingId && me.meetingArea === mediaArea(p) && meetings.contains(mediaArea(p), me.meetingId) ? `meeting:${me.meetingId}` : null;
+    if (scope) msg.scope = scope;
+    for (const [qid, pp] of peers) {
+      const q = pp.presence; if (!q || q.f !== p.f || (q.rm || "") !== rm) continue;
+      if (!rm && Math.hypot(q.x - p.x, q.y - p.y) > NEAR) continue;
+      if (meetings && canShareInRoom(p) && (pp.meetingId || null) !== (scope ? me.meetingId : null)) continue;
+      if (qid !== pid) n++; sendTo(pp);
+    }
     if (!me.presence) sendTo(me);
     if (!n) me.ws.send(JSON.stringify({ t: "chat", k: "sys", text: rm ? "이 방에는 아직 아무도 없어요" : "근처(6칸 안)에 아무도 없어요" }));
   } else if (m.k === "dm") {
@@ -177,17 +235,102 @@ function chatMessage(pid, m) {
     for (const pp of peers.values()) if (pp.uid === to || pp.uid === me.uid) sendTo(pp);
   }
 }
-wss.on("connection", (ws) => {
-  const id = `p${++seq}`;
-  peers.set(id, { ws, name: "크루", presence: null });
-  ws.send(JSON.stringify({ t: "hello", id, v: VERSION }));
+wss.on("connection", (ws, request) => {
+  const id = `p${workerId}-${++seq}`;
+  peers.set(id, { ws, name: "크루", presence: null, mediaAddress: mediaClientAddress(request, process.env.CAMPUS_TRUST_PROXY === "1") });
+  ws.send(JSON.stringify({ t: "hello", id, v: VERSION, meetingTest: !!meetings }));
   for (const b of EZ_BOARDS) ws.send(JSON.stringify({ t: "ez", b, k: "all", strokes: ez[b].strokes }));   // 들어오자마자 판마다 그림 전체
   dirty = true;
   ws.on("message", (raw) => {
     let msg; try { msg = JSON.parse(raw); } catch { return; }
+    if (raw.length > 4096 && msg.t !== "media:cf") return;
     const me = peers.get(id); if (!me) return;
     if (msg.t === "name") { me.name = clean(msg.name, 16) || "크루"; dirty = true; }
-    if (msg.t === "p") { me.presence = sanitize(msg.p); dirty = true; }
+    if (msg.t === "p") {
+      const previousArea = me.presence && mediaArea(me.presence);
+      me.presence = sanitize(msg.p);
+      if (meetings && previousArea && (!me.presence || mediaArea(me.presence) !== previousArea)) {
+        me.meetingId = null; me.meetingArea = null; me.dailyReady = false;
+        cloudflareTest?.disconnected?.(id); void retireMedia(me).catch(() => {}); mediaSwitch.left(id);
+      }
+      dirty = true; cloudflareTest?.presenceChanged?.(); managedStack?.dailyPermissions.changed();
+    }
+    if (msg.t === "media:switch-ack" && Number.isSafeInteger(msg.revision)) mediaSwitch.ack(id, msg.revision);
+    if (msg.t === "media:left") { me.dailyReady = false; me.mediaProvider = null; cloudflareTest?.disconnected?.(id); void retireMedia(me).catch(() => {}); mediaSwitch.left(id); managedStack?.dailyPermissions.changed(); }
+    if (msg.t === "media:meeting" && meetings && typeof msg.id === "string" && /^[a-zA-Z0-9-]{1,48}$/.test(msg.id)) {
+      const respond = (data) => { if (ws.readyState === 1) ws.send(JSON.stringify({ t: "media:meeting", id: msg.id, ...data })); };
+      const now = Date.now(); me.meetingTimes = (me.meetingTimes || []).filter((t) => now - t < 60000);
+      if (me.meetingTimes.length >= 40) { respond({ error: "meeting_rate_limited" }); return; }
+      me.meetingTimes.push(now);
+      if (!me.presence || !canShareInRoom(me.presence)) { respond({ error: "meeting_area_required" }); return; }
+      const area = mediaArea(me.presence);
+      if (msg.op === "list") { respond({ result: meetings.list(area) }); return; }
+      if (!["create", "join", "leave"].includes(msg.op) || me.meetingBusy || me.mediaJoining || me.mediaProvider) { respond({ error: "meeting_busy" }); return; }
+      me.meetingBusy = true;
+      Promise.resolve().then(async () => {
+        if (me.mediaRelease) await me.mediaRelease;
+        if (msg.op === "leave") { me.meetingId = null; me.meetingArea = null; return null; }
+        const result = msg.op === "create"
+          ? await meetings.create({ area, title: msg.data?.title, locked: msg.data?.locked, password: msg.data?.password || "" })
+          : await meetings.join({ area, id: msg.data?.id, password: msg.data?.password || "" });
+        if (!peers.has(id) || !me.presence || mediaArea(me.presence) !== area) throw new Error("area_changed");
+        me.meetingId = result.id; me.meetingArea = area;
+        return result;
+      }).then((result) => respond({ result })).catch((error) => {
+        const reason = /^[a-z_]+$/.test(error?.message || "") ? error.message : "unavailable";
+        respond({ error: reason });
+      }).finally(() => { me.meetingBusy = false; });
+    }
+    if (msg.t === "media:daily-ready" && me.mediaProvider === "daily") { me.dailyReady = true; managedStack?.dailyPermissions.changed(); }
+    if (msg.t === "media:cf" && cloudflareTest?.configured && typeof msg.id === "string" && /^[a-zA-Z0-9-]{1,48}$/.test(msg.id)) {
+      const respond = (data) => { if (ws.readyState === 1) ws.send(JSON.stringify({ t: "media:cf", id: msg.id, ...data })); };
+      const now = Date.now(); me.cfTimes = (me.cfTimes || []).filter((t) => now - t < 60000);
+      if (me.cfTimes.length >= 180 || me.mediaProvider !== "cloudflare") { respond({ error: "unavailable" }); return; }
+      me.cfTimes.push(now);
+      cloudflareTest.operation(id, msg.op, msg.data).then((result) => respond({ result })).catch((error) => {
+        const reason = /^[a-z_]+$/.test(error?.message || "") ? error.message : "unavailable";
+        console.warn(`[cloudflare-test] request: ${reason}`); respond({ error: "unavailable" });
+      });
+    }
+    if (msg.t === "media:join" && typeof msg.id === "string" && /^[a-zA-Z0-9-]{1,48}$/.test(msg.id)) {
+      const requestId = msg.id;
+      const sendMedia = (data) => { if (ws.readyState === 1) ws.send(JSON.stringify({ t: "media:join", id: requestId, ...data })); };
+      const now = Date.now(); me.mediaJoinTimes = (me.mediaJoinTimes || []).filter((t) => now - t < 10000);
+      if (me.mediaJoinTimes.length >= 10) { sendMedia({ error: "rate_limited" }); return; }
+      me.mediaJoinTimes.push(now);
+      if (!mediaService.configured) sendMedia({ error: "not_configured" });
+      else if (!me.presence) sendMedia({ error: "not_ready" });
+      else {
+        const area = mediaArea(me.presence);
+        const meetingId = meetings && canShareInRoom(me.presence) ? me.meetingId : null;
+        const scope = meetingId ? `meeting:${meetingId}` : area;
+        if (msg.area !== area) sendMedia({ error: "area_changed" });
+        else if (meetings && canShareInRoom(me.presence) && (!meetingId || me.meetingArea !== area || !meetings.contains(area, meetingId))) sendMedia({ error: "meeting_required" });
+        else if (me.mediaJoining || me.meetingBusy) sendMedia({ error: "in_progress" });
+        else {
+          try { admission?.check(id, me.mediaAddress); }
+          catch (error) { sendMedia({ error: ["rate_limited", "room_full"].includes(error?.message) ? error.message : "unavailable" }); return; }
+          me.mediaJoining = true;
+          Promise.resolve().then(async () => {
+            if (me.mediaRelease) await me.mediaRelease;
+            if (me.mediaLease) await retireMedia(me);
+            return mediaService.join({ identity: id, name: me.name, area, scope, canShare: canShareInRoom(me.presence) });
+          })
+          .then((join) => {
+            if (!peers.has(id) || !me.presence || mediaArea(me.presence) !== area || (meetingId && (me.meetingId !== meetingId || !meetings.contains(area, meetingId)))) {
+              if (join._leaseKey) void managedStack?.router.releaseLivekit(join._leaseKey).catch(() => {});
+              if (join.provider === "cloudflare") cloudflareTest?.disconnected?.(id);
+              sendMedia({ error: "area_changed" });
+            } else {
+              const { _leaseKey, ...publicJoin } = join;
+              me.mediaLease = _leaseKey || null; me.mediaProvider = join.provider; me.mediaArea = area; me.mediaScope = scope; me.mediaGeneration = join.revision; me.dailyReady = false;
+              managedStack?.dailyPermissions.changed(); sendMedia({ join: publicJoin });
+            }
+          }).catch((error) => sendMedia({ error: ["room_full", "cloudflare_cleanup_required"].includes(error?.message) ? error.message : "unavailable" }))
+          .finally(() => { me.mediaJoining = false; });
+        }
+      }
+    }
     if (msg.t === "ez") ezMessage(id, msg);
     if (msg.t === "id" && !me.uid) { // 브라우저마다 고정된 uid: 개인 메시지 주소. 받자마자 지난 대화를 보낸다
       me.uid = clean(msg.u, 24); dirty = true; if (!me.uid) return;
@@ -196,7 +339,7 @@ wss.on("connection", (ws) => {
     }
     if (msg.t === "chat" && ["near", "all", "dm"].includes(msg.k)) chatMessage(id, msg);
   });
-  ws.on("close", () => { peers.delete(id); dirty = true; });
+  ws.on("close", () => { const me = peers.get(id); if (me) void retireMedia(me).catch(() => {}); cloudflareTest?.disconnected?.(id); mediaSwitch.disconnected(id); peers.delete(id); managedStack?.dailyPermissions.changed(); dirty = true; });
   ws.on("error", () => {});
 });
 setInterval(() => { // 초당 12번, 바뀐 게 있을 때만 모두에게 전체 상태를 보낸다
@@ -212,7 +355,8 @@ let draining = false;
 function drain(reason) {
   if (draining) return; draining = true;
   console.log(`[${VERSION}] draining (${reason})`);
-  server.close(() => process.exit(0));                       // 새 연결은 받지 않고, 처리 중인 요청은 마저 끝낸다
+  const mediaCleanup = (managedStack?.shutdown?.() || cloudflareTest?.shutdown?.() || Promise.resolve()).catch(() => {});
+  server.close(() => { void mediaCleanup.finally(() => { meetings?.close?.(); process.exit(0); }); });  // 새 연결은 받지 않고, 처리 중인 요청과 음성 정리를 마친다
   const bye = JSON.stringify({ t: "bye" });                  // 접속 중인 크루는 곧바로 새 워커로 다시 붙는다
   for (const { ws } of peers.values()) { try { ws.send(bye); ws.close(1012, "restart"); } catch { } }
   setTimeout(() => process.exit(0), 10000).unref();          // 오래 붙잡힌 연결이 있어도 10초 뒤엔 끝낸다
@@ -220,7 +364,7 @@ function drain(reason) {
 process.on("message", (m) => { if (m && m.t === "drain") drain("new version ready"); });
 process.on("SIGTERM", () => drain("SIGTERM"));
 
-server.listen(PORT, async () => {
+server.listen(PORT, BIND_HOST, async () => {
   console.log(`[${VERSION}] wooteco-metaverse on :${PORT}`);
   await Promise.race([feed().catch(() => null), new Promise((r) => setTimeout(r, 5000))]);   // 피드를 미리 데워 두고
   process.send?.({ t: "ready", v: VERSION });                                                  // 감독에게 준비됐다고 알린다

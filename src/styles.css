@@ -32,6 +32,24 @@ body{background:var(--ground);color:var(--ink);font-family:var(--body);overflow:
 @keyframes zzz{0%{opacity:0;transform:translateY(6px)}25%,65%{opacity:1}100%{opacity:0;transform:translateY(-10px)}}
 @media (prefers-reduced-motion:reduce){.zzz i{animation:none;opacity:1}}
 .hud{position:fixed;z-index:5;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+#mediaDock{position:fixed;z-index:8;top:calc(68px + env(safe-area-inset-top,0px));left:max(12px,env(safe-area-inset-left,0px));width:min(440px,calc(100% - 24px));pointer-events:none}
+.mediaActions{display:flex;flex-wrap:wrap;gap:6px;pointer-events:auto}
+.mediaButton{font:700 13px var(--body);color:var(--ink);background:rgba(255,255,255,.96);border:1.5px solid var(--ink);border-radius:10px;padding:7px 10px;box-shadow:1px 2px 0 var(--ink);cursor:pointer}
+.mediaButton.primary,.mediaButton[aria-pressed="true"]{background:var(--brand)}
+.mediaButton:disabled{opacity:.6;cursor:wait}
+#mediaDock [hidden],#sharedScreens[hidden]{display:none!important}
+#mediaStatus{display:inline-block;margin:5px 0 0;padding:4px 8px;border-radius:8px;background:rgba(255,255,255,.92);color:var(--ink);font:12px/1.4 var(--body);pointer-events:auto}
+#meetingPanel{pointer-events:auto;margin-top:6px;padding:9px 10px;background:rgba(255,255,255,.97);border:1.5px solid var(--ink);border-radius:10px;max-height:36dvh;overflow:auto;font:13px/1.4 var(--body)}
+#meetingSelection,#meetingMessage,#meetingChatHint{margin:0 0 5px}#meetingChatHint{font-size:11px;color:#5b5b66}#meetingMessage{color:#8b2929;margin-top:6px}#meetingDetails summary{font-weight:700;cursor:pointer}
+#meetingList{display:grid;gap:5px;margin:7px 0}.meetingRow{display:flex;flex-wrap:wrap;align-items:center;gap:6px}.meetingRow strong{flex:1;min-width:100px;overflow-wrap:anywhere}
+#meetingCreate{display:flex;flex-wrap:wrap;align-items:end;gap:6px;border-top:1px solid #ddd;padding-top:7px}#meetingCreate label{display:grid;gap:2px;font-size:12px}#meetingPanel input,#meetingPanel select{font:13px var(--body);padding:5px;border:1px solid #999;border-radius:6px;max-width:150px}#meetingPanel button{padding:5px 8px}
+#sharedScreens{position:fixed;z-index:9;top:calc(142px + env(safe-area-inset-top,0px));left:max(12px,env(safe-area-inset-left,0px));width:min(480px,calc(100% - 24px));max-height:calc(100dvh - 270px);overflow:auto;background:var(--paper);border:2px solid var(--ink);border-radius:14px;box-shadow:2px 3px 0 var(--ink);padding:9px}
+.sharedScreensHead{display:flex;justify-content:space-between;align-items:center;gap:8px;font:700 13px var(--body)}
+.sharedScreensHead button{font:inherit;background:#fff;border:1px solid var(--ink);border-radius:7px;padding:3px 8px;cursor:pointer}
+#sharedScreenList{display:grid;gap:8px;margin-top:8px}
+#sharedScreenList[hidden]{display:none}
+.sharedScreen{margin:0;min-width:0}.sharedScreen video{display:block;width:100%;max-height:35vh;aspect-ratio:16/9;object-fit:contain;background:#171923;border-radius:8px}.sharedScreen figcaption{margin-top:4px;font:12px var(--body);color:var(--muted)}
+@media(max-width:640px){#mediaDock{top:calc(60px + env(safe-area-inset-top,0px))}.mediaButton{font-size:12px;padding:6px 8px}#mediaStatus{font-size:11px}#sharedScreens{top:calc(145px + env(safe-area-inset-top,0px));max-height:40dvh}.sharedScreen video{max-height:25vh}}
 .chip{background:var(--paper);border:2px solid var(--ink);border-radius:14px 16px 13px 15px;padding:6px 12px;box-shadow:2px 3px 0 var(--ink);font-family:var(--hand);font-size:18px;line-height:1.1;color:var(--ink)}
 button.chip{cursor:pointer}
 #floorHud{top:calc(12px + env(safe-area-inset-top,0px));left:max(12px,env(safe-area-inset-left,0px));max-width:calc(100% - 24px)}

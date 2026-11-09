@@ -20,8 +20,8 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap">
-  <script type="module" crossorigin src="/assets/index-DkOK1bav.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-C9b5VW8L.css">
+  <script type="module" crossorigin src="/assets/index-DQREFnaC.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-Dy8iolyW.css">
 </head>
 <body>
 
@@ -40,6 +40,35 @@
   <form id="nameForm" hidden><input id="nameInput" class="chip" maxlength="16" aria-label="내 이름" style="width:130px"></form>
   <div class="chip" id="online">혼자 둘러보는 중</div>
 </div>
+<section id="mediaDock" aria-label="음성과 화면 공유">
+  <div class="mediaActions">
+    <button type="button" class="mediaButton primary" id="voiceToggle" aria-pressed="false">음성 연결</button>
+    <button type="button" class="mediaButton" id="micToggle" aria-pressed="false" hidden>마이크 켜기</button>
+    <button type="button" class="mediaButton" id="screenToggle" aria-pressed="false" hidden>화면 공유</button>
+    <button type="button" class="mediaButton" id="audioResume" hidden>소리 듣기</button>
+  </div>
+  <p id="mediaStatus" role="status" aria-live="polite">음성을 연결하면 가까운 크루의 목소리가 들려요.</p>
+  <section id="meetingPanel" aria-label="회의 선택" hidden>
+    <p id="meetingSelection">회의를 만들거나 선택해 주세요.</p>
+    <p id="meetingChatHint" hidden>근처 채팅은 같은 회의에만 보여요. 전체 채팅은 모두에게 보여요.</p>
+    <details id="meetingDetails" open>
+      <summary>회의 선택 및 만들기</summary>
+      <div id="meetingList" aria-label="회의 목록"></div>
+      <form id="meetingCreate">
+        <label>회의 이름 <input id="meetingTitle" maxlength="30" required placeholder="예: 함께 공부하기"></label>
+        <label>공개 여부 <select id="meetingPrivacy"><option value="public">공개</option><option value="private">비공개</option></select></label>
+        <label id="meetingCreatePasswordLabel" hidden>비밀번호 <input id="meetingCreatePassword" type="password" minlength="8" maxlength="64" autocomplete="new-password" placeholder="8자 이상"></label>
+        <button type="submit" class="mediaButton">회의 만들기</button>
+      </form>
+      <p id="meetingMessage" role="status" aria-live="polite"></p>
+    </details>
+  </section>
+</section>
+<section id="sharedScreens" aria-label="회의실 공유 화면" hidden>
+  <div class="sharedScreensHead"><strong>회의실 공유 화면</strong><button type="button" id="screensCollapse" aria-expanded="true">접기</button></div>
+  <div id="sharedScreenList"></div>
+</section>
+<div id="mediaAudio" hidden></div>
 <input type="file" id="feedFile" accept=".json,application/json" hidden>
 <div id="zoneToast" class="chip" style="opacity:0"><h2></h2><p></p></div>
 <div id="hint"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 걷기 · <kbd>F</kbd> 상호작용 · <kbd>Enter</kbd> 채팅 · <kbd>Tab</kbd> 인벤토리 · <kbd>V</kbd> 시점 · <button type="button" id="guideBtn">조작법</button></div>

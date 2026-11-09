@@ -7,13 +7,15 @@ import { AVATAR_COLOR_PARTS, AVATAR_COLORS, AVATAR_OPTIONS, AVATAR_PRESETS, LOCK
 import { dropDoll, makeDoll } from "./dolls";
 import { avatarPreview } from "../scene/avatarPreviewStore";
 import { createEnvironment } from "./environment";
+import { mountMediaControls } from "../media/controller";
+import type { MediaJoin } from "../media/types";
 import recruitPosterUrl from "../assets/recruit-poster-2026.png";
 import comicWinterUrl from "../assets/booth/comic-winter.jpg";
 import comicCastellaUrl from "../assets/booth/comic-castella.jpg";
 import comicDanceUrl from "../assets/booth/comic-dance.jpg";
 import comicPassUrl from "../assets/booth/comic-pass.jpg";
 import boothBannerUrl from "../assets/booth/banner.jpg";
-import { W, H, S, FH, WALL, DOLL, CEIL, VIEW, inside, INK, BRAND, NAVY, WEAK, HAND, narrow, clamp, lerp, rng, hash, wx, wz, tX, tY, floorY, FLOOR_INFO, makeFloor, FLOORS, WALK_THROUGH, ELEV_SPAWN, solid, inRect, STEP, ARC_STEP, bleacherLevel, flightSteps, DECK_H, heightAt, topAt, canStand, R_ME, bagSpot, applyLie, fits, nearestFree, furnCells, TOPS, FN, NW, NH, navNext, sweep, buildNav } from "./world";
+import { W, H, S, FH, WALL, DOLL, CEIL, VIEW, inside, INK, BRAND, NAVY, WEAK, HAND, narrow, clamp, lerp, rng, hash, wx, wz, tX, tY, floorY, FLOOR_INFO, makeFloor, FLOORS, WALK_THROUGH, ELEV_SPAWN, solid, inRect, roomKeyAt, STEP, ARC_STEP, bleacherLevel, flightSteps, DECK_H, heightAt, topAt, canStand, R_ME, bagSpot, applyLie, fits, nearestFree, furnCells, TOPS, FN, NW, NH, navNext, sweep, buildNav } from "./world";
 
 // 아티팩트 런타임(window.claude)과 가벼운 DOM 도우미
 declare global { interface Window { claude?: any } }
@@ -2429,6 +2431,15 @@ async function loadFeed() {
 
 /* ════════════════ 12. 같이 있는 크루 (room presence) ════════════════ */
 let room = null, user = null, peerList = [], names = {}, lastSent = 0;
+let requestMediaJoin: (area: string) => Promise<MediaJoin> = async () => { throw new Error("not_ready"); };
+let requestCloudflareMedia: (operation: string, data?: Record<string, unknown>) => Promise<any> = async () => { throw new Error("not_ready"); };
+let requestMeeting: (operation: string, data?: Record<string, unknown>) => Promise<any> = async () => { throw new Error("not_ready"); };
+let acknowledgeMediaSwitch: (revision: number) => void = () => {};
+let notifyMediaLeft: () => void = () => {};
+let notifyDailyReady: () => void = () => {};
+const media = mountMediaControls({ requestJoin: (area) => requestMediaJoin(area), requestCloudflare: (operation, data) => requestCloudflareMedia(operation, data), requestMeeting: (operation, data) => requestMeeting(operation, data), notifyDailyReady: () => notifyDailyReady(), notifyLeft: () => notifyMediaLeft(), acknowledgeSwitch: (revision) => acknowledgeMediaSwitch(revision), meetingChanged: () => renderChat() });
+media.setAvailable(STANDALONE);
+function updateMediaWorld() { const x = Math.round(me.x * 100) / 100, y = Math.round(me.y * 100) / 100; media.updateWorld({ f: me.f, x, y, rm: roomKeyAt(me.f, x, y) }, peerList); }
 /* ───── 로컬 테스트용 가짜 크루(목록·따라가기 확인용) ─────
    vite 개발 서버(npm run dev)에서는 저절로, localhost에서 빌드본을 볼 땐 ?mock 을 붙이면 나온다. ?nomock 이면 끈다. 배포 서버에서는 절대 안 나온다 */
 const MOCK = !new URLSearchParams(location.search).has("nomock") && (import.meta.env.DEV || (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && new URLSearchParams(location.search).has("mock")));
@@ -2459,10 +2470,15 @@ document.addEventListener("visibilitychange", () => { if (document.hidden && me.
 function sendPresence(force) {
   if (!room) return; const now = performance.now(); if (!force && now - lastSent < 90) return; lastSent = now;
   room.presence({ f: me.f, x: Math.round(me.x * 100) / 100, y: Math.round(me.y * 100) / 100, u: Math.round(me.up * 100) / 100, h: Math.round(me.h * 100) / 100, lp: me.act?.name === "laptop" ? 1 : 0, rd: me.act?.name === "read" ? 1 : 0, gn: me.act?.name === "gun" ? 1 : 0, br: me.brush ? 1 : 0, bc: ezPen.c, fk: me.fk, hc: me.hc, hd: Math.round(me.hd * 100) / 100, fc: me.fc, fh: Math.round(me.fh * 100) / 100, dn: me.act?.name === "dance" ? me.act.style + 1 : 0, m: me.moving ? 1 : 0, r: running() ? 1 : 0, l: me.lie ? 1 : 0, st: me.seat ? 1 : 0, ly: me.lie ? Math.round(me.lie.yaw * 100) / 100 : 0, jc: me.jc, ac: me.ac, an: me.an, as: me.as, look: 0, av: avEncode(myAv), rm: roomKey() }).catch(() => { });
+  updateMediaWorld();
 }
 // EC2에서는 직접 만든 WebSocket 서버가 room 역할을 한다
 function wsRoom() {
   let ws = null, handler = null, last = null, retry = 800;
+  let mediaSeq = 0;
+  const pendingMedia = new Map<string, { resolve: (join: MediaJoin) => void; reject: (error: Error) => void; timer: number }>();
+  const pendingCloudflare = new Map<string, { resolve: (result: any) => void; reject: (error: Error) => void; timer: number }>();
+  const pendingMeetings = new Map<string, { resolve: (result: any) => void; reject: (error: Error) => void; timer: number }>();
   const nameKey = "ww.name";
   let myName = LS.get(nameKey) || `크루${Math.floor(Math.random() * 900 + 100)}`; LS.set(nameKey, myName);
   const nameBtn = document.getElementById("nameBtn"), nameForm = document.getElementById("nameForm"), nameInput = $<HTMLInputElement>("nameInput");
@@ -2473,19 +2489,49 @@ function wsRoom() {
   const saveName = () => { const v = nameInput.value.trim().slice(0, 16); if (v) { myName = v; LS.set(nameKey, v); send({ t: "name", name: v }); } nameForm.hidden = true; nameBtn.hidden = false; nameBtn.textContent = `이름: ${myName}`; myTag.textContent = myName; };
   nameForm.addEventListener("submit", (e) => { e.preventDefault(); saveName(); }); nameInput.addEventListener("blur", saveName);
   const send = (m) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m)); };
+  acknowledgeMediaSwitch = (revision) => send({ t: "media:switch-ack", revision });
+  notifyMediaLeft = () => send({ t: "media:left" });
+  notifyDailyReady = () => send({ t: "media:daily-ready" });
+  requestMediaJoin = (area) => new Promise((resolve, reject) => {
+    if (!ws || ws.readyState !== 1) { reject(new Error("not_ready")); return; }
+    const id = `m${++mediaSeq}`;
+    const timer = window.setTimeout(() => { pendingMedia.delete(id); reject(new Error("timeout")); }, 30000);
+    pendingMedia.set(id, { resolve, reject, timer });
+    send({ t: "media:join", id, area });
+  });
+  requestCloudflareMedia = (operation, data) => new Promise((resolve, reject) => {
+    if (!ws || ws.readyState !== 1) { reject(new Error("not_ready")); return; }
+    const id = `c${++mediaSeq}`;
+    const timer = window.setTimeout(() => { pendingCloudflare.delete(id); reject(new Error("timeout")); }, 30000);
+    pendingCloudflare.set(id, { resolve, reject, timer });
+    send({ t: "media:cf", id, op: operation, data: data || {} });
+  });
+  requestMeeting = (operation, data) => new Promise((resolve, reject) => {
+    if (!ws || ws.readyState !== 1) { reject(new Error("not_ready")); return; }
+    // 회의 요청보다 현재 위치를 먼저 보내 서버와 화면의 회의실을 맞춘다.
+    sendPresence(true);
+    const id = `r${++mediaSeq}`;
+    const timer = window.setTimeout(() => { pendingMeetings.delete(id); reject(new Error("timeout")); }, 10000);
+    pendingMeetings.set(id, { resolve, reject, timer });
+    send({ t: "media:meeting", id, op: operation, data: data || {} });
+  });
   netSend = send;   // 이젤 획도 같은 연결로
   let myId = null, firstV = null;
   // 서버가 새 버전으로 바뀌면 페이지는 그대로 두고, 새로고침을 권하는 버튼만 띄운다
   const showUpdate = () => { if (document.getElementById("updateChip")) return; const b = document.createElement("button"); b.id = "updateChip"; b.type = "button"; b.textContent = "새 버전이 나왔어요 · 새로고침"; b.onclick = () => location.reload(); document.body.append(b); };
   const connect = () => {
     ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
-    ws.onopen = () => { netUp = true; retry = 800; send({ t: "id", u: ezState().uid }); send({ t: "name", name: myName }); if (last) send({ t: "p", p: last }); };
+    ws.onopen = () => { netUp = true; retry = 800; send({ t: "id", u: ezState().uid }); send({ t: "name", name: myName }); if (last) send({ t: "p", p: last }); media.setNetwork(true); };
     ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch { return; }
-      if (m.t === "hello") { myId = m.id; if (m.v) { if (!firstV) firstV = m.v; else if (m.v !== firstV) showUpdate(); } }
+      if (m.t === "hello") { myId = m.id; media.setMeetingEnabled(!!m.meetingTest); if (m.v) { if (!firstV) firstV = m.v; else if (m.v !== firstV) showUpdate(); } }
+      if (m.t === "media:join") { const pending = pendingMedia.get(m.id); if (pending) { clearTimeout(pending.timer); pendingMedia.delete(m.id); if (m.join) pending.resolve(m.join); else pending.reject(new Error(m.error || "unavailable")); } }
+      if (m.t === "media:cf") { const pending = pendingCloudflare.get(m.id); if (pending) { clearTimeout(pending.timer); pendingCloudflare.delete(m.id); if (!m.error) pending.resolve(m.result); else pending.reject(new Error(m.error)); } }
+      if (m.t === "media:meeting") { const pending = pendingMeetings.get(m.id); if (pending) { clearTimeout(pending.timer); pendingMeetings.delete(m.id); if (!m.error) pending.resolve(m.result); else pending.reject(new Error(m.error)); } }
+      if (m.t === "media:switch" && Number.isSafeInteger(m.revision)) media.switchProvider(m.revision);
       if (m.t === "ez") easelNet(m);
       if (m.t === "chat") chatNet(m);
       if (m.t === "bye") retry = 150; /* 서버가 새 버전으로 바뀌는 중: 곧바로 다시 붙는다 */ if (m.t === "peers" && handler) handler({ peers: m.peers.map((p) => ({ ...p, kind: "viewer", sameTab: p.peer === myId })) }); };
-    ws.onclose = () => { netUp = false; setTimeout(connect, retry); retry = Math.min(10000, retry * 1.6); };
+    ws.onclose = () => { netUp = false; media.setNetwork(false); for (const pending of [...pendingMedia.values(), ...pendingCloudflare.values(), ...pendingMeetings.values()]) { clearTimeout(pending.timer); pending.reject(new Error("not_ready")); } pendingMedia.clear(); pendingCloudflare.clear(); pendingMeetings.clear(); setTimeout(connect, retry); retry = Math.min(10000, retry * 1.6); };
   };
   connect();
   return { presence: async (p) => { last = p; send({ t: "p", p }); }, onPeers: (fn) => { handler = fn; } };
@@ -2496,6 +2542,7 @@ async function joinRoom() {
       room = wsRoom();
       room.onPeers((ch) => {
         peerList = [...ch.peers.filter((p) => !p.sameTab), ...mockPeers];
+        updateMediaWorld();
         for (const [k, v] of peers) if (!peerList.some((p) => p.peer === k)) { endAct(v); holdBrush(v, false); dropDoll(v.doll); v.tag.remove(); v.bub.remove(); v.zzz.remove(); peers.delete(k); }
         online.textContent = peerList.length ? `같이 있는 크루 ${peerList.length + 1}명` : "혼자 둘러보는 중";
       });
@@ -2574,13 +2621,12 @@ try { chatLogs.near = JSON.parse(LS.get("ww.chatNear") || "[]"); } catch { }
 const uidOf = (peer) => peerList.find((p) => p.peer === peer)?.u || null;
 // 지금 있는 방: 회의실·강의실 같은 닫힌 대화 공간이면 그 이름(층 포함), 아니면 ""
 function roomKey() {
-  let best = null; for (const z of floor.zones || []) if (/강의실|회의실|페어룸|상담실/.test(z.name) && inRect(z, me.x, me.y) && (!best || z.w * z.h < best.w * best.h)) best = z;
-  return best ? `${me.f}:${best.name}` : "";
+  return roomKeyAt(me.f, me.x, me.y);
 }
 function chatNet(m) {
   const mine = m.from?.u === ezState().uid;
   if (m.k === "history") { chatLogs.all = m.all || []; chatLogs.dm = (m.dm || []).sort((a, b) => a.at - b.at); renderChat(); return; }
-  if (m.k === "sys") { chatLogs[chatTab].push({ k: "sys", text: m.text, at: Date.now() }); renderChat(); return; }
+  if (m.k === "sys") { chatLogs[chatTab].push({ k: "sys", text: m.text, at: Date.now(), ...(chatTab === "near" && media.meetingScope() ? { scope: media.meetingScope() } : {}) }); renderChat(); return; }
   const list = chatLogs[m.k]; if (!list) return; if (list.some((x) => x.id === m.id)) return;
   list.push(m); if (list.length > (m.k === "dm" ? 400 : 200)) list.splice(0, list.length - (m.k === "dm" ? 400 : 200));
   if (m.k === "near") LS.set("ww.chatNear", JSON.stringify(chatLogs.near.slice(-100)));
@@ -2622,9 +2668,9 @@ function renderChat() {
     const sel = $<HTMLSelectElement>("chatDmTo"), html2 = `<option value="">고르기</option>` + [...opts].map(([u, n]) => `<option value="${esc(u)}" ${u === dmTo ? "selected" : ""}>${esc(n)}</option>`).join("");
     if (sel.innerHTML !== html2) sel.innerHTML = html2;
   }
-  const rows = chatTab === "dm" ? chatLogs.dm.filter((m) => m.k === "sys" || (dmTo && (m.from?.u === dmTo && m.to === uid || m.from?.u === uid && m.to === dmTo))) : chatLogs[chatTab];
+  const rows = chatTab === "dm" ? chatLogs.dm.filter((m) => m.k === "sys" || (dmTo && (m.from?.u === dmTo && m.to === uid || m.from?.u === uid && m.to === dmTo))) : chatTab === "near" ? chatLogs.near.filter((m) => (m.scope || null) === media.meetingScope()) : chatLogs[chatTab];
   const html = rows.length ? rows.map((m) => m.k === "sys" ? `<li class="sys">${esc(m.text)}</li>` : `<li class="${m.from?.u === uid ? "mine" : ""}"><span class="who" data-u="${esc(m.from?.u || "")}" data-n="${esc(m.from?.name || "")}">${esc(m.from?.name || "크루")}</span>${esc(m.text)}<span class="meta">${hhmm(m.at)}${m.k !== "dm" && m.from?.f ? ` · ${m.from.f}F` : ""}</span></li>`).join("")
-    : `<li class="empty">${chatTab === "near" ? (roomKey() ? "이 방 사람끼리만 보여요" : "6칸 안에 있는 크루에게 보여요") : chatTab === "all" ? "캠퍼스의 모두에게 보여요" : dmTo ? `${esc(dmToName)}님과의 대화예요` : "받는 사람을 고르거나 크루 목록에서 💬를 눌러요"}</li>`;
+    : `<li class="empty">${chatTab === "near" ? (media.meetingScope() ? "같은 회의 사람에게만 보여요" : media.meetingRequired() ? "회의를 선택하지 않은 이 방 사람에게 보여요" : roomKey() ? "이 방 사람끼리만 보여요" : "6칸 안에 있는 크루에게 보여요") : chatTab === "all" ? "캠퍼스의 모두에게 보여요" : dmTo ? `${esc(dmToName)}님과의 대화예요` : "받는 사람을 고르거나 크루 목록에서 💬를 눌러요"}</li>`;
   const log = $("chatLog"); if (html !== chatKey) { const atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 30; chatKey = html; log.innerHTML = html; if (atEnd || true) log.scrollTop = log.scrollHeight; }
   sayInput.placeholder = chatTab === "dm" ? (dmTo ? `${dmToName}님에게 · Tab 바꾸기` : "받는 사람을 골라요") : `${CHAT_LABEL[chatTab]}${chatTab === "near" && roomKey() ? "(이 방)" : ""}에 말하기 · Tab 바꾸기`;
 }
@@ -2813,7 +2859,7 @@ fontsReady.then(() => {
   loadFeed(); joinRoom();
   ready = true;
   // 화면 점검용 손잡이: 주소 끝에 ?debug를 붙였을 때만
-  if (new URLSearchParams(location.search).has("debug")) (window as any).__ez = ezState; (window as any).__t = { peers, gl: renderer, Q, me, NPCS, cam, goFloor, setView, setMyAv, useSkill, jump, lieDown, sitDown, nearSeat, AVATAR_PRESETS, get floor() { return floor; } };
+  if (new URLSearchParams(location.search).has("debug")) (window as any).__ez = ezState; (window as any).__t = { peers, gl: renderer, Q, me, NPCS, cam, goFloor, setView, setMyAv, useSkill, jump, lieDown, sitDown, nearSeat, sendPresence, AVATAR_PRESETS, get floor() { return floor; } };
 });
 
 return { frame(dt: number) { if (!ready) return; const t = performance.now() / 1000; step(Math.min(.05, dt), t); render(Math.min(.05, dt), t); } };

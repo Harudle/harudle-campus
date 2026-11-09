@@ -337,6 +337,17 @@ export function stadiumWall(o, x, y) {
 }
 export const solid = (fl, x, y) => { x = Math.floor(x); y = Math.floor(y); return x < 0 || y < 0 || x >= W || y >= H || fl.grid[y * W + x] === 1; };
 export const inRect = (r, x, y) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
+
+// 채팅과 음성에서 같은 공간을 판단한다. 방 밖은 빈 문자열이다.
+export function roomKeyAt(f: number, x: number, y: number): string {
+  const floor = FLOORS[f];
+  if (!floor || !Number.isFinite(x) || !Number.isFinite(y)) return "";
+  let best: any = null;
+  for (const z of floor.zones || []) {
+    if (/강의실|회의실|페어룸|상담실/.test(z.name) && inRect(z, x, y) && (!best || z.w * z.h < best.w * best.h)) best = z;
+  }
+  return best ? `${f}:${best.name}` : "";
+}
 export const STEP = 0.13;
 export const bleacherLevel = (o, i) => Math.floor((o.down ? (o.axis === "y" ? o.h : o.w) - 1 - i : i) / (o.axis === "y" ? 2 : 1));
 // 반원 객석: 중심(cx, cy)에서 서쪽으로 펼쳐진다. 0 바닥 · 무대 0.5단 · 바깥으로 갈수록 한 단씩
