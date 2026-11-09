@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
+import { createWeatherService } from "./weather.js";
 
 const PORT = Number(process.env.PORT || 80);
 const VERSION = (process.env.APP_VERSION || "dev").slice(0, 12);
@@ -17,6 +18,7 @@ const ROOT = join(fileURLToPath(new URL(".", import.meta.url)), "dist");
 const HARUDLE = "https://www.harudle.com";
 const FEED_TTL = 4 * 60 * 1000;   // 하루들 이미지 주소는 15분 뒤 만료되므로 그보다 짧게
 const PER_AUTHOR = 6;
+const weather = createWeatherService();
 
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css; charset=utf-8", ".woff2": "font/woff2", ".json": "application/json", ".png": "image/png", ".svg": "image/svg+xml", ".ico": "image/x-icon" };
 
@@ -72,6 +74,12 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");
   try {
     if (url.pathname === "/healthz") { res.writeHead(200, { "content-type": "text/plain", "cache-control": "no-store" }); return res.end(`ok ${VERSION}`); }
+    if (url.pathname === "/api/environment") {
+      // 외부 요청은 백그라운드에서 갱신하므로 날씨 서비스가 느려도 시계는 바로 응답한다.
+      const state = weather.snapshot();
+      res.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
+      return res.end(JSON.stringify({ serverTime: Date.now(), ...state }));
+    }
     if (url.pathname === "/api/feed-check") {   // 헤드셋 해금: 붙여넣은 하루들 피드가 진짜 있는지
       const id = url.searchParams.get("id") || "";
       if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) { res.writeHead(400, { "content-type": "application/json" }); return res.end('{"ok":false}'); }

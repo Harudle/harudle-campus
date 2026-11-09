@@ -9,6 +9,7 @@
     "dev": "vite",
     "build": "tsc -p tsconfig.json && vite build && vite build --mode artifact && node scripts/build-info.mjs",
     "check": "node scripts/check.mjs",
+    "test": "node --test scripts/*.test.mjs",
     "serve": "PORT=8080 node server.js"
   },
   "engines": {
@@ -23,11 +24,13 @@
     "@react-three/fiber": "9.8.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
+    "@types/suncalc": "^1.9.2",
     "@types/three": "0.187.0",
     "@vitejs/plugin-react": "^6.2.1",
     "esbuild": "*",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "suncalc": "^2.1.3",
     "three": "0.187.0",
     "typescript": "7.0.2",
     "vite": "8.3.6",
