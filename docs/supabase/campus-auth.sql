@@ -17,9 +17,16 @@ create table if not exists public.campus_sessions (
     revoked_at      timestamptz
 );
 
+-- 하루들 연결 토큰을 한 번만 쓰도록 jti를 만료 시각까지 기억한다
+create table if not exists public.campus_used_link_tokens (
+    jti        text        primary key,
+    expires_at timestamptz not null
+);
+
 create index if not exists campus_sessions_expires_at_idx on public.campus_sessions (expires_at);
 create index if not exists campus_sessions_user_idx on public.campus_sessions (harudle_user_id);
 create index if not exists campus_users_last_login_at_idx on public.campus_users (last_login_at);
 
 alter table public.campus_users enable row level security;
 alter table public.campus_sessions enable row level security;
+alter table public.campus_used_link_tokens enable row level security;
