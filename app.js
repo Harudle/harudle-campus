@@ -19,6 +19,8 @@ import { createCloudflareTestService } from "./server/media/cloudflare-test.js";
 import { createMeetingRegistry } from "./server/media/meeting-registry.js";
 import { createMediaAdmission, mediaClientAddress } from "./server/media/admission.js";
 import { createAuth } from "./server/auth/index.js";
+import { createStartrack } from "./server/startrack.js";
+import { canControlStartrack } from "./src/startrack/shared.mjs";
 
 const PORT = Number(process.env.PORT || 80);
 const BIND_HOST = process.env.CAMPUS_BIND_HOST || undefined;
@@ -129,6 +131,7 @@ if (requiredOrigin) {
 if (process.env.NODE_ENV === "production" && process.env.MEDIA_PROVIDER === "managed-draft" && !requiredOrigin) throw new Error("invalid_campus_origin");
 const wss = new WebSocketServer({ server, path: "/ws", maxPayload: cloudflareTestMode ? 131072 : 4096, verifyClient: ({ origin }) => !requiredOrigin || origin === requiredOrigin });
 const peers = new Map();   // id -> { ws, name, presence }
+const startrack = createStartrack({ onChange: (state) => ezAll({ t: "startrack", state }) });
 const admission = process.env.MEDIA_PROVIDER === "managed-draft" ? createMediaAdmission({ peers, maxParticipants: Number(process.env.MEDIA_MAX_PARTICIPANTS || 20), perAddressPerMinute: Number(process.env.MEDIA_JOIN_PER_IP_PER_MINUTE || 12) }) : null;
 const mediaSwitch = createSwitchCoordinator(peers, process.env.MEDIA_PROVIDER === "managed-draft" ? 2000 : 15000);
 let managedStack = null;
@@ -243,7 +246,7 @@ function chatMessage(pid, m) {
     if (scope) msg.scope = scope;
     for (const [qid, pp] of peers) {
       const q = pp.presence; if (!q || q.f !== p.f || (q.rm || "") !== rm) continue;
-      if (!rm && Math.hypot(q.x - p.x, q.y - p.y) > NEAR) continue;
+      if (!rm && Math.hypot(q.x - p.x, q.y - p.y) > NEAR && !(canControlStartrack(p) && canControlStartrack(q))) continue;
       if (meetings && canShareInRoom(p) && (pp.meetingId || null) !== (scope ? me.meetingId : null)) continue;
       if (qid !== pid) n++; sendTo(pp);
     }
@@ -259,6 +262,7 @@ wss.on("connection", (ws, request) => {
   const id = `p${workerId}-${++seq}`;
   peers.set(id, { ws, name: "크루", presence: null, mediaAddress: mediaClientAddress(request, process.env.CAMPUS_TRUST_PROXY === "1") });
   ws.send(JSON.stringify({ t: "hello", id, v: VERSION, meetingTest: !!meetings }));
+  ws.send(JSON.stringify({ t: "startrack", state: startrack.snapshot() }));
   for (const b of EZ_BOARDS) ws.send(JSON.stringify({ t: "ez", b, k: "all", strokes: ez[b].strokes }));   // 들어오자마자 판마다 그림 전체
   dirty = true;
   const sendHistory = (me) => { const dms = Object.entries(chatDm).filter(([k]) => k.split("|").includes(me.uid)).flatMap(([, v]) => v); ws.send(JSON.stringify({ t: "chat", k: "history", all: chatAll, dm: dms })); };
@@ -277,11 +281,24 @@ wss.on("connection", (ws, request) => {
     if (msg.t === "p") {
       const previousArea = me.presence && mediaArea(me.presence);
       me.presence = sanitize(msg.p);
+      startrack.setPresent(id, canControlStartrack(me.presence));
       if (meetings && previousArea && (!me.presence || mediaArea(me.presence) !== previousArea)) {
         me.meetingId = null; me.meetingArea = null; me.dailyReady = false;
         cloudflareTest?.disconnected?.(id); void retireMedia(me).catch(() => {}); mediaSwitch.left(id);
       }
       dirty = true; cloudflareTest?.presenceChanged?.(); managedStack?.dailyPermissions.changed();
+    }
+    if (msg.t === "startrack") {
+      const now = Date.now();
+      me.startrackTimes = (me.startrackTimes || []).filter((at) => now - at < 5000);
+      if (me.startrackTimes.length >= 12) { ws.send(JSON.stringify({ t: "startrack", error: "rate_limited" })); return; }
+      me.startrackTimes.push(now);
+      const result = startrack.apply(msg, me);
+      if (result.error) ws.send(JSON.stringify({ t: "startrack", error: result.error }));
+      else ezAll({ t: "startrack", state: result.state });
+    }
+    if (msg.t === "startrack:clock" && typeof msg.sentAt === "number" && Number.isFinite(msg.sentAt) && msg.sentAt >= 0) {
+      ws.send(JSON.stringify({ t: "startrack:clock", sentAt: msg.sentAt, serverTime: Date.now() }));
     }
     if (msg.t === "media:switch-ack" && Number.isSafeInteger(msg.revision)) mediaSwitch.ack(id, msg.revision);
     if (msg.t === "media:left") { me.dailyReady = false; me.mediaProvider = null; cloudflareTest?.disconnected?.(id); void retireMedia(me).catch(() => {}); mediaSwitch.left(id); managedStack?.dailyPermissions.changed(); }
@@ -382,7 +399,8 @@ wss.on("connection", (ws, request) => {
     });
     if (msg.t === "chat" && ["near", "all", "dm"].includes(msg.k)) chatMessage(id, msg);
   });
-  ws.on("close", () => { const me = peers.get(id); if (me) void retireMedia(me).catch(() => {}); cloudflareTest?.disconnected?.(id); mediaSwitch.disconnected(id); peers.delete(id); managedStack?.dailyPermissions.changed(); dirty = true; });
+  ws.on("pong", () => startrack.setPresent(id, canControlStartrack(peers.get(id)?.presence)));
+  ws.on("close", () => { const me = peers.get(id); if (me) void retireMedia(me).catch(() => {}); startrack.setPresent(id, false); cloudflareTest?.disconnected?.(id); mediaSwitch.disconnected(id); peers.delete(id); managedStack?.dailyPermissions.changed(); dirty = true; });
   ws.on("error", () => {});
 });
 setInterval(() => { // 초당 12번, 바뀐 게 있을 때만 모두에게 전체 상태를 보낸다
@@ -392,6 +410,7 @@ setInterval(() => { // 초당 12번, 바뀐 게 있을 때만 모두에게 전�
   for (const { ws } of peers.values()) if (ws.readyState === 1) ws.send(msg);
 }, 83);
 setInterval(() => { for (const { ws } of peers.values()) if (ws.readyState === 1) ws.ping(); }, 25000);
+setInterval(() => startrack.expirePresence(), 15000);
 
 /* ───────── 무중단 배포: 준비 알림 · 비우기 ───────── */
 let draining = false;
