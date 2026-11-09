@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { campusSun } from "../dist-check/solar.mjs";
+import { campusMoon, campusSun } from "../dist-check/solar.mjs";
 
 const at = (date) => campusSun(Date.parse(date));
 
@@ -30,4 +30,20 @@ test("같은 오후 6시라도 계절에 따라 해가 있는 위치가 다르�
   assert.ok(summer.y > 0);
   assert.ok(winter.y < 0);
   assert.ok(summer.daylight > winter.daylight);
+});
+
+test("달의 밝은 면은 날짜에 따라 변하고 방향은 단위 벡터다", () => {
+  // NASA 2026 Moon Phases: 6월 15일은 삭, 6월 29일은 보름이다.
+  // https://eclipse.gsfc.nasa.gov/SKYCAL/SKYCAL.html?cal=2026
+  const newMoon = campusMoon(Date.parse("2026-06-15T03:00:00Z"));
+  const fullMoon = campusMoon(Date.parse("2026-06-30T00:00:00Z"));
+  assert.ok(newMoon.fraction < .02);
+  assert.ok(fullMoon.fraction > .98);
+  // 보름 무렵 낮에는 지평선 아래에 있고 밤에는 위에 있다.
+  assert.ok(campusMoon(Date.parse("2026-06-29T12:00:00+09:00")).y < 0);
+  assert.ok(campusMoon(Date.parse("2026-06-29T23:00:00+09:00")).y > 0);
+  for (const moon of [newMoon, fullMoon]) {
+    assert.ok(Math.abs(Math.hypot(moon.x, moon.y, moon.z) - 1) < 1e-9);
+    assert.ok(Number.isFinite(moon.tilt));
+  }
 });
