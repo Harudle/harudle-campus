@@ -1601,7 +1601,7 @@ const camera = R3F.camera; camera.fov = 38; camera.near = .1; camera.far = 360; 
 const ambient = new THREE.HemisphereLight(0xffffff, 0xCFD6E8, 1.6); scene.add(ambient);
 const sun = new THREE.DirectionalLight(0xffffff, 1.5); sun.castShadow = true; sun.shadow.mapSize.set(narrow() ? 1024 : 2048, narrow() ? 1024 : 2048);
 Object.assign(sun.shadow.camera, { left: -40, right: 40, top: 28, bottom: -28, near: 1, far: 95 }); sun.shadow.bias = -.0006; scene.add(sun, sun.target);
-const environment = createEnvironment({ scene, ambient, sun, skyStars, moon, paintCity, ground: GROUND });
+const environment = createEnvironment({ scene, camera, ambient, sun, skyStars, moon, paintCity, ground: GROUND });
 const cam = { eye: undefined as number | undefined, close: false, ip: .3, ipT: .3, id: 3.2, idT: 3.2, look: 0, lookT: 0, yaw: -.35, pitch: .95, dist: narrow() ? 24 : 29, yawT: -.35, pitchT: .95, distT: narrow() ? 24 : 29, target: new THREE.Vector3() };
 const eyeV = new THREE.Vector3(), lookV = new THREE.Vector3(); let fpDt = 0;
 // 들어가서 볼 때: 내 뒤(또는 눈높이)에서, 벽 앞에서 멈추고 천장 아래에 머문다
