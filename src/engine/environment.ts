@@ -156,9 +156,10 @@ export function createEnvironment({ scene, camera, ambient, sun, skyStars, moon,
     moon.position.copy(camera.position).addScaledVector(moonDirection, 440);
     (moon.material as THREE.SpriteMaterial).opacity = (.14 + .86 * (1 - day)) * (1 - clouds * .92) * smooth(-.01, .015, moonDirection.y);
     moon.visible = (moon.material as THREE.SpriteMaterial).opacity > .01;
-    // 실내 조명은 밤에도 유지해 글과 캐릭터가 잘 보이게 한다.
-    ambient.intensity = 1.2 + day * .4; ambient.color.set(0xDFE7FF).lerp(white, day).lerp(eveningLight, twilight * .12);
-    sun.intensity = .8 + day * .7; sun.color.set(0xDFE7FF).lerp(white, day).lerp(eveningLight, twilight * .65);
+    // 캠퍼스의 천장 조명은 해가 진 뒤에도 켜져 있다.
+    // 실내가 파랗게 어두워지지 않도록 밝은 흰 조명을 유지한다.
+    ambient.intensity = 1.6; ambient.color.copy(white);
+    sun.intensity = 1.5; sun.color.copy(white).lerp(eveningLight, twilight * .12);
     const nextDay = Math.round(day * 40), nextTwilight = Math.round(twilight * 40), nextClouds = Math.round(clouds * 20);
     if (nextDay !== cityDay || nextTwilight !== cityTwilight || nextClouds !== cityClouds) {
       cityDay = nextDay; cityTwilight = nextTwilight; cityClouds = nextClouds;
@@ -170,6 +171,11 @@ export function createEnvironment({ scene, camera, ambient, sun, skyStars, moon,
   return {
     frame,
     nightVisibility: () => night,
-    lightOffset: () => ({ x: sunDirection.x * 24, y: Math.max(.25, sunDirection.y) * 24, z: sunDirection.z * 24 }),
+    // 낮에는 햇빛 방향을 따르고, 밤에는 위쪽의 실내 조명 방향으로 바뀐다.
+    lightOffset: () => ({
+      x: (sunDirection.x * day + .2 * (1 - day)) * 24,
+      y: (Math.max(.25, sunDirection.y) * day + (1 - day)) * 24,
+      z: (sunDirection.z * day + .25 * (1 - day)) * 24,
+    }),
   };
 }
