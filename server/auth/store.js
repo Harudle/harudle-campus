@@ -34,14 +34,17 @@ export function createMemoryStore() {
   };
 }
 
-// PostgREST(/rest/v1)를 fetch로 부른다. service_role 키는 서버에만 있고 브라우저로 나가지 않는다
+// PostgREST(/rest/v1)를 fetch로 부른다. 비밀 키는 서버에만 있고 브라우저로 나가지 않는다
+// 새 비밀 키(sb_secret_…)는 apikey 헤더로만 보낸다(JWT가 아니라 Authorization에 넣으면 안 된다).
+// 예전 service_role 키(JWT, 2027년 초 폐기 예정)는 apikey와 Authorization 둘 다 보낸다.
 export function createSupabaseStore({ url, key, fetch = globalThis.fetch }) {
   const base = `${String(url).replace(/\/+$/, "")}/rest/v1`;
+  const auth = String(key).startsWith("sb_") ? {} : { authorization: `Bearer ${key}` };
   const iso = (ms) => new Date(ms).toISOString();
   async function call(path, init = {}, prefer = "return=minimal") {
     const res = await fetch(`${base}${path}`, {
       ...init,
-      headers: { apikey: key, authorization: `Bearer ${key}`, "content-type": "application/json", accept: "application/json", prefer, ...(init.headers || {}) },
+      headers: { apikey: key, ...auth, "content-type": "application/json", accept: "application/json", prefer, ...(init.headers || {}) },
       signal: AbortSignal.timeout(5000),
     });
     if (!res.ok) throw new Error(`supabase ${res.status}`);

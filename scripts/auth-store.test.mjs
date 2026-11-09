@@ -78,3 +78,10 @@ test("연결 토큰 jti는 한 번만 쓸 수 있다", async () => {
   status = 500;
   await assert.rejects(() => s.useLinkToken("j2", 0), /supabase 500/);
 });
+
+test("새 비밀 키(sb_secret_)는 apikey 헤더로만 보낸다", async () => {
+  const f = fakeFetch(() => ({ status: 201 }));
+  await createSupabaseStore({ url: "https://abc.supabase.co", key: "sb_secret_abc", fetch: f.fn }).useLinkToken("j", 0);
+  assert.equal(f.calls.at(-1).headers.apikey, "sb_secret_abc");
+  assert.equal(f.calls.at(-1).headers.authorization, undefined);
+});
