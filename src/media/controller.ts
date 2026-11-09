@@ -3,9 +3,9 @@ import { createMediaProvider } from "./provider";
 import type { CloudflareRequest, MediaCallbacks, MediaJoin, MediaProvider, NearbyPeer, Position } from "./types";
 import { mountMeetings } from "./meetings";
 
-type Options = { requestJoin: (area: string) => Promise<MediaJoin>; requestCloudflare: CloudflareRequest; requestMeeting: (operation: string, data?: Record<string, unknown>) => Promise<any>; notifyDailyReady?: () => void; notifyLeft?: () => void; acknowledgeSwitch?: (revision: number) => void; meetingChanged?: () => void };
+type Options = { requestJoin: (area: string) => Promise<MediaJoin>; requestRenew: () => Promise<number>; requestCloudflare: CloudflareRequest; requestMeeting: (operation: string, data?: Record<string, unknown>) => Promise<any>; notifyDailyReady?: () => void; notifyLeft?: () => void; acknowledgeSwitch?: (revision: number) => void; meetingChanged?: () => void };
 
-export function mountMediaControls({ requestJoin, requestCloudflare, requestMeeting, notifyDailyReady = () => {}, notifyLeft = () => {}, acknowledgeSwitch = () => {}, meetingChanged = () => {} }: Options) {
+export function mountMediaControls({ requestJoin, requestRenew, requestCloudflare, requestMeeting, notifyDailyReady = () => {}, notifyLeft = () => {}, acknowledgeSwitch = () => {}, meetingChanged = () => {} }: Options) {
   const dock = document.getElementById("mediaDock")!;
   const voice = document.getElementById("voiceToggle") as HTMLButtonElement;
   const mic = document.getElementById("micToggle") as HTMLButtonElement;
@@ -106,6 +106,23 @@ export function mountMediaControls({ requestJoin, requestCloudflare, requestMeet
     if (!reconciling) void reconcile();
   }
 
+  function scheduleLease(expiresAt: number, current: MediaProvider, renewable: boolean) {
+    const renewIn = expiresAt * 1000 - Date.now() - 5000;
+    if (!Number.isFinite(renewIn) || renewIn < 1000) throw new Error("lease_expired");
+    leaseTimer = window.setTimeout(() => {
+      if (provider !== current || !wanted || !network) return;
+      if (!renewable) { renewLease = true; queue(); return; }
+      void requestRenew().then((next) => {
+        if (provider === current && wanted && network) scheduleLease(next, current, true);
+      }).catch((error) => {
+        if (provider !== current || pendingSwitch !== null || !wanted) return;
+        wanted = false; microphone = false; sharing = false;
+        message = error?.message === "media_unavailable" ? "지금은 음성과 회의를 사용할 수 없어요. 잠시 후 다시 시도해 주세요." : "음성 연결을 유지하지 못했어요. 다시 연결해 주세요.";
+        queue(); render();
+      });
+    }, renewIn);
+  }
+
   async function reconcile() {
     reconciling = true;
     while (queued) {
@@ -148,11 +165,7 @@ export function mountMediaControls({ requestJoin, requestCloudflare, requestMeet
         candidate.setAllowedPeers(allowedPeers());
         if (microphone) await candidate.setMicrophone(true);
         const expiresAt = Number(join.connection.expiresAt || 0);
-        if (expiresAt) {
-          const renewIn = expiresAt * 1000 - Date.now() - 5000;
-          if (!Number.isFinite(renewIn) || renewIn < 1000) throw new Error("lease_expired");
-          leaseTimer = window.setTimeout(() => { renewLease = true; queue(); }, renewIn);
-        }
+        if (expiresAt) scheduleLease(expiresAt, candidate, join.provider === "livekit" && join.connection.renewable === "1");
         message = interruptedShare ? "음성을 다시 연결했어요. 화면 공유를 다시 시작해 주세요." : "";
       } catch (error: any) {
         if (provider === candidate) await closeProvider();
@@ -160,7 +173,7 @@ export function mountMediaControls({ requestJoin, requestCloudflare, requestMeet
         else if (!network || (position && areaOf(position) !== area)) queued = true;
         else {
           wanted = false; microphone = false;
-          message = error?.message === "not_configured" ? "음성 기능을 아직 설정하지 않았어요." : error?.message === "meeting_required" ? "회의를 다시 선택해 주세요." : error?.message === "room_full" ? "음성 공간에 사람이 가득 찼어요. 잠시 후 다시 시도해 주세요." : error?.message === "rate_limited" ? "연결 요청이 많아요. 잠시 후 다시 시도해 주세요." : error?.message === "cloudflare_cleanup_required" ? "이전 음성 연결을 확인하고 있어요. 잠시 후 다시 시도해 주세요." : "음성 연결에 실패했어요. 잠시 후 다시 시도해 주세요.";
+          message = error?.message === "not_configured" ? "음성 기능을 아직 설정하지 않았어요." : error?.message === "meeting_required" ? "회의를 다시 선택해 주세요." : error?.message === "room_full" ? "음성 공간에 사람이 가득 찼어요. 잠시 후 다시 시도해 주세요." : error?.message === "rate_limited" ? "연결 요청이 많아요. 잠시 후 다시 시도해 주세요." : error?.message === "cloudflare_cleanup_required" ? "이전 음성 연결을 확인하고 있어요. 잠시 후 다시 시도해 주세요." : error?.message === "media_unavailable" ? "지금은 음성과 회의를 사용할 수 없어요. 잠시 후 다시 시도해 주세요." : "음성 연결에 실패했어요. 잠시 후 다시 시도해 주세요.";
         }
       } finally {
         connecting = false; render();

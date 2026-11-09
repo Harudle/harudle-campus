@@ -68,11 +68,25 @@ export function createManagedLiveKitProvider(env, store, { now = Date.now, roomC
         store.assertLeadership();
         const current = store.state();
         if (current.phase !== "active" || current.provider !== "livekit" || current.generation !== generation) throw new Error("media_state_changed");
-        return { provider: "livekit", area, canShare, connection: { url, token: jwt, expiresAt: String(lease.expiresAt) }, _leaseKey: resourceKey };
+        return { provider: "livekit", area, canShare, connection: { url, token: jwt, expiresAt: String(lease.expiresAt), renewable: "1" }, _leaseKey: resourceKey };
       });
       queues.set(room, next);
       void next.finally(() => { if (queues.get(room) === next) queues.delete(room); }).catch(() => {});
       return next;
+    },
+    renew({ leaseKey, canShare }, { generation }) {
+      if (!configured || typeof canShare !== "boolean") throw new Error("invalid_media_request");
+      store.assertLeadership();
+      const resource = store.resource(leaseKey);
+      let room;
+      try { room = JSON.parse(resource?.locator || "").room; } catch { throw new Error("invalid_resource"); }
+      const participants = store.livekitRoomParticipants(room, generation);
+      if (!participants) throw new Error("media_state_changed");
+      const expiresAt = Math.floor(now() / 1000) + leaseSeconds, seconds = leaseSeconds + 30;
+      // 연결을 끊지 않고 시간을 연장한다. 양방향 전송을 넉넉하게 예약한다.
+      const bytesPerSecond = 2 * (participants - 1) * (canShare ? 500000 : 64000);
+      store.renewLivekitParticipant({ key: leaseKey, generation, amounts: { livekit: seconds, livekit_bytes: seconds * bytesPerSecond + 5000000 }, expiresAt });
+      return { expiresAt };
     },
   };
 }

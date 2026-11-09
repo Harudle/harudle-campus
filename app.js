@@ -265,6 +265,7 @@ wss.on("connection", (ws, request) => {
       if (!me.presence || !canShareInRoom(me.presence)) { respond({ error: "meeting_area_required" }); return; }
       const area = mediaArea(me.presence);
       if (msg.op === "list") { respond({ result: meetings.list(area) }); return; }
+      if (["create", "join"].includes(msg.op) && process.env.MEDIA_PROVIDER === "managed-draft" && (!managedStack || managedStack.router.state().phase === "blocked")) { respond({ error: "media_unavailable" }); return; }
       if (!["create", "join", "leave"].includes(msg.op) || me.meetingBusy || me.mediaJoining || me.mediaProvider) { respond({ error: "meeting_busy" }); return; }
       me.meetingBusy = true;
       Promise.resolve().then(async () => {
@@ -282,6 +283,18 @@ wss.on("connection", (ws, request) => {
       }).finally(() => { me.meetingBusy = false; });
     }
     if (msg.t === "media:daily-ready" && me.mediaProvider === "daily") { me.dailyReady = true; managedStack?.dailyPermissions.changed(); }
+    if (msg.t === "media:renew" && typeof msg.id === "string" && /^[a-zA-Z0-9-]{1,48}$/.test(msg.id)) {
+      const respond = (data) => { if (ws.readyState === 1) ws.send(JSON.stringify({ t: "media:renew", id: msg.id, ...data })); };
+      const time = Date.now(); me.mediaRenewTimes = (me.mediaRenewTimes || []).filter((t) => time - t < 10000);
+      if (me.mediaRenewTimes.length >= 4) { respond({ error: "rate_limited" }); return; }
+      me.mediaRenewTimes.push(time);
+      if (!managedStack || me.mediaProvider !== "livekit" || !me.mediaLease || !me.presence || me.mediaArea !== mediaArea(me.presence) || me.mediaJoining) { respond({ error: "media_unavailable" }); return; }
+      const key = me.mediaLease; me.mediaJoining = true;
+      Promise.resolve().then(() => managedStack.router.renewLivekit(key, canShareInRoom(me.presence))).then((lease) => {
+        if (!peers.has(id) || me.mediaLease !== key || me.mediaProvider !== "livekit") throw new Error("media_unavailable");
+        respond({ expiresAt: lease.expiresAt });
+      }).catch((error) => respond({ error: error?.message === "media_unavailable" ? error.message : "unavailable" })).finally(() => { me.mediaJoining = false; });
+    }
     if (msg.t === "media:cf" && cloudflareTest?.configured && typeof msg.id === "string" && /^[a-zA-Z0-9-]{1,48}$/.test(msg.id)) {
       const respond = (data) => { if (ws.readyState === 1) ws.send(JSON.stringify({ t: "media:cf", id: msg.id, ...data })); };
       const now = Date.now(); me.cfTimes = (me.cfTimes || []).filter((t) => now - t < 60000);
@@ -326,7 +339,7 @@ wss.on("connection", (ws, request) => {
               me.mediaLease = _leaseKey || null; me.mediaProvider = join.provider; me.mediaArea = area; me.mediaScope = scope; me.mediaGeneration = join.revision; me.dailyReady = false;
               managedStack?.dailyPermissions.changed(); sendMedia({ join: publicJoin });
             }
-          }).catch((error) => sendMedia({ error: ["room_full", "cloudflare_cleanup_required"].includes(error?.message) ? error.message : "unavailable" }))
+          }).catch((error) => sendMedia({ error: ["room_full", "cloudflare_cleanup_required", "media_unavailable"].includes(error?.message) ? error.message : "unavailable" }))
           .finally(() => { me.mediaJoining = false; });
         }
       }

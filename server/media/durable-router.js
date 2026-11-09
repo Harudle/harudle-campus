@@ -1,9 +1,10 @@
 import { cleanupDurableResources } from "./provider-cleanup.js";
 
 // 단일 EC2의 단일 미디어 관리자에서만 사용한다. 상태와 정리 대상은 SQLite에 남긴다.
-export function createDurableMediaRouter({ store, providers, cleaners, notifySwitch = () => {}, retryMs = 5000, now = Date.now, resumeMinimums = { livekit: 1, livekit_bytes: 1, daily: 1, cloudflare: 1 } }) {
+export function createDurableMediaRouter({ store, providers, cleaners, notifySwitch = () => {}, retryMs = 5000, now = Date.now, allowedProviders = ["livekit", "daily", "cloudflare"], resumeMinimums = { livekit: 1, livekit_bytes: 1, daily: 1, cloudflare: 1 } }) {
   const names = ["livekit", "daily", "cloudflare"];
-  if (!store || !providers || !cleaners || typeof notifySwitch !== "function" || !names.every((name) => providers[name]?.configured && typeof providers[name].join === "function")) throw new Error("invalid_media_router");
+  if (!store || !providers || !cleaners || typeof notifySwitch !== "function" || !names.every((name) => providers[name]?.configured && typeof providers[name].join === "function") || !Array.isArray(allowedProviders) || !allowedProviders.length || !allowedProviders.every((p, i) => names.includes(p) && (i === 0 || names.indexOf(allowedProviders[i - 1]) < names.indexOf(p)))) throw new Error("invalid_media_router");
+  allowedProviders = [...allowedProviders];
   let closed = false, recovery = null, timer, switching = null, ticking = false, activeTick = null;
   const inflight = new Set(), resourceCleanups = new Map();
 
@@ -31,7 +32,7 @@ export function createDurableMediaRouter({ store, providers, cleaners, notifySwi
       const result = await cleanupDurableResources(store, cleaners);
       if (result.unresolved || store.pendingResources().length) throw new Error("cleanup_unconfirmed");
       if (before.phase === "blocked") return false;
-      const after = store.completeCleanup({ transitionId: before.transition_id });
+      const after = store.completeCleanup({ transitionId: before.transition_id, allowedProviders });
       return after.phase === "active";
     })();
     try { return await recovery; } finally { recovery = null; }
@@ -49,7 +50,7 @@ export function createDurableMediaRouter({ store, providers, cleaners, notifySwi
     if (switching) return switching;
     switching = (async () => {
       let change;
-      try { change = store.beginSwitch({ provider, generation }); }
+      try { change = store.beginSwitch({ provider, generation, allowedProviders, reason }); }
       catch (error) { if (error?.message === "media_state_changed") return recover(); throw error; }
       try { await notifySwitch({ ...change, revision: change.generation, reason }); } catch { /* 서버 정리가 기준이다. */ }
       await Promise.allSettled([...inflight, ...resourceCleanups.values()]);
@@ -67,10 +68,10 @@ export function createDurableMediaRouter({ store, providers, cleaners, notifySwi
         await recover();
         if (store.state().phase === "blocked") {
           // 날짜가 바뀐 것만으로 초기화하지 않는다. 보관 기간이 끝나 예약량이 실제로 줄었을 때만 재개한다.
-          const candidate = store.resumeCandidate(resumeMinimums);
+          const candidate = store.resumeCandidate(resumeMinimums, allowedProviders);
           if (candidate) {
             await providers[candidate].prepareResume?.();
-            if (!closed) store.resume(candidate, resumeMinimums);
+            if (!closed) store.resume(candidate, resumeMinimums, allowedProviders);
           }
         }
         return;
@@ -99,6 +100,7 @@ export function createDurableMediaRouter({ store, providers, cleaners, notifySwi
         const s = store.state();
         if (s.phase === "blocked") throw new Error("media_unavailable");
         if (s.phase !== "active") { await recover(); continue; }
+        if (!allowedProviders.includes(s.provider)) throw new Error("media_unavailable");
         const provider = providers[s.provider], promise = Promise.resolve().then(() => provider.join(options, { generation: s.generation }));
         inflight.add(promise);
         let joined, error;
@@ -117,6 +119,17 @@ export function createDurableMediaRouter({ store, providers, cleaners, notifySwi
     async markUnavailable(provider) {
       const s = store.state();
       if (s.phase === "active" && s.provider === provider) await transition(provider, s.generation, "provider_unavailable");
+    },
+    async renewLivekit(key, canShare) {
+      if (closed || !key) throw new Error("media_unavailable");
+      store.assertLeadership();
+      const s = store.state();
+      if (s.phase !== "active" || s.provider !== "livekit" || !allowedProviders.includes("livekit")) throw new Error("media_unavailable");
+      try { return await providers.livekit.renew({ leaseKey: key, canShare }, { generation: s.generation }); }
+      catch (error) {
+        if (error?.message === "budget_exhausted") { await transition("livekit", s.generation, "budget_exhausted"); throw new Error("media_unavailable"); }
+        throw error;
+      }
     },
     async releaseLivekit(key) {
       if (closed || !key) return;

@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { createServer } from "node:net";
 import { once } from "node:events";
 import WebSocket from "ws";
-import { initializeDurableMediaState } from "../server/media/durable-state.js";
+import { initializeDurableMediaState, openDurableMediaState } from "../server/media/durable-state.js";
 
 test("운영 설정에서 만든 비공개 회의는 서버 재시작 후에도 비밀번호로 입장한다", async (t) => {
   const dir = mkdtempSync(join(tmpdir(), "campus-prod-meetings-")); t.after(() => rmSync(dir, { recursive: true, force: true }));
@@ -27,12 +27,12 @@ test("운영 설정에서 만든 비공개 회의는 서버 재시작 후에도 
     socket.on("message", (data) => messages.push(JSON.parse(data.toString()))); await once(socket, "open");
     socket.send(JSON.stringify({ t: "p", p: { f: 12, x: 37, y: 2 } }));
     let seq = 0;
-    const meeting = async (op, data) => {
-      const id = `r${++seq}`; socket.send(JSON.stringify({ t: "media:meeting", id, op, data }));
+    const request = async (type, data) => {
+      const id = `r${++seq}`; socket.send(JSON.stringify({ t: type, id, ...data }));
       for (let i = 0; i < 300; i++) { const at = messages.findIndex((m) => m.id === id); if (at !== -1) return messages.splice(at, 1)[0]; await new Promise((r) => setTimeout(r, 10)); }
       throw new Error("reply_timeout");
     };
-    return { socket, meeting };
+    return { socket, meeting: (op, data) => request("media:meeting", { op, data }), voice: (area) => request("media:join", { area }) };
   }
   await start(); const first = await connect();
   const room = (await first.meeting("create", { title: "재시작 시험", locked: true, password: "test1234" })).result;
@@ -42,4 +42,14 @@ test("운영 설정에서 만든 비공개 회의는 서버 재시작 후에도 
   assert.equal((await second.meeting("join", { id: room.id, password: "wrong123" })).error, "meeting_password_invalid");
   assert.equal((await second.meeting("join", { id: room.id, password: "test1234" })).result.id, room.id);
   second.socket.close(); await once(second.socket, "close"); child.kill("SIGTERM"); await once(child, "exit");
+
+  const db = openDurableMediaState(state), current = db.state();
+  const transition = db.beginSwitch({ provider: current.provider, generation: current.generation, allowedProviders: ["livekit"] });
+  db.completeCleanup({ transitionId: transition.id, allowedProviders: ["livekit"] }); db.close();
+  await start(); const third = await connect(); t.after(() => third.socket.terminate());
+  assert.equal((await third.meeting("create", { title: "한도 시험", locked: false, password: "" })).error, "media_unavailable");
+  assert.equal((await third.meeting("join", { id: room.id, password: "test1234" })).error, "media_unavailable");
+  third.socket.send(JSON.stringify({ t: "p", p: { f: 12, x: 2, y: 2 } }));
+  assert.equal((await third.voice("12:open")).error, "media_unavailable");
+  third.socket.close(); await once(third.socket, "close"); child.kill("SIGTERM"); await once(child, "exit");
 });

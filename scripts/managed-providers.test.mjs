@@ -7,11 +7,11 @@ import { TokenVerifier } from "livekit-server-sdk";
 import { initializeDurableMediaState, openDurableMediaState } from "../server/media/durable-state.js";
 import { createManagedDailyProvider, createManagedLiveKitProvider, managedRoom } from "../server/media/managed-providers.js";
 
-function fixture(t) {
+function fixture(t, now = Date.now) {
   const dir = mkdtempSync(join(tmpdir(), "campus-managed-")); t.after(() => rmSync(dir, { recursive: true, force: true }));
   const path = join(dir, "state.sqlite"), period = new Date().toISOString().slice(0, 7);
-  initializeDurableMediaState({ path, period, budgets: { livekit: { limit: 1800, used: 0 }, livekit_bytes: { limit: 10000000000, used: 0 }, daily: { limit: 1800, used: 0 }, cloudflare: { limit: 1000, used: 0 } } });
-  const store = openDurableMediaState(path); store.acquireLeadership(); store.completeCleanup();
+  initializeDurableMediaState({ path, period, now, budgets: { livekit: { limit: 1800, used: 0 }, livekit_bytes: { limit: 10000000000, used: 0 }, daily: { limit: 1800, used: 0 }, cloudflare: { limit: 1000, used: 0 } } });
+  const store = openDurableMediaState(path, { now }); store.acquireLeadership(); store.completeCleanup();
   t.after(() => { try { store.releaseLeadership(); store.close(); } catch {} });
   return store;
 }
@@ -30,6 +30,30 @@ test("LiveKit은 연결마다 다른 ID와 세대별 방을 발급하고 시간�
   assert.equal(store.budget("livekit").reserved, 660);
   assert.equal(store.budget("livekit_bytes").reserved, 2 * 5000000 + 330 * 2 * 64000);
   assert.equal(store.pendingResources("livekit").length, 3);
+});
+
+test("LiveKit 연결을 끊지 않고 예약을 연장하며 한도나 만료 때는 연장을 거절한다", async (t) => {
+  let clock = Date.now();
+  const store = fixture(t, () => clock), rooms = new Map();
+  const roomClient = { async listRooms(names) { return names.map((name) => rooms.get(name)).filter(Boolean); }, async createRoom(options) { const room = { name: options.name, maxParticipants: options.maxParticipants }; rooms.set(room.name, room); return room; } };
+  const provider = createManagedLiveKitProvider(env, store, { roomClient, now: () => clock });
+  const join = await provider.join({ identity: "peer-1", name: "크루", area: "12:open", canShare: false }, { generation: 0 });
+  assert.equal(join.connection.renewable, "1");
+  let expiresAt = Number(join.connection.expiresAt);
+  for (let i = 0; i < 4; i++) {
+    clock += 295000;
+    const renewed = provider.renew({ leaseKey: join._leaseKey, canShare: false }, { generation: 0 });
+    assert.ok(renewed.expiresAt > expiresAt); expiresAt = renewed.expiresAt;
+    assert.equal(store.resource(join._leaseKey).expires_at, expiresAt);
+  }
+  assert.equal(store.budget("livekit").reserved, 1650);
+  clock += 295000;
+  assert.throws(() => provider.renew({ leaseKey: join._leaseKey, canShare: false }, { generation: 0 }), /budget_exhausted/);
+  assert.equal(store.resource(join._leaseKey).expires_at, expiresAt);
+  assert.equal(store.budget("livekit").reserved, 1650);
+  clock += 6000;
+  assert.throws(() => provider.renew({ leaseKey: join._leaseKey, canShare: false }, { generation: 0 }), /media_state_changed/);
+  assert.equal(store.budget("livekit").reserved, 1650);
 });
 
 test("Daily 같은 방의 동시 토큰 발급은 차례대로 진행하고 기록을 남긴다", async (t) => {

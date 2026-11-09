@@ -100,3 +100,80 @@ test("세 제공자를 다 쓴 뒤 예약 보관 기간이 끝나면 확인 후 
   assert.equal(router.state().provider, "livekit");
   await router.shutdown();
 });
+
+test("허용된 무료 제공자의 한도를 쓰면 유료 전환 없이 멈추고 재시작 뒤에도 유지한다", async (t) => {
+  let clock = TIME, paidCalls = 0;
+  const f = fixture(t, () => clock);
+  function makeRouter(db) {
+    const services = providers(db);
+    for (const name of ["daily", "cloudflare"]) services[name].join = async () => { paidCalls++; throw new Error("unexpected_paid_provider"); };
+    return createDurableMediaRouter({ store: db, providers: services, cleaners, allowedProviders: ["livekit"], now: () => clock });
+  }
+  let db = f.open(), router = makeRouter(db);
+  await router.start();
+  assert.equal((await router.join({})).provider, "livekit");
+  await assert.rejects(router.join({}), /media_unavailable/);
+  assert.equal(router.state().phase, "blocked");
+  assert.equal(paidCalls, 0);
+  await router.shutdown();
+
+  db = f.open(); router = makeRouter(db); await router.start();
+  assert.equal(router.state().phase, "blocked");
+  await assert.rejects(router.join({}), /media_unavailable/);
+  clock += 35 * 86400000 + 61000;
+  await router.checkExpired();
+  assert.equal(router.state().phase, "active");
+  assert.equal(router.state().provider, "livekit");
+  assert.equal(paidCalls, 0);
+  await router.shutdown();
+});
+
+test("재시작 시 허용하지 않는 이전 제공자는 정리하고 새 연결을 막는다", async (t) => {
+  const f = fixture(t); let db = f.open();
+  db.completeCleanup();
+  const transition = db.beginSwitch({ provider: "livekit", generation: 0 });
+  db.completeCleanup({ transitionId: transition.id });
+  assert.equal(db.state().provider, "daily");
+  db.close();
+
+  db = f.open(); const services = providers(db);
+  services.daily.join = async () => { throw new Error("unexpected_paid_provider"); };
+  const router = createDurableMediaRouter({ store: db, providers: services, cleaners, allowedProviders: ["livekit"] });
+  await router.start();
+  assert.equal(router.state().phase, "blocked");
+  await assert.rejects(router.join({}), /media_unavailable/);
+  await router.shutdown();
+});
+
+test("사용 중인 LiveKit 연결을 연장할 예산이 없으면 정리하고 차단한다", async (t) => {
+  const f = fixture(t), db = f.open(), services = providers(db); let paidCalls = 0, cleaned = 0;
+  services.livekit.renew = () => { throw new Error("budget_exhausted"); };
+  for (const name of ["daily", "cloudflare"]) services[name].join = async () => { paidCalls++; };
+  const router = createDurableMediaRouter({ store: db, providers: services, cleaners: { ...cleaners, livekit: async () => { cleaned++; } }, allowedProviders: ["livekit"] });
+  await router.start(); await router.join({});
+  await assert.rejects(router.renewLivekit("participant", false), /media_unavailable/);
+  assert.equal(router.state().phase, "blocked");
+  assert.equal(cleaned, 1); assert.equal(paidCalls, 0);
+  await router.shutdown();
+});
+
+test("일시 장애로 중단한 경우 재시작 뒤에도 상태를 확인해 복구하고 유료 제공자는 쓰지 않는다", async (t) => {
+  const f = fixture(t); let healthy = false, paidCalls = 0;
+  function makeRouter(db) {
+    const services = providers(db);
+    const join = services.livekit.join;
+    services.livekit.join = async (...args) => { if (!healthy) throw new Error("livekit_unavailable"); return join(...args); };
+    services.livekit.prepareResume = async () => { if (!healthy) throw new Error("offline"); };
+    for (const name of ["daily", "cloudflare"]) services[name].join = async () => { paidCalls++; };
+    return createDurableMediaRouter({ store: db, providers: services, cleaners, allowedProviders: ["livekit"] });
+  }
+  let db = f.open(), router = makeRouter(db);
+  await router.start(); await assert.rejects(router.join({}), /media_unavailable/);
+  assert.equal(router.state().phase, "blocked"); await router.shutdown();
+  db = f.open(); router = makeRouter(db); await router.start();
+  await assert.rejects(router.checkExpired(), /offline/);
+  assert.equal(router.state().phase, "blocked");
+  healthy = true; await router.checkExpired();
+  assert.equal((await router.join({})).provider, "livekit");
+  assert.equal(paidCalls, 0); await router.shutdown();
+});

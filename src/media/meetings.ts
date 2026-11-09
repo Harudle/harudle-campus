@@ -24,6 +24,7 @@ export function mountMeetings(request: Request, beforeChoose: () => Promise<void
     invalid_meeting: "회의 이름과 비밀번호를 확인해 주세요.",
     meeting_busy: "이전 연결을 정리하고 있어요. 잠시 후 다시 시도해 주세요.",
     meeting_area_required: "회의실 위치를 확인하고 있어요. 잠시 후 다시 시도해 주세요.",
+    media_unavailable: "지금은 음성과 회의를 사용할 수 없어요. 잠시 후 다시 시도해 주세요.",
     area_changed: "회의실 위치가 바뀌었어요. 다시 시도해 주세요.",
     not_ready: "캠퍼스 연결이 끊겼어요. 다시 연결되면 시도해 주세요.",
     timeout: "서버 응답이 늦어요. 잠시 후 다시 시도해 주세요.",

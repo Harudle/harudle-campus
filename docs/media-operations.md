@@ -1,12 +1,14 @@
 # 음성 서비스 운영 준비
 
-이 구성은 운영 전 검증이 필요합니다. 실제 배포 여부와 키 설정 여부는 운영 서버에서 따로 확인해야 합니다.
+운영에서는 LiveKit Build 무료 요금제만 사용합니다. 서버의 예약 한도에 도달하면 기존 음성 연결을 정리하고 새 연결을 막습니다. Daily와 Cloudflare는 자동 전환 코드가 있어도 운영에서 새 연결을 만들지 않습니다. 두 제공사는 무료량 초과 시 서버의 추정과 별도로 청구될 수 있기 때문입니다.
+
+LiveKit 프로젝트가 Build 요금제인지 운영자가 계속 확인해야 합니다. 프로젝트를 유료 요금제로 바꾸면 이 코드가 요금제 변경을 자동으로 감지하지 못합니다. EC2와 다른 AWS 서비스의 비용도 이 제한에 포함되지 않습니다.
 
 ## 지금 준비된 동작
 
-서버는 LiveKit, Daily, Cloudflare 순서로 연결합니다. 각 연결 전에 예상 사용량을 예약하고, 한도에 도달하면 이전 연결을 서버에서 정리한 뒤 다음 서비스로 전환합니다. 정리가 확인되지 않으면 전환을 멈춥니다. SQLite에 예약량과 정리 대상이 남아 서버 재시작 뒤에도 이어서 확인합니다.
+로컬 시험에서 서버는 LiveKit, Daily, Cloudflare 순서로 연결합니다. 각 연결 전에 예상 사용량을 예약하고, 한도에 도달하면 이전 연결을 서버에서 정리한 뒤 다음 서비스로 전환합니다. 정리가 확인되지 않으면 전환을 멈춥니다. SQLite에 예약량과 정리 대상이 남아 서버 재시작 뒤에도 이어서 확인합니다. 운영에서는 LiveKit이 마지막 제공자이므로 한도에 닿으면 다른 제공자로 전환하지 않고 중단합니다.
 
-예약량은 35일 동안 유지합니다. 제공사별 청구일이 달라도 이전 예약을 곧바로 지우지 않기 위한 보수적인 방법입니다. 세 서비스를 다 사용해 중단된 경우, 오래된 예약이 보관 기간을 지나고 연결 상태 확인이 성공하면 다시 연결할 수 있습니다. 현재 서비스가 동작 중일 때 더 앞 순서 서비스로 즉시 돌아가지는 않습니다.
+예약량은 35일 동안 유지합니다. 제공사별 청구일이 달라도 이전 예약을 곧바로 지우지 않기 위한 보수적인 방법입니다. 허용된 서비스를 다 사용해 중단된 경우, 오래된 예약이 보관 기간을 지나고 연결 상태 확인이 성공하면 다시 연결할 수 있습니다. 현재 서비스가 동작 중일 때 더 앞 순서 서비스로 즉시 돌아가지는 않습니다.
 
 Daily는 최대 연결 시간에 60초를 더하고 LiveKit은 30초를 더 예약합니다. LiveKit은 참가자 수를 기준으로 수신 전송량도 예상하여 예약합니다. Cloudflare는 수신별 예상 전송량에 정리 지연을 위한 시간을 더 예약합니다. 실제 이용량과 같지 않습니다. 다른 앱의 계정 사용량이나 예상보다 큰 전송량을 모두 통제하지는 못합니다.
 
@@ -25,6 +27,8 @@ Cloudflare 시험 구성은 EC2와 별도의 Worker 및 Durable Object에 세션
 
 같은 Cloudflare 앱을 운영에 사용할 때는 서버를 멈춘 상태에서 `scripts/import-cloudflare-recovery.mjs`로 이 기록을 운영 DB에 가져옵니다. `MEDIA_LEGACY_STATE_PATH`는 기존 DB, `MEDIA_STATE_PATH`는 운영 DB를 가리켜야 하며, 같은 앱임을 확인한 경우에만 `MEDIA_LEGACY_SAME_APP_CONFIRMED=1`을 설정합니다. 운영 DB의 Cloudflare 초기 사용량이 이전 시험의 전체 예약량보다 작으면 가져오지 않습니다. 미확인 기록이 남은 동안 LiveKit과 Daily는 사용할 수 있지만 Cloudflare 새 연결은 막습니다. 서버가 주기적으로 다시 확인하고 정리가 확인되면 Cloudflare를 다시 사용할 수 있습니다.
 
+현재 운영 정책에서는 정리 여부와 관계없이 Cloudflare와 Daily에 새로 연결하지 않습니다. 이전 Cloudflare 연결이 남아 비용이 계속 발생하지 않도록 그 연결을 확인하고 종료하는 요청은 보낼 수 있습니다.
+
 ## 이 컴퓨터에서 다시 시험하기
 
 이번 시험 계정의 설정과 사용량 DB는 Git에 포함되지 않는 `.env.*` 파일에만 보관합니다. 서버가 꺼졌다면 저장소 폴더에서 `bash scripts/run-local-media-demo.sh`를 실행합니다. 다음으로 `http://127.0.0.1:18092/?nomock`을 엽니다. 이 주소는 서버를 실행한 컴퓨터에서만 열립니다. 시험 사용량 한도는 작게 잡았으므로 사용 중 제공자가 바뀌거나 연결이 중단될 수 있습니다.
@@ -41,7 +45,7 @@ Cloudflare 시험 구성은 EC2와 별도의 Worker 및 Durable Object에 세션
 
 한 대의 EC2와 로컬 영구 디스크만 지원합니다. SQLite 파일뿐 아니라 WAL 파일도 같은 디스크에 유지해야 합니다. 무중단 교체 중 두 워커는 관리자 권한을 동시에 갖지 않으며, 이전 워커가 정리된 뒤 새 워커가 이어받습니다. 디스크 유실은 지원하지 않습니다. SQLite의 백업 기능이나 서버를 안전하게 멈춘 뒤의 일관된 백업을 사용해야 합니다.
 
-`node:sqlite`를 사용하는 이 초안은 Node.js 22.13 이상이 필요합니다. 기존 EC2의 Node 버전은 아직 확인하지 못했습니다. `deploy/media-systemd.conf.example`은 systemd가 `/etc/harudle-campus/media.env`를 읽고 `/var/lib/harudle-campus`를 만들도록 하는 예시입니다. 이 파일은 자동 적용되지 않습니다. 환경 파일은 root만 읽도록 권한을 제한하고, 가능하면 EC2 역할과 AWS Systems Manager Parameter Store의 SecureString 또는 Secrets Manager로 비밀을 관리합니다.
+`node:sqlite`를 사용하는 이 구성은 Node.js 22.13 이상이 필요합니다. `deploy/media-systemd.conf.example`은 systemd가 `/etc/harudle-campus/media.env`를 읽고 `/var/lib/harudle-campus`를 만들도록 하는 예시입니다. 이 파일은 자동 적용되지 않습니다. 환경 파일은 root만 읽도록 권한을 제한하고, 가능하면 EC2 역할과 AWS Systems Manager Parameter Store의 SecureString 또는 Secrets Manager로 비밀을 관리합니다.
 
 운영에는 `MEDIA_PROVIDER=managed-draft`, `MEDIA_SINGLE_HOST=1`, `MEDIA_MEETINGS=persistent`, `MEDIA_STATE_PATH`와 `CAMPUS_PUBLIC_ORIGIN=https://campus.harudle.com`이 필요합니다. `CAMPUS_TRUST_PROXY=1`은 신뢰할 수 있는 로컬 Caddy가 앞에 있을 때만 설정합니다. 음성 연결은 동시에 최대 20명이고, 같은 IP의 토큰 요청은 기본적으로 분당 12회까지입니다. 이 제한과 웹소켓 출처 검사는 무단 사용을 완전히 막지 않으며, 특히 같은 계정의 다른 앱 사용량을 막지 못합니다.
 

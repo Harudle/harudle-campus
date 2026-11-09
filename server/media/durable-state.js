@@ -14,6 +14,7 @@ const WINDOW_SECONDS = 35 * 86400;
 const validInt = (v) => Number.isSafeInteger(v) && v >= 0;
 const validPeriod = (v) => typeof v === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(v);
 const validKey = (v) => typeof v === "string" && /^[a-zA-Z0-9:_-]{1,160}$/.test(v);
+const validProviders = (list) => Array.isArray(list) && list.length > 0 && list.every((p, i) => PROVIDERS.includes(p) && (i === 0 || PROVIDERS.indexOf(list[i - 1]) < PROVIDERS.indexOf(p)));
 
 function configure(db) {
   db.exec("PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;");
@@ -90,6 +91,7 @@ export function openDurableMediaState(path, { now = Date.now } = {}) {
     if (!validInt(db.prepare("SELECT baseline_until FROM initialization WHERE id=1").get()?.baseline_until)) throw new Error("media_state_invalid");
     if (!validInt(db.prepare("SELECT livekit_bytes_until FROM initialization WHERE id=1").get()?.livekit_bytes_until)) throw new Error("media_state_invalid");
     db.exec("CREATE TABLE IF NOT EXISTS cloudflare_recovery (session_id TEXT PRIMARY KEY, pending INTEGER NOT NULL CHECK(pending IN (0,1))) STRICT");
+    db.exec("CREATE TABLE IF NOT EXISTS media_transition_reason (id INTEGER PRIMARY KEY CHECK(id=1), reason TEXT NOT NULL CHECK(reason IN ('budget_exhausted','provider_unavailable','cleanup_unavailable','configuration'))) STRICT");
   } catch (error) { db.close(); throw error; }
   const state = () => settings(db);
   function budget(provider) {
@@ -109,6 +111,20 @@ export function openDurableMediaState(path, { now = Date.now } = {}) {
     const leader = db.prepare("SELECT pid, nonce FROM leader WHERE id=1").get();
     return !!leaderNonce && leader?.pid === process.pid && leader.nonce === leaderNonce;
   };
+  function reserveAmountsInTransaction({ provider, generation, amounts, expiresAt }) {
+    const keys = Object.keys(amounts || {});
+    if (!PROVIDERS.includes(provider) || !validInt(generation) || !validInt(expiresAt) || !keys.length || !keys.every((key) => (key === provider || (provider === "livekit" && key === "livekit_bytes")) && validInt(amounts[key]) && amounts[key] > 0)) throw new Error("invalid_reservation");
+    const s = state(), time = now();
+    if (!Number.isFinite(time)) throw new Error("media_state_invalid");
+    if (s.phase !== "active" || s.provider !== provider || s.generation !== generation) throw new Error("media_state_changed");
+    const secondsLeft = expiresAt - Math.floor(time / 1000);
+    if (secondsLeft <= 0 || (amounts[provider] !== undefined && provider !== "cloudflare" && amounts[provider] < secondsLeft)) throw new Error("invalid_reservation");
+    const rows = Object.fromEntries(keys.map((key) => [key, budget(key)]));
+    if (keys.some((key) => amounts[key] > rows[key].limit - rows[key].reserved)) throw new Error("budget_exhausted");
+    const insert = db.prepare("INSERT INTO reservation VALUES(?, ?, ?, ?, ?, ?)");
+    for (const key of keys) insert.run(randomUUID(), s.period, key, generation, amounts[key], expiresAt);
+    return { expiresAt, reserved: rows[provider] ? rows[provider].reserved + amounts[provider] : undefined };
+  }
   return {
     state,
     acquireLeadership() {
@@ -145,27 +161,26 @@ export function openDurableMediaState(path, { now = Date.now } = {}) {
       return this.reserveAmounts({ provider, generation, amounts: { [provider]: amount }, expiresAt });
     },
     reserveAmounts({ provider, generation, amounts, expiresAt }) {
-      const keys = Object.keys(amounts || {});
-      if (!PROVIDERS.includes(provider) || !validInt(generation) || !validInt(expiresAt) || !keys.length || !keys.every((key) => (key === provider || (provider === "livekit" && key === "livekit_bytes")) && validInt(amounts[key]) && amounts[key] > 0)) throw new Error("invalid_reservation");
+      return transaction(db, () => reserveAmountsInTransaction({ provider, generation, amounts, expiresAt }));
+    },
+    renewLivekitParticipant({ key, generation, amounts, expiresAt }) {
+      if (!validKey(key) || !validInt(generation)) throw new Error("invalid_resource");
       return transaction(db, () => {
-        const s = state(), time = now();
-        if (!Number.isFinite(time)) throw new Error("media_state_invalid");
-        if (s.phase !== "active" || s.provider !== provider || s.generation !== generation) throw new Error("media_state_changed");
-        const secondsLeft = expiresAt - Math.floor(time / 1000);
-        if (secondsLeft <= 0 || (amounts[provider] !== undefined && provider !== "cloudflare" && amounts[provider] < secondsLeft)) throw new Error("invalid_reservation");
-        const rows = Object.fromEntries(keys.map((key) => [key, budget(key)]));
-        if (keys.some((key) => amounts[key] > rows[key].limit - rows[key].reserved)) throw new Error("budget_exhausted");
-        const insert = db.prepare("INSERT INTO reservation VALUES(?, ?, ?, ?, ?, ?)");
-        for (const key of keys) insert.run(randomUUID(), s.period, key, generation, amounts[key], expiresAt);
-        return { expiresAt, reserved: rows[provider] ? rows[provider].reserved + amounts[provider] : undefined };
+        const row = db.prepare("SELECT provider, generation, kind, expires_at, pending, closed FROM resource WHERE resource_key=?").get(key);
+        const time = Math.floor(now() / 1000);
+        if (!row || row.provider !== "livekit" || row.generation !== generation || row.kind !== "participant" || row.pending || row.closed || row.expires_at <= time || expiresAt <= row.expires_at) throw new Error("media_state_changed");
+        const result = reserveAmountsInTransaction({ provider: "livekit", generation, amounts, expiresAt });
+        db.prepare("UPDATE resource SET expires_at=? WHERE resource_key=?").run(expiresAt, key);
+        return result;
       });
     },
-    beginSwitch({ provider, generation }) {
-      if (!PROVIDERS.includes(provider) || !validInt(generation)) throw new Error("invalid_transition");
+    beginSwitch({ provider, generation, allowedProviders = PROVIDERS, reason = "budget_exhausted" }) {
+      if (!PROVIDERS.includes(provider) || !validInt(generation) || !validProviders(allowedProviders) || !["budget_exhausted", "provider_unavailable", "cleanup_unavailable"].includes(reason)) throw new Error("invalid_transition");
       return transaction(db, () => {
         const s = state();
         if (s.phase !== "active" || s.provider !== provider || s.generation !== generation) throw new Error("media_state_changed");
-        const next = PROVIDERS[PROVIDERS.indexOf(provider) + 1] || null, id = randomUUID();
+        const index = allowedProviders.indexOf(provider), next = index < 0 ? null : allowedProviders[index + 1] || null, id = randomUUID();
+        db.prepare("INSERT INTO media_transition_reason VALUES(1,?) ON CONFLICT(id) DO UPDATE SET reason=excluded.reason").run(reason);
         db.prepare("UPDATE media_state SET phase='switching', generation=generation+1, next_provider=?, transition_id=? WHERE id=1").run(next, id);
         return { id, from: provider, to: next, generation: generation + 1 };
       });
@@ -224,25 +239,33 @@ export function openDurableMediaState(path, { now = Date.now } = {}) {
       if (!PROVIDERS.includes(provider) || !["room", "session", "participant"].includes(kind) || !validInt(timeSeconds)) throw new Error("invalid_resource");
       return db.prepare("SELECT * FROM resource WHERE closed=0 AND pending=0 AND provider=? AND kind=? AND expires_at<=? ORDER BY expires_at").all(provider, kind, timeSeconds);
     },
-    completeCleanup({ transitionId } = {}) {
+    completeCleanup({ transitionId, allowedProviders = PROVIDERS } = {}) {
+      if (!validProviders(allowedProviders)) throw new Error("invalid_transition");
       return transaction(db, () => {
         const s = state();
         if (!["switching", "recovering"].includes(s.phase) || (s.phase === "switching" && s.transition_id !== transitionId)) throw new Error("media_state_changed");
         const remaining = db.prepare("SELECT COUNT(*) AS n FROM resource WHERE closed=0").get().n;
         if (remaining) throw new Error("cleanup_unconfirmed");
-        if (s.phase === "switching" && !s.next_provider) {
+        const target = s.phase === "switching" ? s.next_provider : s.provider;
+        if (!target || !allowedProviders.includes(target)) {
+          if (s.phase === "recovering") db.prepare("INSERT INTO media_transition_reason VALUES(1,'configuration') ON CONFLICT(id) DO UPDATE SET reason=excluded.reason").run();
           db.prepare("DELETE FROM blocked_budget").run();
           const insert = db.prepare("INSERT INTO blocked_budget VALUES(?, ?)");
           for (const provider of BUDGETS) insert.run(provider, budget(provider).reserved);
           db.prepare("UPDATE media_state SET phase='blocked', next_provider=NULL, transition_id=NULL WHERE id=1").run();
         }
-        else db.prepare("UPDATE media_state SET provider=?, phase='active', next_provider=NULL, transition_id=NULL WHERE id=1").run(s.next_provider || s.provider);
+        else {
+          db.prepare("UPDATE media_state SET provider=?, phase='active', next_provider=NULL, transition_id=NULL WHERE id=1").run(target);
+          db.prepare("DELETE FROM media_transition_reason").run();
+        }
         return state();
       });
     },
-    resumeCandidate(minimums) {
+    resumeCandidate(minimums, allowedProviders = PROVIDERS) {
+      if (!validProviders(allowedProviders)) throw new Error("invalid_transition");
       if (state().phase !== "blocked" || db.prepare("SELECT COUNT(*) AS n FROM resource WHERE closed=0").get().n) return null;
-      for (const provider of PROVIDERS) {
+      const blocked = state(), reason = db.prepare("SELECT reason FROM media_transition_reason WHERE id=1").get()?.reason;
+      for (const provider of allowedProviders) {
         const previous = db.prepare("SELECT reserved FROM blocked_budget WHERE provider=?").get(provider);
         const current = budget(provider), minimum = minimums[provider];
         let freed = !!previous && current.reserved < previous.reserved;
@@ -252,15 +275,17 @@ export function openDurableMediaState(path, { now = Date.now } = {}) {
           freed ||= !!previousBytes && bytes.reserved < previousBytes.reserved;
           enough &&= validInt(minimums.livekit_bytes) && minimums.livekit_bytes > 0 && bytes.limit - bytes.reserved >= minimums.livekit_bytes;
         }
-        if (freed && enough) return provider;
+        const retryUnavailable = provider === blocked.provider && ["provider_unavailable", "cleanup_unavailable"].includes(reason);
+        if ((freed || retryUnavailable) && enough) return provider;
       }
       return null;
     },
-    resume(provider, minimums) {
+    resume(provider, minimums, allowedProviders = PROVIDERS) {
       return transaction(db, () => {
-        if (this.resumeCandidate(minimums) !== provider) throw new Error("media_state_changed");
+        if (this.resumeCandidate(minimums, allowedProviders) !== provider) throw new Error("media_state_changed");
         db.prepare("UPDATE media_state SET provider=?, phase='active', generation=generation+1, next_provider=NULL, transition_id=NULL WHERE id=1").run(provider);
         db.prepare("DELETE FROM blocked_budget").run();
+        db.prepare("DELETE FROM media_transition_reason").run();
         return state();
       });
     },

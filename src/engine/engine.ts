@@ -2432,12 +2432,13 @@ async function loadFeed() {
 /* ════════════════ 12. 같이 있는 크루 (room presence) ════════════════ */
 let room = null, user = null, peerList = [], names = {}, lastSent = 0;
 let requestMediaJoin: (area: string) => Promise<MediaJoin> = async () => { throw new Error("not_ready"); };
+let requestMediaRenew: () => Promise<number> = async () => { throw new Error("not_ready"); };
 let requestCloudflareMedia: (operation: string, data?: Record<string, unknown>) => Promise<any> = async () => { throw new Error("not_ready"); };
 let requestMeeting: (operation: string, data?: Record<string, unknown>) => Promise<any> = async () => { throw new Error("not_ready"); };
 let acknowledgeMediaSwitch: (revision: number) => void = () => {};
 let notifyMediaLeft: () => void = () => {};
 let notifyDailyReady: () => void = () => {};
-const media = mountMediaControls({ requestJoin: (area) => requestMediaJoin(area), requestCloudflare: (operation, data) => requestCloudflareMedia(operation, data), requestMeeting: (operation, data) => requestMeeting(operation, data), notifyDailyReady: () => notifyDailyReady(), notifyLeft: () => notifyMediaLeft(), acknowledgeSwitch: (revision) => acknowledgeMediaSwitch(revision), meetingChanged: () => renderChat() });
+const media = mountMediaControls({ requestJoin: (area) => requestMediaJoin(area), requestRenew: () => requestMediaRenew(), requestCloudflare: (operation, data) => requestCloudflareMedia(operation, data), requestMeeting: (operation, data) => requestMeeting(operation, data), notifyDailyReady: () => notifyDailyReady(), notifyLeft: () => notifyMediaLeft(), acknowledgeSwitch: (revision) => acknowledgeMediaSwitch(revision), meetingChanged: () => renderChat() });
 media.setAvailable(STANDALONE);
 function updateMediaWorld() { const x = Math.round(me.x * 100) / 100, y = Math.round(me.y * 100) / 100; media.updateWorld({ f: me.f, x, y, rm: roomKeyAt(me.f, x, y) }, peerList); }
 /* ───── 로컬 테스트용 가짜 크루(목록·따라가기 확인용) ─────
@@ -2477,6 +2478,7 @@ function wsRoom() {
   let ws = null, handler = null, last = null, retry = 800;
   let mediaSeq = 0;
   const pendingMedia = new Map<string, { resolve: (join: MediaJoin) => void; reject: (error: Error) => void; timer: number }>();
+  const pendingRenew = new Map<string, { resolve: (expiresAt: number) => void; reject: (error: Error) => void; timer: number }>();
   const pendingCloudflare = new Map<string, { resolve: (result: any) => void; reject: (error: Error) => void; timer: number }>();
   const pendingMeetings = new Map<string, { resolve: (result: any) => void; reject: (error: Error) => void; timer: number }>();
   const nameKey = "ww.name";
@@ -2498,6 +2500,13 @@ function wsRoom() {
     const timer = window.setTimeout(() => { pendingMedia.delete(id); reject(new Error("timeout")); }, 30000);
     pendingMedia.set(id, { resolve, reject, timer });
     send({ t: "media:join", id, area });
+  });
+  requestMediaRenew = () => new Promise((resolve, reject) => {
+    if (!ws || ws.readyState !== 1) { reject(new Error("not_ready")); return; }
+    const id = `m${++mediaSeq}`;
+    const timer = window.setTimeout(() => { pendingRenew.delete(id); reject(new Error("timeout")); }, 10000);
+    pendingRenew.set(id, { resolve, reject, timer });
+    send({ t: "media:renew", id });
   });
   requestCloudflareMedia = (operation, data) => new Promise((resolve, reject) => {
     if (!ws || ws.readyState !== 1) { reject(new Error("not_ready")); return; }
@@ -2525,13 +2534,14 @@ function wsRoom() {
     ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch { return; }
       if (m.t === "hello") { myId = m.id; media.setMeetingEnabled(!!m.meetingTest); if (m.v) { if (!firstV) firstV = m.v; else if (m.v !== firstV) showUpdate(); } }
       if (m.t === "media:join") { const pending = pendingMedia.get(m.id); if (pending) { clearTimeout(pending.timer); pendingMedia.delete(m.id); if (m.join) pending.resolve(m.join); else pending.reject(new Error(m.error || "unavailable")); } }
+      if (m.t === "media:renew") { const pending = pendingRenew.get(m.id); if (pending) { clearTimeout(pending.timer); pendingRenew.delete(m.id); if (Number.isSafeInteger(m.expiresAt)) pending.resolve(m.expiresAt); else pending.reject(new Error(m.error || "unavailable")); } }
       if (m.t === "media:cf") { const pending = pendingCloudflare.get(m.id); if (pending) { clearTimeout(pending.timer); pendingCloudflare.delete(m.id); if (!m.error) pending.resolve(m.result); else pending.reject(new Error(m.error)); } }
       if (m.t === "media:meeting") { const pending = pendingMeetings.get(m.id); if (pending) { clearTimeout(pending.timer); pendingMeetings.delete(m.id); if (!m.error) pending.resolve(m.result); else pending.reject(new Error(m.error)); } }
       if (m.t === "media:switch" && Number.isSafeInteger(m.revision)) media.switchProvider(m.revision);
       if (m.t === "ez") easelNet(m);
       if (m.t === "chat") chatNet(m);
       if (m.t === "bye") retry = 150; /* 서버가 새 버전으로 바뀌는 중: 곧바로 다시 붙는다 */ if (m.t === "peers" && handler) handler({ peers: m.peers.map((p) => ({ ...p, kind: "viewer", sameTab: p.peer === myId })) }); };
-    ws.onclose = () => { netUp = false; media.setNetwork(false); for (const pending of [...pendingMedia.values(), ...pendingCloudflare.values(), ...pendingMeetings.values()]) { clearTimeout(pending.timer); pending.reject(new Error("not_ready")); } pendingMedia.clear(); pendingCloudflare.clear(); pendingMeetings.clear(); setTimeout(connect, retry); retry = Math.min(10000, retry * 1.6); };
+    ws.onclose = () => { netUp = false; media.setNetwork(false); for (const pending of [...pendingMedia.values(), ...pendingRenew.values(), ...pendingCloudflare.values(), ...pendingMeetings.values()]) { clearTimeout(pending.timer); pending.reject(new Error("not_ready")); } pendingMedia.clear(); pendingRenew.clear(); pendingCloudflare.clear(); pendingMeetings.clear(); setTimeout(connect, retry); retry = Math.min(10000, retry * 1.6); };
   };
   connect();
   return { presence: async (p) => { last = p; send({ t: "p", p }); }, onPeers: (fn) => { handler = fn; } };
