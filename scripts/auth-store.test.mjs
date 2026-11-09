@@ -35,7 +35,8 @@ test("Supabase: 사용자 upsert · 세션 생성 · 조회 · 폐기 · 정리"
   assert.equal(c.method, "PATCH"); assert.match(c.url, /sid_hash=eq\.h{64}&revoked_at=is\.null$/); assert.deepEqual(c.body, { revoked_at: "2026-11-09T00:00:00.000Z" });
 
   await s.cleanup({ sessionsBefore: at, usersBefore: at - 90 * 864e5 });
-  assert.deepEqual(f.calls.slice(-2).map((x) => [x.method, x.url.split("/rest/v1")[1]]), [
+  assert.deepEqual(f.calls.slice(-3).map((x) => [x.method, x.url.split("/rest/v1")[1]]), [
+    ["DELETE", "/campus_used_link_tokens?expires_at=lt.2026-11-09T00%3A00%3A00.000Z"],
     ["DELETE", "/campus_sessions?expires_at=lt.2026-11-09T00%3A00%3A00.000Z"],
     ["DELETE", "/campus_users?last_login_at=lt.2026-08-11T00%3A00%3A00.000Z"],
   ]);
@@ -59,4 +60,28 @@ test("메모리 저장소: 90일 지난 사용자는 세션과 함께 지운다"
   await s.createSession({ sidHash: "x", userId: "old", createdAt: 0, expiresAt: 10 ** 13 });
   await s.cleanup({ sessionsBefore: 5, usersBefore: 1 });
   assert.equal(await s.getSession("x"), null);
+});
+
+test("연결 토큰 jti는 한 번만 쓸 수 있다", async () => {
+  const m = createMemoryStore();
+  assert.equal(await m.useLinkToken("j1", 10), true);
+  assert.equal(await m.useLinkToken("j1", 10), false);
+
+  let status = 201;
+  const f = fakeFetch(() => ({ status }));
+  const s = createSupabaseStore({ url: "https://abc.supabase.co", key: "k", fetch: f.fn });
+  assert.equal(await s.useLinkToken("j1", Date.parse("2026-11-09T00:01:00Z")), true);
+  assert.equal(f.calls.at(-1).url, "https://abc.supabase.co/rest/v1/campus_used_link_tokens");
+  assert.deepEqual(f.calls.at(-1).body, { jti: "j1", expires_at: "2026-11-09T00:01:00.000Z" });
+  status = 409;
+  assert.equal(await s.useLinkToken("j1", 0), false);
+  status = 500;
+  await assert.rejects(() => s.useLinkToken("j2", 0), /supabase 500/);
+});
+
+test("새 비밀 키(sb_secret_)는 apikey 헤더로만 보낸다", async () => {
+  const f = fakeFetch(() => ({ status: 201 }));
+  await createSupabaseStore({ url: "https://abc.supabase.co", key: "sb_secret_abc", fetch: f.fn }).useLinkToken("j", 0);
+  assert.equal(f.calls.at(-1).headers.apikey, "sb_secret_abc");
+  assert.equal(f.calls.at(-1).headers.authorization, undefined);
 });
