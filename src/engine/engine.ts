@@ -1565,10 +1565,11 @@ function placeInside() {
   const base = floorY(me.f) + heightAt(floor, me.x, me.y) + me.up + me.jz + seatLift(me.seat), ceil = Math.max(floorY(me.f) + CEIL[me.f] - .12, base + 1.4);   // 계단 위에서는 머리 위로 비켜 준다
   if (VIEW.mode === "first") {
     // 1인칭은 어지럽지 않게: 기울임·흔들림 없이, 눈높이는 계단·단을 오를 때 툭툭 끊기지 않게 부드럽게 따라가고, 고개는 제자리에서 돈다
-    const eyeT = base + (me.lie ? .45 : me.seat ? .72 : .92);
+    // 누우면 눈은 빈백 가운데가 아니라 applyLie로 눕힌 머리 자리(등받이 쪽으로 .39, 위로 .86): 낮으면 빈백 몸통 속에 묻혀 화면이 까맣게 가린다
+    const eyeT = base + (me.lie ? .86 : me.seat ? .72 : .92), back = me.lie ? -.39 : 0;
     cam.eye = cam.eye === undefined || Math.abs(cam.eye - eyeT) > 2 ? eyeT : lerp(cam.eye, eyeT, Math.min(1, fpDt * 12));
     const eye = cam.eye;
-    camera.position.set(wx(me.x), eye, wz(me.y));
+    camera.position.set(wx(me.x) + (me.lie ? Math.sin(me.lie.yaw) * back : 0), eye, wz(me.y) + (me.lie ? Math.cos(me.lie.yaw) * back : 0));
     lookV.set(camera.position.x - Math.sin(cam.yaw) * Math.cos(cam.look), eye + Math.sin(cam.look), camera.position.z - Math.cos(cam.yaw) * Math.cos(cam.look));
     camera.lookAt(lookV); return;
   }
@@ -1936,8 +1937,8 @@ const mkLabel = (cls, text) => { const e = document.createElement("div"); e.clas
 let roomTags = [];
 function refreshRoomTags() {
   roomTags.forEach((t) => t.el.remove()); roomTags = [];
-  for (const r of floor.rooms) if (r.name) roomTags.push({ el: mkLabel(`room-tag${r.planet ? " planet" : ""}`, r.name), x: wx(r.x + r.w / 2), y: WALL + .35, z: wz(r.y + .5) });
-  for (const z of floor.zones) if (z.desc && !floor.rooms.some((r) => r.name && z.name.includes(r.name)) && !["엘리베이터 홀", "회의실"].includes(z.name)) roomTags.push({ el: mkLabel("room-tag", z.name), x: wx(z.x + z.w / 2), y: .9, z: wz(z.y + z.h / 2) });
+  for (const r of floor.rooms) if (r.name) roomTags.push({ el: mkLabel(`room-tag${r.planet ? " planet" : ""}`, r.name), x: wx(r.x + r.w / 2), y: WALL + .35, z: wz(r.y + .5), place: true });
+  for (const z of floor.zones) if (z.desc && !floor.rooms.some((r) => r.name && z.name.includes(r.name)) && !["엘리베이터 홀", "회의실"].includes(z.name)) roomTags.push({ el: mkLabel("room-tag", z.name), x: wx(z.x + z.w / 2), y: .9, z: wz(z.y + z.h / 2), place: true });
   for (const p of floor.portals) roomTags.push({ el: mkLabel("room-tag port", "⇅ " + p.label), x: wx(p.x + p.w / 2), y: 1.1, z: wz(p.y + p.h / 2) });
   roomTags.push({ el: mkLabel("room-tag", "엘리베이터"), x: wx(ELEV_SPAWN[0]), y: 2.0, z: wz(13.5) });
 }
@@ -1971,7 +1972,6 @@ addEventListener("keydown", (e) => {
     if (c === "Escape") closeTour(); else if (c === "ArrowLeft" || c === "KeyA") showTourStep(tourAt - 1); else if (c === "ArrowRight" || c === "KeyD" || c === "Enter" || c === "Space" || c === "KeyF") tourNext.click();
     return;
   }
-  if (!guide.hidden) { if (c === "Escape" || c === "Enter" || c === "Space" || c === "KeyF") { e.preventDefault(); closeGuide(); } return; }
   if (c === "Escape") {
     // 설정창이 떠 있으면 닫는다(막 열린 직후 같은 Esc는 무시). 여기서 바로 마우스를 고정하면 브라우저가 그 Esc로 다시 풀어 버려서
     // pointerlockchange가 설정창을 또 열었다 → 고정은 다음 키나 클릭으로 미루고, 그사이 풀림 신호는 무시한다
@@ -2040,8 +2040,7 @@ function useItem(id) {
   }
   inv.hidden = true; syncCursor();
 }
-document.getElementById("jumpBtn").onclick = jump;
-const runBtn = document.getElementById("runBtn"); runBtn.onclick = () => { me.runToggle = !me.runToggle; runBtn.setAttribute("aria-pressed", String(me.runToggle)); mRun.setAttribute("aria-pressed", String(me.runToggle)); };
+document.getElementById("dFire").onclick = () => fireFirework();   // 아래 독의 폭죽(C와 같다)
 /* ───── 모바일: 조이스틱 · 버튼 묶음 ───── */
 const mRun = document.getElementById("mRun");
 const joy = { on: false, x: 0, y: 0, id: -1, cx: 0, cy: 0 };
@@ -2052,13 +2051,13 @@ const joy = { on: false, x: 0, y: 0, id: -1, cx: 0, cy: 0 };
   pad.addEventListener("pointerdown", (e) => { e.preventDefault(); pad.setPointerCapture(e.pointerId); const r = pad.getBoundingClientRect(); joy.cx = r.left + r.width / 2; joy.cy = r.top + r.height / 2; joy.on = true; joy.id = e.pointerId; stopFollow(); me.path = null; me.goal = null; pad.classList.add("on"); move(e); });
   pad.addEventListener("pointermove", (e) => { if (e.pointerId === joy.id) move(e); });
   pad.addEventListener("pointerup", end); pad.addEventListener("pointercancel", end);
-  mRun.onclick = () => runBtn.click();
+  mRun.onclick = () => { me.runToggle = !me.runToggle; mRun.setAttribute("aria-pressed", String(me.runToggle)); };
   document.getElementById("mJump").addEventListener("pointerdown", (e) => { e.preventDefault(); jump(); });
   document.getElementById("mInv").onclick = () => toggleInv();
   document.getElementById("mFire").onclick = () => fireFirework(me.act?.name === "gun");   // 모바일: 종이 총을 들었으면 총알, 아니면 폭죽
   $all("#mPad [data-skill]").forEach((b) => (b.onclick = () => useSkill(b.dataset.skill)));
   const chatBtn = document.getElementById("mChat"), sayIn = $<HTMLInputElement>("sayInput");
-  chatBtn.onclick = () => { if (document.body.classList.toggle("chatting")) { setSide("chat"); sayIn.focus(); } else sayIn.blur(); };
+  chatBtn.onclick = () => { if (document.body.classList.toggle("chatting")) { document.body.classList.remove("peopleOpen"); sayIn.focus(); } else sayIn.blur(); };
   sayIn.addEventListener("blur", () => { if (TOUCH) setTimeout(() => document.body.classList.remove("chatting"), 150); });
 }
 addEventListener("blur", () => { keys.clear(); me.runHold = false; if (me.moving) { me.moving = false; wasMoving = false; sendPresence(true); } pointers.clear(); drag = null; canvas.classList.remove("dragging"); });   // 알트탭: 떼지 못한 클릭이 남아 다음 클릭을 막지 않게
@@ -2090,9 +2089,9 @@ const endDrag = (e) => {
 // 배그처럼: 들어가서 볼 때는 커서를 숨기고 화면에 고정한다. 마우스를 움직인 만큼(화면 끝 없이) 고개가 돌고, 가운데 조준점이 뜬다. Esc로 풀린다
 let lockFailed = false;
 const locked = () => document.pointerLockElement === canvas;
-// 경계: 창(층 고르기·크루 피드·사진·캐릭터 꾸미기·조작법)이 떠 있는 동안은 커서를 꺼내 두고, 다 닫히면 게임으로 돌아와 다시 고정한다.
+// 경계: 창(층 고르기·크루 피드·사진·캐릭터 꾸미기·설정)이 떠 있는 동안은 커서를 꺼내 두고, 다 닫히면 게임으로 돌아와 다시 고정한다.
 // 채팅창에 쓰는 동안도 커서를 꺼내 둔다
-const uiOpen = () => !easelEd.hidden || !menu.hidden || !profile.hidden || !tour.hidden || !inv.hidden || !picker.hidden || panel.classList.contains("open") || !avPanel.hidden || !guide.hidden || !lb.hidden;
+const uiOpen = () => !easelEd.hidden || !menu.hidden || !profile.hidden || !tour.hidden || !inv.hidden || !picker.hidden || panel.classList.contains("open") || !avPanel.hidden || !lb.hidden;
 const typing = () => document.activeElement === sayInput;   // 채팅창에 쓰는 중: 커서를 꺼내 둔다
 function syncCursor() { if (uiOpen()) { if (locked()) document.exitPointerLock(); } else lockMouse(); }
 function lockMouse() {
@@ -2261,8 +2260,8 @@ const TOUR = [
     kb: "<kbd>V</kbd>를 누를 때마다 위에서 보기 → 들어가서 보기 → 1인칭으로 바뀌어요. 들어가서 볼 때는 마우스로 둘러보고, <kbd>Esc</kbd>로 커서를 꺼내요.", touch: "오른쪽 아래 시점 버튼으로 위에서·들어가서·1인칭을 오가요. 화면을 끌어서 둘러봐요." },
   { title: "Tab으로 가방 열기", art: `<div class="tart tart-tab"><div class="tbar"><span class="tslot"><i>1</i>${ICON.laptop}</span><span class="tslot"><i>2</i>${ICON.coffee}</span><span class="tslot vacant"></span><span class="tslot vacant"></span></div><kbd class="tkey wide">Tab</kbd></div>`,
     kb: "<kbd>Tab</kbd>을 누르면 인벤토리가 열려요. 칸을 누르거나 숫자키로 써요. 노트북은 의자에 앉아서 펼치고, 아이스 아메리카노는 언제든 한 모금!", touch: "🎒 버튼으로 인벤토리를 열고 칸을 눌러 써요. 노트북은 앉아서 펼치고, 아이스 아메리카노는 언제든 한 모금!" },
-  { title: "조작 한눈에 보기", art: `<div class="tart tkeys">${[["WASD", "걷기"], ["Shift", "달리기"], ["Space", "점프 · 두 번 더블"], ["F", "상호작용"], ["C", "폭죽"], ["Enter", "채팅"], ["Tab", "인벤토리"], ["1 2 3", "네 컷 · 인사 · 하트"], ["Z", "춤 켜고 끄기"], ["클릭", "종이 총 발사"], ["V", "시점 바꾸기"], ["\\", "사이드바 접기"], ["Esc", "설정"]].map(([k, t]) => `<span><kbd>${k}</kbd>${t}</span>`).join("")}</div>`,
-    kb: "왼쪽 아래 <b>조작법</b>이나 Esc 설정창에서 언제든 다시 볼 수 있어요. 채팅과 같이 있는 크루는 오른쪽 💬 👥 버튼으로 열어요.", touch: "왼쪽 조이스틱으로 걷고, 오른쪽 버튼으로 점프·표현·채팅을 해요. 화면을 끌면 둘러봐요." },
+  { title: "조작 한눈에 보기", art: `<div class="tart tkeys">${[["WASD", "걷기"], ["Shift", "달리기"], ["Space", "점프 · 두 번 더블"], ["F", "상호작용"], ["C", "폭죽"], ["Enter", "채팅"], ["Tab", "인벤토리"], ["1 2 3", "네 컷 · 인사 · 하트"], ["Z", "춤 켜고 끄기"], ["클릭", "종이 총 발사"], ["V", "시점 바꾸기"], ["Q E", "화면 돌리기"], ["\\", "사이드바 접기"], ["Esc", "설정"]].map(([k, t]) => `<span><kbd>${k}</kbd>${t}</span>`).join("")}</div>`,
+    kb: "왼쪽 위 ⚙️(또는 Esc) 설정창의 <b>조작법</b> 탭에서 언제든 다시 볼 수 있어요. 채팅과 같이 있는 크루는 오른쪽 💬 👥 버튼으로 열어요.", touch: "왼쪽 조이스틱으로 걷고, 오른쪽 버튼으로 점프·표현·채팅을 해요. 화면을 끌면 둘러봐요. 설정과 조작법은 왼쪽 위 ⚙️에서 봐요." },
 ];
 let tourAt = 0;
 tourDots.innerHTML = TOUR.map(() => "<i></i>").join("");
@@ -2278,11 +2277,6 @@ function closeTour() { tour.hidden = true; LS.set("ww.tour", "1"); syncCursor();
 tourNext.onclick = () => (tourAt === TOUR.length - 1 ? closeTour() : showTourStep(tourAt + 1));
 tourPrev.onclick = () => showTourStep(tourAt - 1);
 document.getElementById("tourSkip").onclick = closeTour;
-const guide = document.getElementById("guide");
-function openGuide() { guide.hidden = false; if (locked()) document.exitPointerLock(); document.getElementById("guideOk").focus(); }
-function closeGuide() { guide.hidden = true; LS.set("ww.guide", "1"); syncCursor(); }
-document.getElementById("guideOk").onclick = closeGuide; document.getElementById("guideBtn").onclick = openGuide;
-guide.addEventListener("click", (e) => { if (e.target === guide) closeGuide(); });
 // 걷기만 하고 달려 본 적이 없으면 한 번 알려 준다
 let walkFor = 0, runTipShown = false;
 const actBtn = document.getElementById("act"); actBtn.onclick = interact;
@@ -2338,23 +2332,25 @@ avPanel.addEventListener("click", (e) => {
 });
 function openAvPanel() { if (locked()) document.exitPointerLock(); avPanel.hidden = false; renderAvPanel(); avatarPreview.set({ open: true, config: { ...DEFAULT_AV, ...myAv } }); if (!inside()) { avCamBack = cam.distT; cam.distT = 6; cam.yawT = me.h; cam.pitchT = .5; } /* 얼굴이 보이게 앞쪽에서 */ document.getElementById("avDone").focus(); }
 function closeAvPanel() { const was = !avPanel.hidden; avPanel.hidden = true; avColorOpen = false; renderColorPop(); avatarPreview.set({ open: false }); if (was) syncCursor(); if (avCamBack !== null) { cam.distT = avCamBack; avCamBack = null; } }
-/* ───── Esc 설정창: 프로필 수정 · 캐릭터 외형 수정 ───── */
+/* ───── 설정창(Esc · 왼쪽 위 ⚙️): 설정 탭(프로필 수정 · 캐릭터 외형 수정) · 조작법 탭 ───── */
 const menu = document.getElementById("menu"), profile = document.getElementById("profile"), profileName = $<HTMLInputElement>("profileName");
 let menuAt = 0, renameMe: ((v: string) => void) | null = null, myNameNow = () => "";
-function openMenu() { if (locked()) document.exitPointerLock(); keys.clear(); me.runHold = false; menu.hidden = false; menuAt = performance.now(); $("menuClose").focus(); }
+function setMenuTab(t) { menu.querySelectorAll<HTMLElement>("[data-mtab]").forEach((el) => { if (el.getAttribute("role") === "tab") el.setAttribute("aria-selected", String(el.dataset.mtab === t)); else el.hidden = el.dataset.mtab !== t; }); }
+function openMenu(tab = "main") { if (locked()) document.exitPointerLock(); keys.clear(); me.runHold = false; setMenuTab(tab); menu.hidden = false; menuAt = performance.now(); $("menuClose").focus(); }
 function closeMenu() { menu.hidden = true; syncCursor(); }
 function openProfile() { menu.hidden = true; profile.hidden = false; profileName.value = myNameNow(); profileName.focus(); profileName.select(); }
 function closeProfile(back = true) { profile.hidden = true; if (back) openMenu(); else syncCursor(); }
 $("menuClose").onclick = closeMenu;
 $("menuProfile").onclick = openProfile;
 $("menuLook").onclick = () => { menu.hidden = true; openAvPanel(); };
-$("menuGuide").onclick = () => { menu.hidden = true; openGuide(); };
+menu.querySelector(".mtabs").addEventListener("click", (e) => { const b = (e.target as HTMLElement).closest<HTMLElement>("[data-mtab]"); if (b) setMenuTab(b.dataset.mtab); });
+$("setBtn").onclick = () => openMenu();
 $("profileCancel").onclick = () => closeProfile();
 $("profileForm").addEventListener("submit", (e) => { e.preventDefault(); const v = profileName.value.trim().slice(0, 16); if (v && renameMe) renameMe(v); closeProfile(false); showToast("프로필을 바꿨어요", `이제 ${myNameNow()}(으)로 보여요.`, 2200); });
 profileName.addEventListener("keydown", (e) => { if (e.code === "Escape") { e.preventDefault(); e.stopPropagation(); closeProfile(); } });
 // 채팅: Enter로 들어가고, 쓰고 Enter면 보내고 나온다(빈 채로 Enter·Esc면 그냥 나온다). 나오면 다시 마우스를 고정한다
 const sayInput = $<HTMLInputElement>("sayInput");
-function openChat() { keys.clear(); me.runHold = false; if (sideTucked) tuckSide(false); setSide("chat"); sayInput.focus(); if (locked()) document.exitPointerLock(); }   // 채팅창에 들어가면 커서를 꺼낸다(나오면 closeChat이 다시 고정)
+function openChat() { keys.clear(); me.runHold = false; sayInput.focus(); if (locked()) document.exitPointerLock(); }   // 채팅창에 들어가면 커서를 꺼낸다(나오면 closeChat이 다시 고정)
 function closeChat() { sayInput.blur(); lockMouse(); }
 document.getElementById("sayForm").addEventListener("submit", (e) => { e.preventDefault(); const v = sayInput.value.trim(); if (v) { sendChat(v); sayInput.value = ""; } closeChat(); });
 sayInput.addEventListener("keydown", (e) => { if (e.code === "Escape") { e.preventDefault(); sayInput.value = ""; holdLock = true; closeChat(); holdLock = false; menuQuietUntil = performance.now() + 800; relockOnKey = true; } else if (e.code === "Tab") { e.preventDefault(); setChatTab(CHAT_TABS[(CHAT_TABS.indexOf(chatTab) + (e.shiftKey ? 2 : 1)) % 3]); } });   // Esc: 채팅만 닫고 설정창은 안 띄운다(고정은 다음 키에서) · 입력 중 Tab: 근처 → 전체 → 개인
@@ -2362,7 +2358,7 @@ let curZone = null, toastTimer = 0; const toast = document.getElementById("zoneT
 function showToast(h, p, ms = 3800) { toast.querySelector("h2").textContent = h; toast.querySelector("p").textContent = p; toast.style.opacity = "1"; clearTimeout(toastTimer); toastTimer = setTimeout(() => (toast.style.opacity = "0"), ms); }
 function checkZone() {
   let z = null; for (const zz of floor.zones) if (inRect(zz, me.x, me.y) && zz.desc) { if (!z || zz.w * zz.h < z.w * z.h) z = zz; }
-  if (z !== curZone) { curZone = z; if (z) showToast(z.name, z.desc); }
+  if (z !== curZone) { curZone = z; if (z) showToast(z.name, "", 2400); }   // 들어가면 공간 이름만
 }
 /* 피드 묶음: 함께 올린 feed.json → 없으면 이 브라우저에 불러 둔 파일(IndexedDB) */
 const idb = {
@@ -2597,21 +2593,10 @@ function chatNet(m) {
   list.push(m); if (list.length > (m.k === "dm" ? 400 : 200)) list.splice(0, list.length - (m.k === "dm" ? 400 : 200));
   if (m.k === "near") LS.set("ww.chatNear", JSON.stringify(chatLogs.near.slice(-100)));
   if (!mine && m.k !== "dm") { const v = peers.get(m.from.peer); if (v) { v.chatSay = m.text.slice(0, 40); v.chatAt = Date.now(); } }   // 머리 위 말풍선
-  if (!mine && (m.k !== chatTab || sideView !== "chat" || sideTucked)) unread[m.k]++;
-  if (!mine && sideTucked) chatPing(m);
+  if (!mine && m.k !== chatTab) unread[m.k]++;
   if (!mine && m.k === "dm" && !dmTo) { dmTo = m.from.u; dmToName = m.from.name; }
   renderChat();
 }
-// 사이드바를 접어 둔 채 새 채팅이 오면: 채팅 버튼을 톡 튀기고 아래에 보낸 사람·내용을 잠깐 띄운다(누르면 그 탭으로 채팅을 연다)
-let peekTimer = 0, peekTab = "near";
-function chatPing(m) {
-  const btn = $("showChat"), peek = $("chatPeek"); btn.classList.remove("ping"); void btn.offsetWidth; btn.classList.add("ping");
-  peekTab = m.k; peek.querySelector("b").textContent = `${CHAT_LABEL[m.k] || ""} · ${m.from?.name || "크루"}`; peek.querySelector("span").textContent = m.text;
-  peek.hidden = false; requestAnimationFrame(() => peek.classList.add("on"));
-  clearTimeout(peekTimer); peekTimer = setTimeout(() => peek.classList.remove("on"), 4200);
-}
-$("showChat").addEventListener("animationend", (e) => { if (e.animationName === "chatPing") $("showChat").classList.remove("ping"); });
-$("chatPeek").onclick = () => { $("chatPeek").classList.remove("on"); tuckSide(false); setSide("chat"); setChatTab(peekTab); };
 function sendChat(text) {
   if (chatTab === "dm" && !dmTo) { chatLogs.dm.push({ k: "sys", text: "받는 사람을 먼저 골라 주세요", at: Date.now() }); renderChat(); return; }
   if (chatTab !== "dm") { me.say = text.slice(0, 40); me.sayAt = Date.now(); }   // 내 말풍선
@@ -2626,7 +2611,6 @@ function renderChat() {
   const uid = ezState().uid;
   $all<HTMLButtonElement>("#chat .ctabs button").forEach((b2) => { const t = b2.dataset.tab; b2.setAttribute("aria-selected", String(t === chatTab)); const bd = b2.querySelector("b"); bd.textContent = String(unread[t]); bd.classList.toggle("on", unread[t] > 0 && t !== chatTab); });
   $("chatDmBar").hidden = chatTab !== "dm";
-  { const tot = unread.near + unread.all + unread.dm, rb = $("railChatBadge"), tb = $("sideTab").querySelector("b"); rb.textContent = tb.textContent = $("sideShowBadge").textContent = String(tot); $("sideShowBadge").classList.toggle("on", tot > 0 && sideTucked); $("showChat").classList.toggle("hasNew", tot > 0 && sideTucked); if (!sideTucked) $("chatPeek").classList.remove("on"); rb.classList.toggle("on", tot > 0 && sideView !== "chat"); tb.classList.toggle("on", tot > 0 && sideTucked); }
   if (chatTab === "dm") { // 받는 사람: 지금 접속한 크루 + 대화했던 크루
     const opts = new Map(); for (const p of peerList) if (p.u) opts.set(p.u, p.name || "크루");
     for (const m of chatLogs.dm) { const other = m.from?.u === uid ? m.to : m.from?.u; if (other && !opts.has(other)) opts.set(other, m.from?.u === uid ? (dmToName && dmTo === other ? dmToName : "크루") : m.from.name); }
@@ -2641,27 +2625,15 @@ function renderChat() {
   sayInput.placeholder = chatTab === "dm" ? (dmTo ? `${dmToName}님에게 · Tab 바꾸기` : "받는 사람을 골라요") : `${CHAT_LABEL[chatTab]}${chatTab === "near" && roomKey() ? "(이 방)" : ""}에 말하기 · Tab 바꾸기`;
 }
 $all<HTMLButtonElement>("#chat .ctabs button").forEach((b2) => (b2.onclick = () => setChatTab(b2.dataset.tab as any)));
-// 오른쪽 사이드: 레일 아이콘으로 채팅·사람을 고르고, 같은 아이콘을 다시 누르거나 ›로 접는다
-let sideView: "chat" | "people" = LS.get("ww.side") === "people" ? "people" : "chat";   // 채팅과 크루 중 하나는 늘 펼쳐 둔다
-function setSide(v) {
-  if (!v) v = sideView || "chat";   // 접기는 없다: 둘 중 하나는 늘 보인다
-  sideView = v; LS.set("ww.side", v || "");
-  const side = $("side"); side.classList.toggle("closed", !v); document.body.classList.toggle("sideOpen", !!v);
-  $all<HTMLButtonElement>(".srail button").forEach((b2) => b2.setAttribute("aria-pressed", String(b2.dataset.view === v)));
-  for (const sec of $all<HTMLElement>(".sview")) sec.hidden = sec.dataset.view !== v;
-  $("sideTitle").textContent = v === "people" ? "같이 있는 크루" : "채팅";
-  if (v === "chat") unread[chatTab] = 0;
-  renderChat();
-}
-$all<HTMLButtonElement>(".srail button").forEach((b2) => (b2.onclick = () => setSide(b2.dataset.view)));   // 누르면 그 화면으로 바뀐다(같은 걸 눌러도 접히지 않는다)
-
-// 접기: 손잡이(또는 \ 키)로 패널을 오른쪽으로 집어넣는다. 접혀 있어도 Enter로 채팅하면 다시 나온다
+// 오른쪽 사이드: 같이 있는 크루. 손잡이(또는 \ 키)로 오른쪽으로 집어넣고, 접히면 오른쪽 위 인원 버튼으로 다시 편다
+// 모바일은 사이드를 늘 숨겨 두고, 인원 버튼으로 위쪽에 띄웠다 닫는다(채팅과 번갈아)
 let sideTucked = LS.get("ww.sideTucked") === "1";
-function tuckSide(on) { sideTucked = on; LS.set("ww.sideTucked", on ? "1" : ""); $("side").classList.toggle("tucked", on); document.body.classList.toggle("sideTucked", on); $("sideTab").setAttribute("aria-expanded", String(!on)); if (!on && sideView === "chat" && booted) { unread[chatTab] = 0; renderChat(); } }
+function tuckSide(on) { sideTucked = on; LS.set("ww.sideTucked", on ? "1" : ""); $("side").classList.toggle("tucked", on); document.body.classList.toggle("sideTucked", on); $("sideTab").setAttribute("aria-expanded", String(!on)); }
+const peopleOpen = (on) => { document.body.classList.toggle("peopleOpen", on); if (on) { document.body.classList.remove("chatting"); sayInput.blur(); } };
 $("sideTab").onclick = () => tuckSide(!sideTucked);
-$("sideHide").onclick = () => tuckSide(true); $("showPeople").onclick = () => { tuckSide(false); setSide("people"); }; $("showChat").onclick = () => { tuckSide(false); setSide("chat"); };
-let booted = false; tuckSide(sideTucked); requestAnimationFrame(() => (booted = true));
-requestAnimationFrame(() => setSide(sideView));
+$("sideHide").onclick = () => (TOUCH ? peopleOpen(false) : tuckSide(true));
+$("showPeople").onclick = () => (TOUCH ? peopleOpen(!document.body.classList.contains("peopleOpen")) : tuckSide(false));
+tuckSide(sideTucked);
 $("chatDmTo").addEventListener("change", () => { const sel = $<HTMLSelectElement>("chatDmTo"); dmTo = sel.value || null; dmToName = sel.selectedOptions[0]?.textContent || ""; renderChat(); });
 $("chatLog").addEventListener("click", (e) => { const w = (e.target as HTMLElement).closest(".who") as HTMLElement; if (w && w.dataset.u && w.dataset.u !== ezState().uid) openDm(w.dataset.u, w.dataset.n); });
 setInterval(() => { if (chatTab === "near") renderChat(); }, 1000);   // 방을 드나들면 안내 문구가 바뀐다
@@ -2809,9 +2781,9 @@ function render(dt, t) {
     bub.hidden = !(n.say && performance.now() - n.sayAt < 2500); if (!bub.hidden) { bub.textContent = n.say; project(bub, p.x, p.y + DOLL, p.z); }
     showZzz(zzz, n.doll, !!n.lie && bub.hidden);
   }
-  for (const rt of roomTags) { // 들어가 있으면 가까운 이름표만
-    if (inside() && Math.hypot(rt.x - wx(me.x), rt.z - wz(me.y)) > 12) { rt.el.style.display = "none"; continue; }
-    project(rt.el, rt.x, floorY(me.f) + (inside() && rt.y === WALL + .35 ? 1.6 : rt.y), rt.z); }
+  for (const rt of roomTags) { // 들어가 있으면 공간 이름표는 숨기고(들어설 때 뜨는 이름으로 충분) 층 이동 · 엘리베이터 표지만 가까운 것. 1인칭에선 눈높이(.92) 위로
+    if (inside() && (rt.place || Math.hypot(rt.x - wx(me.x), rt.z - wz(me.y)) > 12)) { rt.el.style.display = "none"; continue; }
+    project(rt.el, rt.x, floorY(me.f) + (inside() && rt.y === WALL + .35 ? 1.6 : VIEW.mode === "first" ? Math.max(rt.y, 1.6) : rt.y), rt.z); }
 }
 
 /* ════════════════ 시작 ════════════════ */
@@ -2821,7 +2793,7 @@ fontsReady.then(() => {
   cam.target.set(wx(me.x), 0, wz(me.y)); placeCamera();
   const ld = document.getElementById("loading"); ld.style.opacity = "0"; setTimeout(() => ld.remove(), 450);
   showToast("11층에 도착했어요", "1번을 눌러 네 컷을 그려 보세요. 캐릭터를 누르면 그 크루의 하루들 피드가 열려요.", 5000);
-  if (!LS.get("ww.tour")) openTour();   // 처음 오면 세 장짜리 안내(전체 조작법은 「조작법」 버튼)
+  if (!LS.get("ww.tour")) openTour();   // 처음 오면 세 장짜리 안내(전체 조작법은 설정창 「조작법」 탭)
   loadFeed(); joinRoom();
   ready = true;
   // 화면 점검용 손잡이: 주소 끝에 ?debug를 붙였을 때만

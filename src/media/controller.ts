@@ -7,6 +7,7 @@ type Options = { requestJoin: (area: string) => Promise<MediaJoin>; requestRenew
 
 export function mountMediaControls({ requestJoin, requestRenew, requestCloudflare, requestMeeting, notifyDailyReady = () => {}, notifyLeft = () => {}, acknowledgeSwitch = () => {}, meetingChanged = () => {} }: Options) {
   const dock = document.getElementById("mediaDock")!;
+  const buttons = document.getElementById("mediaBtns")!;
   const voice = document.getElementById("voiceToggle") as HTMLButtonElement;
   const mic = document.getElementById("micToggle") as HTMLButtonElement;
   const screen = document.getElementById("screenToggle") as HTMLButtonElement;
@@ -39,27 +40,25 @@ export function mountMediaControls({ requestJoin, requestRenew, requestCloudflar
     for (const element of elements.values()) element.remove();
     elements.clear(); screens.hidden = true;
   }
+  // 독 버튼: 아이콘은 그대로 두고 아래 글자(<b>)와 풍선 도움말만 바꾼다. 마이크 · 화면 공유는 늘 보이고, 못 쓸 때는 흐리게
+  const label = (button: HTMLButtonElement, text: string, tip = text) => { button.querySelector("b")!.textContent = text; button.title = tip; button.setAttribute("aria-label", tip); };
   function render() {
-    voice.textContent = wanted ? "음성 나가기" : "음성 연결";
+    const scope = meetings.isRequired() ? "같은 회의에 들어온 크루와 대화해요" : position?.rm ? "같은 방에 있는 크루와 대화해요" : "같은 층에서 가까운 크루와 대화해요";
+    label(voice, wanted ? "음성 끊기" : "음성 연결", wanted ? `음성 끊기 · ${scope}` : "음성을 연결하면 가까운 크루의 목소리가 들려요");
     voice.setAttribute("aria-pressed", String(wanted));
     voice.disabled = meetings.isRequired() && !meetings.isSelected();
-    mic.hidden = !wanted;
-    mic.disabled = !connected || connecting || actionBusy;
-    mic.textContent = microphone ? "마이크 끄기" : "마이크 켜기";
+    mic.disabled = !wanted || !connected || connecting || actionBusy;
+    label(mic, "마이크", !wanted ? "음성을 연결하면 마이크를 켤 수 있어요" : microphone ? "마이크 끄기" : "마이크 켜기");
     mic.setAttribute("aria-pressed", String(microphone));
-    screen.hidden = !wanted || !position || !canShareScreen(position);
-    screen.disabled = !connected || connecting || actionBusy;
-    screen.textContent = sharing ? "공유 중지" : "화면 공유";
+    mic.classList.toggle("muted", wanted && !microphone);
+    const shareHere = !!position && canShareScreen(position);
+    screen.disabled = !wanted || !shareHere || !connected || connecting || actionBusy;
+    label(screen, sharing ? "공유 중지" : "화면 공유", !shareHere ? "회의실에서 음성을 연결하면 화면을 공유할 수 있어요" : !wanted ? "음성을 연결하면 화면을 공유할 수 있어요" : sharing ? "공유 중지" : "화면 공유");
     screen.setAttribute("aria-pressed", String(sharing));
     resume.hidden = !wanted || !audioBlocked;
-    if (message) status.textContent = message;
-    else if (meetings.isRequired() && !meetings.isSelected()) status.textContent = "회의를 만들거나 선택한 뒤 음성을 연결해 주세요.";
-    else if (connecting) status.textContent = "음성을 연결하고 있어요.";
-    else if (wanted && !network) status.textContent = "캠퍼스에 다시 연결하고 있어요.";
-    else if (connected && meetings.isRequired()) status.textContent = "같은 회의에 들어온 크루와 대화해요.";
-    else if (connected && position?.rm) status.textContent = "같은 방에 있는 크루와 대화해요.";
-    else if (connected) status.textContent = "같은 층에서 가까운 크루와 대화해요.";
-    else status.textContent = "음성을 연결하면 가까운 크루의 목소리가 들려요.";
+    // 상태 글은 알려야 할 때(오류 · 연결 중 · 회의 선택)만 띄운다. 평소 안내는 음성 버튼 풍선 도움말로
+    const notice = message || (meetings.isRequired() && !meetings.isSelected() ? "회의를 만들거나 선택한 뒤 음성을 연결해 주세요." : connecting ? "음성을 연결하고 있어요." : wanted && !network ? "캠퍼스에 다시 연결하고 있어요." : "");
+    status.textContent = notice; status.hidden = !notice;
   }
 
   function callbacksFor(candidate: () => MediaProvider | null): MediaCallbacks {
@@ -219,7 +218,7 @@ export function mountMediaControls({ requestJoin, requestRenew, requestCloudflar
       if (!Number.isSafeInteger(revision)) return;
       pendingSwitch = revision; renewLease = true; queue();
     },
-    setAvailable(available: boolean) { dock.hidden = !available; if (!available) { wanted = false; queue(); } },
+    setAvailable(available: boolean) { dock.hidden = !available; buttons.hidden = !available; if (!available) { wanted = false; queue(); } },
     setMeetingEnabled(enabled: boolean) { meetings.setEnabled(enabled); },
     setNetwork(online: boolean) { network = online; meetings.setNetwork(online); if (!online) { provider?.setAllowedPeers([]); wanted = false; microphone = false; message = ""; } queue(); },
     updateWorld(nextPosition: Position, nextPeers: NearbyPeer[]) {
