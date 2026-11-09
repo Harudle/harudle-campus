@@ -162,6 +162,8 @@
     <button type="button" role="tab" data-mtab="keys" aria-selected="false">조작법</button>
   </div>
   <div class="mview mlist" data-mtab="main" role="tabpanel">
+    <p class="macct" id="menuAccount" hidden></p>
+    <button class="btn ghost" type="button" id="menuLogin" hidden>하루들 연동하기</button>
     <button class="btn ghost" type="button" id="menuProfile">프로필 수정</button>
     <button class="btn ghost" type="button" id="menuLook">캐릭터 외형 수정</button>
   </div>
@@ -204,6 +206,13 @@
   <div class="prow"><button class="btn ghost" type="button" id="profileCancel">취소</button><button class="btn" type="submit">저장</button></div>
   <p class="mhint touch-only">날씨 자료: <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo</a> 예보를 화면에 맞게 가공했어요. <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">CC BY 4.0</a></p>
 </form></div>
+<!-- 하루들 연동이 필요한 기능을 눌렀을 때 -->
+<div id="loginAsk" class="modal" hidden><div class="box" role="dialog" aria-labelledby="loginAskTitle">
+  <h4 id="loginAskTitle">하루들 연동이 필요해요</h4>
+  <p class="lreason" id="loginAskReason"></p>
+  <p class="mhint">하루들에서 [연동하기]를 누르면 닉네임과 프로필 사진으로 캠퍼스에 들어와요.</p>
+  <div class="prow"><button class="btn ghost" type="button" id="loginAskLater">나중에</button><button class="btn" type="button" id="loginAskGo">하루들 연동하기</button></div>
+</div></div>
 <!-- 하루들 부스 함께 그리는 이젤: 그림판 -->
 <div id="easelEd" class="modal" hidden><div class="box ezbox" role="dialog" aria-label="함께 그리는 네컷">
   <div class="ezhead"><h4>함께 그리는 네컷 <small>모두에게 실시간으로 보여요</small></h4><button class="btn ghost" type="button" id="ezClose">닫기</button></div>

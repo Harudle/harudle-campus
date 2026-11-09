@@ -1732,12 +1732,15 @@ const ezBoards: THREE.Mesh[] = [];
 // 함께 그리는 판은 여럿: "easel"(하루들 부스 네컷 이젤), "wb"(12층 코워킹 존 벽 화이트보드). 그림판이 지금 여는 판은 ezCur
 let ezCur = "easel";
 const ezBoardsState = new Map();
+/* 크루 주소: ww.uid는 이 브라우저만 아는 비밀값이라 서버에만 보낸다. 다른 크루에게 보이는 내 주소(p_…)는 서버가 접속 때 알려 준다(WS "me") */
+const secretUid = () => { let v = LS.get("ww.uid"); if (!v || v.length < 20) { const a = new Uint8Array(16); crypto.getRandomValues(a); v = [...a].map((x) => x.toString(16).padStart(2, "0")).join(""); LS.set("ww.uid", v); } return v; };
+let myPub: string | null = null;
+const selfU = () => myPub || "local";
 function ezState(b = ezCur) {
   if (ezBoardsState.has(b)) return ezBoardsState.get(b);
   const mk = () => { const c = document.createElement("canvas"); c.width = c.height = 1024; return c; };
   const base = mk(), show = mk(); show.id = "ezCanvas";
-  const uid = LS.get("ww.uid") || (() => { const v = Math.random().toString(36).slice(2, 12); LS.set("ww.uid", v); return v; })();
-  const s0 = { b, base, show, bg: base.getContext("2d"), sg: show.getContext("2d"), tex: null, strokes: [] as any[], live: new Map(), redo: [] as string[], uid, n: 0, cur: null, need: 2 } as any;
+  const s0 = { b, base, show, bg: base.getContext("2d"), sg: show.getContext("2d"), tex: null, strokes: [] as any[], live: new Map(), redo: [] as string[], n: 0, cur: null, need: 2 } as any;
   ezBoardsState.set(b, s0); return s0;
 }
 function ezTexture(b = "easel") { const S = ezState(b); if (!S.tex) { S.tex = new THREE.CanvasTexture(S.show); S.tex.colorSpace = THREE.SRGBColorSpace; S.tex.anisotropy = 8; ezRedraw(true, S); } return S.tex; }
@@ -1778,12 +1781,12 @@ function easelNet(m) {
   else if (m.k === "vis") { const st = S.strokes.find((x) => x.id === m.id); if (st) { st.h = m.h; ezRedraw(true, S); } }
 }
 // 그리기(내 획): 누르면 시작, 움직이면 점을 더하고 0.05초마다 조각으로 보낸다, 떼면 끝
-function ezBegin(x, y, c, w) { const S = ezState(); S.cur = { id: `${S.uid}-${Date.now().toString(36)}-${S.n++}`, u: S.uid, c, w, p: [x, y], h: 0 }; S.sent = 0; S.lastSend = 0; S.redo = []; ezRedraw(); }
+function ezBegin(x, y, c, w) { const S = ezState(); S.cur = { id: `${selfU()}-${Date.now().toString(36)}-${S.n++}`, u: selfU(), c, w, p: [x, y], h: 0 }; S.sent = 0; S.lastSend = 0; S.redo = []; ezRedraw(); }
 function ezMove(x, y) { const S = ezState(), st = S.cur; if (!st) return; const n = st.p.length; if (Math.hypot(st.p[n - 2] - x, st.p[n - 1] - y) < 1.5) return; st.p.push(x, y); ezRedraw(); const now = performance.now(); if (now - S.lastSend > 50) ezFlush(); }
-function ezFlush() { const S = ezState(), st = S.cur; if (!st || st.p.length <= S.sent) return; const from = Math.max(0, S.sent), chunk = st.p.slice(from, from + 400); if (chunk.length < 2) return; netSend({ t: "ez", b: S.b, k: "seg", u: S.uid, id: st.id, c: st.c, w: st.w, p: chunk }); S.sent = from + chunk.length; S.lastSend = performance.now(); if (S.sent < st.p.length) ezFlush(); }
-function ezEnd() { const S = ezState(), st = S.cur; if (!st) return; ezFlush(); netSend({ t: "ez", b: S.b, k: "end", u: S.uid, id: st.id }); S.cur = null; ezCommit(st); }
-function ezUndo() { const S = ezState(); for (let i = S.strokes.length - 1; i >= 0; i--) { const st = S.strokes[i]; if (st.u === S.uid && !st.h) { st.h = 1; S.redo.push(st.id); netSend({ t: "ez", b: S.b, k: "undo", u: S.uid }); ezRedraw(true); return; } } }
-function ezRedoOne() { const S = ezState(), id = S.redo.pop(), st = id && S.strokes.find((x) => x.id === id); if (st) { st.h = 0; netSend({ t: "ez", b: S.b, k: "redo", u: S.uid }); ezRedraw(true); } }
+function ezFlush() { const S = ezState(), st = S.cur; if (!st || st.p.length <= S.sent) return; const from = Math.max(0, S.sent), chunk = st.p.slice(from, from + 400); if (chunk.length < 2) return; netSend({ t: "ez", b: S.b, k: "seg", id: st.id, c: st.c, w: st.w, p: chunk }); S.sent = from + chunk.length; S.lastSend = performance.now(); if (S.sent < st.p.length) ezFlush(); }
+function ezEnd() { const S = ezState(), st = S.cur; if (!st) return; ezFlush(); netSend({ t: "ez", b: S.b, k: "end", id: st.id }); S.cur = null; ezCommit(st); }
+function ezUndo() { const S = ezState(); for (let i = S.strokes.length - 1; i >= 0; i--) { const st = S.strokes[i]; if (st.u === selfU() && !st.h) { st.h = 1; S.redo.push(st.id); netSend({ t: "ez", b: S.b, k: "undo" }); ezRedraw(true); return; } } }
+function ezRedoOne() { const S = ezState(), id = S.redo.pop(), st = id && S.strokes.find((x) => x.id === id); if (st) { st.h = 0; netSend({ t: "ez", b: S.b, k: "redo" }); ezRedraw(true); } }
 // 바로가기: harudle.com · 인스타그램. 누르거나(클릭·탭) 앞에서 F → 새 탭
 const linkBoards: THREE.Mesh[] = [];
 function openLink(url) { if (locked()) document.exitPointerLock(); window.open(url, "_blank", "noopener"); showToast("새 탭으로 열었어요", url.replace(/^https:\/\/(www\.)?/, "").replace(/\/$/, ""), 2000);
@@ -1972,6 +1975,7 @@ addEventListener("keydown", (e) => {
     if (c === "Escape") closeTour(); else if (c === "ArrowLeft" || c === "KeyA") showTourStep(tourAt - 1); else if (c === "ArrowRight" || c === "KeyD" || c === "Enter" || c === "Space" || c === "KeyF") tourNext.click();
     return;
   }
+  if ($("loginAsk")?.hidden === false) { if (c === "Escape") { e.preventDefault(); closeLoginAsk(); } return; }   // 연동 안내 창: Esc로 닫기, 다른 키는 게임으로 가지 않게
   if (c === "Escape") {
     // 설정창이 떠 있으면 닫는다(막 열린 직후 같은 Esc는 무시). 여기서 바로 마우스를 고정하면 브라우저가 그 Esc로 다시 풀어 버려서
     // pointerlockchange가 설정창을 또 열었다 → 고정은 다음 키나 클릭으로 미루고, 그사이 풀림 신호는 무시한다
@@ -2091,7 +2095,7 @@ let lockFailed = false;
 const locked = () => document.pointerLockElement === canvas;
 // 경계: 창(층 고르기·크루 피드·사진·캐릭터 꾸미기·설정)이 떠 있는 동안은 커서를 꺼내 두고, 다 닫히면 게임으로 돌아와 다시 고정한다.
 // 채팅창에 쓰는 동안도 커서를 꺼내 둔다
-const uiOpen = () => !easelEd.hidden || !menu.hidden || !profile.hidden || !tour.hidden || !inv.hidden || !picker.hidden || panel.classList.contains("open") || !avPanel.hidden || !lb.hidden;
+const uiOpen = () => !easelEd.hidden || $("loginAsk")?.hidden === false || !menu.hidden || !profile.hidden || !tour.hidden || !inv.hidden || !picker.hidden || panel.classList.contains("open") || !avPanel.hidden || !lb.hidden;
 const typing = () => document.activeElement === sayInput;   // 채팅창에 쓰는 중: 커서를 꺼내 둔다
 function syncCursor() { if (uiOpen()) { if (locked()) document.exitPointerLock(); } else lockMouse(); }
 function lockMouse() {
@@ -2338,8 +2342,48 @@ let menuAt = 0, renameMe: ((v: string) => void) | null = null, myNameNow = () =>
 function setMenuTab(t) { menu.querySelectorAll<HTMLElement>("[data-mtab]").forEach((el) => { if (el.getAttribute("role") === "tab") el.setAttribute("aria-selected", String(el.dataset.mtab === t)); else el.hidden = el.dataset.mtab !== t; }); }
 function openMenu(tab = "main") { if (locked()) document.exitPointerLock(); keys.clear(); me.runHold = false; setMenuTab(tab); menu.hidden = false; menuAt = performance.now(); $("menuClose").focus(); }
 function closeMenu() { menu.hidden = true; syncCursor(); }
-function openProfile() { menu.hidden = true; profile.hidden = false; profileName.value = myNameNow(); profileName.focus(); profileName.select(); }
+function openProfile() { if (account.user) { menu.hidden = true; syncCursor(); showToast("이름은 하루들 닉네임이에요", "하루들에서 닉네임을 바꾸고 다시 연동하면 여기에도 바뀌어요.", 3600); return; } menu.hidden = true; profile.hidden = false; profileName.value = myNameNow(); profileName.focus(); profileName.select(); }
 function closeProfile(back = true) { profile.hidden = true; if (back) openMenu(); else syncCursor(); }
+/* ───── 하루들 연동(로그인) ─────
+   서버가 연동을 켰을 때만 버튼이 보인다(/api/me의 enabled). 연동하면 이름은 하루들 닉네임으로 고정되고, 다른 크루에게도 그렇게 보인다.
+   연동이 필요한 기능은 requireLogin("이유")을 먼저 부른다: 연동돼 있으면 true, 아니면 안내 창을 띄우고 false */
+type HarudleUser = { id: string; nickname: string; profileImageUrl: string | null };
+const account: { enabled: boolean; user: HarudleUser | null } = { enabled: false, user: null };
+const loginAsk = $("loginAsk");
+function applyAccount() {
+  const btn = $("menuLogin"), line = $("menuAccount"), u = account.user;
+  btn.hidden = !account.enabled; btn.textContent = u ? "하루들 연동 끊기" : "하루들 연동하기";
+  line.hidden = !u; line.textContent = u ? `하루들 ${u.nickname}(으)로 연동됨` : "";
+  if (u) { myNameNow = () => u.nickname; myTag.textContent = u.nickname; const nb = $("nameBtn"); nb.textContent = `하루들: ${u.nickname}`; nb.title = "하루들 닉네임으로 보여요"; }
+}
+function startHarudleLogin() { location.href = "/auth/harudle/start"; }
+async function harudleLogout() {
+  try { const r = await fetch("/auth/logout", { method: "POST", credentials: "same-origin" }); if (!r.ok && r.status !== 204) throw new Error(String(r.status)); location.reload(); }
+  catch { showToast("연동을 끊지 못했어요", "잠시 뒤에 다시 시도해 주세요.", 3200); }
+}
+function requireLogin(reason: string) {
+  if (account.user) return true;
+  if (!account.enabled) { showToast("지금은 하루들 연동을 쓸 수 없어요", reason, 3200); return false; }
+  if (locked()) document.exitPointerLock();
+  $("loginAskReason").textContent = reason; loginAsk.hidden = false; $("loginAskGo").focus();
+  return false;
+}
+function closeLoginAsk() { loginAsk.hidden = true; syncCursor(); }
+$("loginAskGo").onclick = startHarudleLogin;
+$("loginAskLater").onclick = closeLoginAsk;
+loginAsk.addEventListener("click", (e) => { if (e.target === loginAsk) closeLoginAsk(); });
+$("menuLogin").onclick = () => { if (account.user) void harudleLogout(); else startHarudleLogin(); };
+async function loadAccount() {
+  const q = new URLSearchParams(location.search), result = q.get("login");
+  if (result) { q.delete("login"); history.replaceState(null, "", location.pathname + (q.toString() ? `?${q}` : "") + location.hash); }
+  if (STANDALONE) try {
+    const r = await fetch("/api/me", { credentials: "same-origin", cache: "no-store" });
+    if (r.ok) { const d = await r.json(); account.enabled = !!d.enabled; account.user = d.loggedIn && d.user ? d.user : null; }
+  } catch { }
+  applyAccount();
+  if (result === "ok" && account.user) setTimeout(() => showToast("하루들과 연동했어요", `${account.user.nickname}(으)로 들어왔어요.`, 4200), 600);
+  else if (result) setTimeout(() => showToast("하루들과 연동하지 못했어요", "다시 시도해 주세요. 하루들 앱 안에서 열었다면 브라우저에서 열어 주세요.", 5200), 600);
+}
 $("menuClose").onclick = closeMenu;
 $("menuProfile").onclick = openProfile;
 $("menuLook").onclick = () => { menu.hidden = true; openAvPanel(); };
@@ -2482,7 +2526,7 @@ function wsRoom() {
   const showUpdate = () => { if (document.getElementById("updateChip")) return; const b = document.createElement("button"); b.id = "updateChip"; b.type = "button"; b.textContent = "새 버전이 나왔어요 · 새로고침"; b.onclick = () => location.reload(); document.body.append(b); };
   const connect = () => {
     ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
-    ws.onopen = () => { netUp = true; retry = 800; send({ t: "id", u: ezState().uid }); send({ t: "name", name: myName }); if (last) send({ t: "p", p: last }); media.setNetwork(true); };
+    ws.onopen = () => { netUp = true; retry = 800; send({ t: "id", u: secretUid() }); send({ t: "name", name: myName }); if (last) send({ t: "p", p: last }); media.setNetwork(true); };
     ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch { return; }
       if (m.t === "hello") { myId = m.id; media.setMeetingEnabled(!!m.meetingTest); if (m.v) { if (!firstV) firstV = m.v; else if (m.v !== firstV) showUpdate(); } }
       if (m.t === "media:join") { const pending = pendingMedia.get(m.id); if (pending) { clearTimeout(pending.timer); pendingMedia.delete(m.id); if (m.join) pending.resolve(m.join); else pending.reject(new Error(m.error || "unavailable")); } }
@@ -2490,6 +2534,7 @@ function wsRoom() {
       if (m.t === "media:cf") { const pending = pendingCloudflare.get(m.id); if (pending) { clearTimeout(pending.timer); pendingCloudflare.delete(m.id); if (!m.error) pending.resolve(m.result); else pending.reject(new Error(m.error)); } }
       if (m.t === "media:meeting") { const pending = pendingMeetings.get(m.id); if (pending) { clearTimeout(pending.timer); pendingMeetings.delete(m.id); if (!m.error) pending.resolve(m.result); else pending.reject(new Error(m.error)); } }
       if (m.t === "media:switch" && Number.isSafeInteger(m.revision)) media.switchProvider(m.revision);
+      if (m.t === "me" && typeof m.u === "string") { myPub = m.u; renderChat(); }   // 서버가 정한 내 주소(게스트 p_… · 하루들 연동 h_…)
       if (m.t === "ez") easelNet(m);
       if (m.t === "chat") chatNet(m);
       if (m.t === "bye") retry = 150; /* 서버가 새 버전으로 바뀌는 중: 곧바로 다시 붙는다 */ if (m.t === "peers" && handler) handler({ peers: m.peers.map((p) => ({ ...p, kind: "viewer", sameTab: p.peer === myId })) }); };
@@ -2586,7 +2631,7 @@ function roomKey() {
   return roomKeyAt(me.f, me.x, me.y);
 }
 function chatNet(m) {
-  const mine = m.from?.u === ezState().uid;
+  const mine = m.from?.u === selfU();
   if (m.k === "history") { chatLogs.all = m.all || []; chatLogs.dm = (m.dm || []).sort((a, b) => a.at - b.at); renderChat(); return; }
   if (m.k === "sys") { chatLogs[chatTab].push({ k: "sys", text: m.text, at: Date.now(), ...(chatTab === "near" && media.meetingScope() ? { scope: media.meetingScope() } : {}) }); renderChat(); return; }
   const list = chatLogs[m.k]; if (!list) return; if (list.some((x) => x.id === m.id)) return;
@@ -2601,14 +2646,14 @@ function sendChat(text) {
   if (chatTab === "dm" && !dmTo) { chatLogs.dm.push({ k: "sys", text: "받는 사람을 먼저 골라 주세요", at: Date.now() }); renderChat(); return; }
   if (chatTab !== "dm") { me.say = text.slice(0, 40); me.sayAt = Date.now(); }   // 내 말풍선
   netSend({ t: "chat", k: chatTab, text, to: chatTab === "dm" ? dmTo : undefined });
-  if (!netUp) chatNet({ id: "local" + Date.now(), k: chatTab, text, at: Date.now(), to: dmTo, from: { u: ezState().uid, name: myNameNow() || "나", f: me.f } });   // 서버 없이 볼 때
+  if (!netUp) chatNet({ id: "local" + Date.now(), k: chatTab, text, at: Date.now(), to: dmTo, from: { u: selfU(), name: myNameNow() || "나", f: me.f } });   // 서버 없이 볼 때
 }
 function setChatTab(t) { chatTab = t; unread[t] = 0; renderChat(); }
 function openDm(u, name) { dmTo = u; dmToName = name || "크루"; setChatTab("dm"); openChat(); }
 const hhmm = (ms) => { const d = new Date(ms); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
 let chatKey = "";
 function renderChat() {
-  const uid = ezState().uid;
+  const uid = selfU();
   $all<HTMLButtonElement>("#chat .ctabs button").forEach((b2) => { const t = b2.dataset.tab; b2.setAttribute("aria-selected", String(t === chatTab)); const bd = b2.querySelector("b"); bd.textContent = String(unread[t]); bd.classList.toggle("on", unread[t] > 0 && t !== chatTab); });
   $("chatDmBar").hidden = chatTab !== "dm";
   if (chatTab === "dm") { // 받는 사람: 지금 접속한 크루 + 대화했던 크루
@@ -2635,7 +2680,7 @@ $("sideHide").onclick = () => (TOUCH ? peopleOpen(false) : tuckSide(true));
 $("showPeople").onclick = () => (TOUCH ? peopleOpen(!document.body.classList.contains("peopleOpen")) : tuckSide(false));
 tuckSide(sideTucked);
 $("chatDmTo").addEventListener("change", () => { const sel = $<HTMLSelectElement>("chatDmTo"); dmTo = sel.value || null; dmToName = sel.selectedOptions[0]?.textContent || ""; renderChat(); });
-$("chatLog").addEventListener("click", (e) => { const w = (e.target as HTMLElement).closest(".who") as HTMLElement; if (w && w.dataset.u && w.dataset.u !== ezState().uid) openDm(w.dataset.u, w.dataset.n); });
+$("chatLog").addEventListener("click", (e) => { const w = (e.target as HTMLElement).closest(".who") as HTMLElement; if (w && w.dataset.u && w.dataset.u !== selfU()) openDm(w.dataset.u, w.dataset.n); });
 setInterval(() => { if (chatTab === "near") renderChat(); }, 1000);   // 방을 드나들면 안내 문구가 바뀐다
 /* ───── 같이 있는 크루 목록: 나 · 같은 층 · 다른 층 순, 이름 옆에 층, 따라가기 ───── */
 const plistBody = document.getElementById("plistBody");
@@ -2794,7 +2839,7 @@ fontsReady.then(() => {
   const ld = document.getElementById("loading"); ld.style.opacity = "0"; setTimeout(() => ld.remove(), 450);
   showToast("11층에 도착했어요", "1번을 눌러 네 컷을 그려 보세요. 캐릭터를 누르면 그 크루의 하루들 피드가 열려요.", 5000);
   if (!LS.get("ww.tour")) openTour();   // 처음 오면 세 장짜리 안내(전체 조작법은 설정창 「조작법」 탭)
-  loadFeed(); joinRoom();
+  loadFeed(); joinRoom(); void loadAccount();
   ready = true;
   // 화면 점검용 손잡이: 주소 끝에 ?debug를 붙였을 때만
   if (new URLSearchParams(location.search).has("debug")) (window as any).__ez = ezState; (window as any).__t = { peers, gl: renderer, Q, me, NPCS, cam, goFloor, setView, setMyAv, useSkill, jump, lieDown, sitDown, nearSeat, sendPresence, AVATAR_PRESETS, get floor() { return floor; } };

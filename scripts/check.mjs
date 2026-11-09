@@ -15,7 +15,7 @@ let bad = 0
 const fail = (...m) => { bad++; console.log('✗', ...m) }
 const ok = (m) => console.log('✓', m)
 
-for (const f of ['server.js', 'app.js', 'weather.js', 'workers/media-watchdog/index.js', ...readdirSync('server/media').filter((name) => name.endsWith('.js')).map((name) => join('server/media', name))]) {
+for (const f of ['server.js', 'app.js', 'weather.js', 'workers/media-watchdog/index.js', ...['server/media', 'server/auth'].flatMap((dir) => readdirSync(dir).filter((name) => name.endsWith('.js')).map((name) => join(dir, name)))]) {
   try { execFileSync(process.execPath, ['--check', f], { stdio: 'pipe' }); ok(`${f} 문법`) } catch (e) { fail(f, e.stderr?.toString()) }
 }
 for (const [file, name] of [['scripts/weather.test.mjs', '날씨 갱신과 실패 처리'], ['scripts/solar.test.mjs', '판교의 해와 시간 변화'], ['scripts/traffic.test.mjs', '도로 위 차량 이동']]) {

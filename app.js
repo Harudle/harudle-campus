@@ -11,13 +11,14 @@ import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import { createWeatherService } from "./weather.js";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { roomKeyAt } from "./dist-check/world.mjs";
 import { createMediaService, mediaArea, canShareInRoom } from "./server/media/index.js";
 import { createSwitchCoordinator } from "./server/media/switch-coordinator.js";
 import { createCloudflareTestService } from "./server/media/cloudflare-test.js";
 import { createMeetingRegistry } from "./server/media/meeting-registry.js";
 import { createMediaAdmission, mediaClientAddress } from "./server/media/admission.js";
+import { createAuth } from "./server/auth/index.js";
 
 const PORT = Number(process.env.PORT || 80);
 const BIND_HOST = process.env.CAMPUS_BIND_HOST || undefined;
@@ -27,6 +28,8 @@ const HARUDLE = "https://www.harudle.com";
 const FEED_TTL = 4 * 60 * 1000;   // 하루들 이미지 주소는 15분 뒤 만료되므로 그보다 짧게
 const PER_AUTHOR = 6;
 const weather = createWeatherService();
+const auth = createAuth(process.env);   // 하루들 로그인 연동. 비밀값·저장소가 없으면 꺼진 채(모두 게스트)
+auth.startCleanup();
 
 const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css; charset=utf-8", ".woff2": "font/woff2", ".json": "application/json", ".png": "image/png", ".svg": "image/svg+xml", ".ico": "image/x-icon" };
 
@@ -82,6 +85,7 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");
   try {
     if (url.pathname === "/healthz") { res.writeHead(200, { "content-type": "text/plain", "cache-control": "no-store" }); return res.end(`ok ${VERSION}`); }
+    if (await auth.handle(req, res, url)) return;   // /api/me · /auth/harudle/start · /auth/harudle/callback · /auth/logout
     if (url.pathname === "/api/environment") {
       // 외부 요청은 백그라운드에서 갱신하므로 날씨 서비스가 느려도 시계는 바로 응답한다.
       const state = weather.snapshot();
@@ -160,6 +164,15 @@ function retireMedia(peer) {
   return work;
 }
 const clean = (s, n) => (typeof s === "string" ? s.replace(/[\u0000-\u001f]/g, "").slice(0, n) : "");
+/* ───────── 크루 주소: 비밀 uid는 서버 밖으로 내보내지 않는다 ─────────
+   브라우저는 저만 아는 비밀 uid를 서버에 한 번 보낸다(WS "id"). 서버는 그 해시(공개 주소 p_…)만 다른 크루에게 보여 준다.
+   개인 메시지·이젤 획·접속자 목록은 모두 공개 주소를 쓰므로, 남의 주소를 알아도 그 사람의 개인 메시지 기록은 받을 수 없다 */
+const PUB_RE = /^p_[0-9a-f]{16}$/;
+const ADDR_RE = /^(p_[0-9a-f]{16}|h_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;   // 게스트(p_…) · 하루들 로그인(h_회원 ID)
+const pubOf = (secret) => `p_${createHash("sha256").update(`harudle-campus:${secret}`).digest("hex").slice(0, 16)}`;
+const asPub = (u) => (typeof u !== "string" || !u ? u : PUB_RE.test(u) ? u : pubOf(u));   // 예전 기록(비밀 uid 그대로)을 공개 주소로
+function dmKeyOf(a, b) { return a < b ? `${a}|${b}` : `${b}|${a}`; }
+const strokeId = (u, id) => (id.startsWith(`${u}-`) ? id : `${u}-${createHash("sha256").update(id).digest("hex").slice(0, 12)}`);   // 예전 클라이언트는 획 id에 비밀 uid를 넣었다
 function sanitize(p) {
   if (!p || typeof p !== "object") return null;
   const num = (v, a, b) => (typeof v === "number" && isFinite(v) ? Math.min(b, Math.max(a, v)) : 0);
@@ -175,14 +188,15 @@ const EZ_FILE = join(tmpdir(), "harudle-easel.json"), EZ_MAX = 2500, EZ_PTS = 40
 // 판(board)이 여럿: easel(부스 네컷 이젤), wb(12층 코워킹 존 화이트보드). 판마다 획과 사람별 앞으로가기 줄을 따로 둔다
 const EZ_BOARDS = ["easel", "wb"], ez = Object.fromEntries(EZ_BOARDS.map((b) => [b, { strokes: [], redo: new Map() }]));
 try { const d = JSON.parse(readFileSync(EZ_FILE, "utf8")); if (Array.isArray(d.strokes)) ez.easel.strokes = d.strokes; for (const b of EZ_BOARDS) if (Array.isArray(d.boards?.[b])) ez[b].strokes = d.boards[b]; } catch { }
+for (const b of EZ_BOARDS) for (const st of ez[b].strokes) { st.u = asPub(st.u); if (typeof st.id === "string" && st.u) st.id = strokeId(st.u, st.id); }   // 예전 획: 비밀 uid → 공개 주소
 let ezDirty = false;
 setInterval(() => { if (!ezDirty) return; ezDirty = false; writeFile(EZ_FILE, JSON.stringify({ strokes: ez.easel.strokes, boards: Object.fromEntries(EZ_BOARDS.map((b) => [b, ez[b].strokes])) })).catch(() => { }); }, 4000).unref();
 const ezAll = (msg, except) => { const s = JSON.stringify(msg); for (const [pid, { ws }] of peers) if (pid !== except && ws.readyState === 1) ws.send(s); };
 function ezMessage(pid, m) {
-  const u = clean(m.u, 24); if (!u) return;
+  const u = peers.get(pid)?.uid; if (!u) return;   // 그린 사람은 접속의 공개 주소로 정한다(보낸 값을 믿지 않는다)
   const b = EZ_BOARDS.includes(m.b) ? m.b : "easel", ezStrokes = ez[b].strokes, ezRedo = ez[b].redo;
   if (m.k === "seg") {
-    const id = clean(m.id, 32), c = /^#[0-9a-f]{6}$/i.test(m.c) ? m.c : "#111118", w = Math.min(80, Math.max(1, Number(m.w) || 6));
+    const raw = clean(m.id, 48), id = raw && strokeId(u, raw), c = /^#[0-9a-f]{6}$/i.test(m.c) ? m.c : "#111118", w = Math.min(80, Math.max(1, Number(m.w) || 6));
     const pts = Array.isArray(m.p) ? m.p.slice(0, 400).map((v) => Math.min(1000, Math.max(0, Math.round(Number(v) || 0)))) : [];
     if (!id || pts.length < 2) return;
     let st = ezStrokes.find((x) => x.id === id);
@@ -190,7 +204,7 @@ function ezMessage(pid, m) {
     if (st.u !== u || st.p.length >= EZ_PTS) return;
     st.p.push(...pts); ezDirty = true;
     ezAll({ t: "ez", b, k: "seg", id, u, c, w, p: pts }, pid);
-  } else if (m.k === "end") ezAll({ t: "ez", b, k: "end", id: clean(m.id, 32) }, pid);
+  } else if (m.k === "end") { const raw = clean(m.id, 48); if (raw) ezAll({ t: "ez", b, k: "end", id: strokeId(u, raw) }, pid); }
   else if (m.k === "undo") {
     for (let i = ezStrokes.length - 1; i >= 0; i--) { const st = ezStrokes[i]; if (st.u === u && !st.h) { st.h = 1; (ezRedo.get(u) || ezRedo.set(u, []).get(u)).push(st.id); ezDirty = true; ezAll({ t: "ez", b, k: "vis", id: st.id, h: 1 }, pid); break; } }
   } else if (m.k === "redo") {
@@ -204,9 +218,15 @@ function ezMessage(pid, m) {
 const CHAT_FILE = join(tmpdir(), "harudle-chat.json"), NEAR = 6;
 let chatAll = [], chatDm = {};
 try { const d = JSON.parse(readFileSync(CHAT_FILE, "utf8")); if (Array.isArray(d.all)) chatAll = d.all; if (d.dm && typeof d.dm === "object") chatDm = d.dm; } catch { }
+{ // 예전 기록에 남은 비밀 uid를 공개 주소로 바꾼다
+  const fix = (m) => { if (m?.from) m.from.u = asPub(m.from.u); if (m && "to" in m) m.to = asPub(m.to); return m; };
+  chatAll.forEach(fix);
+  const dm = {}; for (const [k, v] of Object.entries(chatDm)) { const [a, b] = k.split("|").map(asPub); if (!a || !b || !Array.isArray(v)) continue; (dm[dmKeyOf(a, b)] ||= []).push(...v.map(fix)); }
+  chatDm = dm;
+}
 let chatDirty = false, chatSeq = Date.now();
 setInterval(() => { if (!chatDirty) return; chatDirty = false; writeFile(CHAT_FILE, JSON.stringify({ all: chatAll, dm: chatDm })).catch(() => { }); }, 4000).unref();
-const dmKey = (a, b) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+const dmKey = dmKeyOf;
 function chatMessage(pid, m) {
   const me = peers.get(pid); if (!me || !me.uid) return;
   const now = Date.now(); me.chatT = (me.chatT || []).filter((x) => now - x < 5000); if (me.chatT.length >= 6) return void me.ws.send(JSON.stringify({ t: "chat", k: "sys", text: "조금 천천히 보내 주세요" })); me.chatT.push(now);
@@ -230,7 +250,7 @@ function chatMessage(pid, m) {
     if (!me.presence) sendTo(me);
     if (!n) me.ws.send(JSON.stringify({ t: "chat", k: "sys", text: rm ? "이 방에는 아직 아무도 없어요" : "근처(6칸 안)에 아무도 없어요" }));
   } else if (m.k === "dm") {
-    const to = clean(m.to, 24); if (!to || to === me.uid) return; msg.to = to;
+    const to = clean(m.to, 40); if (!ADDR_RE.test(to) || to === me.uid) return; msg.to = to;
     const key = dmKey(me.uid, to); (chatDm[key] ||= []).push(msg); if (chatDm[key].length > 50) chatDm[key].splice(0, chatDm[key].length - 50); chatDirty = true;
     for (const pp of peers.values()) if (pp.uid === to || pp.uid === me.uid) sendTo(pp);
   }
@@ -241,11 +261,19 @@ wss.on("connection", (ws, request) => {
   ws.send(JSON.stringify({ t: "hello", id, v: VERSION, meetingTest: !!meetings }));
   for (const b of EZ_BOARDS) ws.send(JSON.stringify({ t: "ez", b, k: "all", strokes: ez[b].strokes }));   // 들어오자마자 판마다 그림 전체
   dirty = true;
+  const sendHistory = (me) => { const dms = Object.entries(chatDm).filter(([k]) => k.split("|").includes(me.uid)).flatMap(([, v]) => v); ws.send(JSON.stringify({ t: "chat", k: "history", all: chatAll, dm: dms })); };
+  // 하루들로 로그인한 접속: 주소(h_회원 ID)와 이름(하루들 닉네임)을 서버가 정한다. 보낸 id·name은 무시한다
+  const ready = auth.userFromUpgrade(request).then((user) => {
+    const me = peers.get(id); if (!user || !me) return;
+    me.uid = `h_${user.id}`; me.name = user.nickname; me.verified = true; dirty = true;
+    ws.send(JSON.stringify({ t: "me", u: me.uid, verified: true, name: user.nickname }));
+    sendHistory(me);
+  }, () => {});
   ws.on("message", (raw) => {
     let msg; try { msg = JSON.parse(raw); } catch { return; }
     if (raw.length > 4096 && msg.t !== "media:cf") return;
     const me = peers.get(id); if (!me) return;
-    if (msg.t === "name") { me.name = clean(msg.name, 16) || "크루"; dirty = true; }
+    if (msg.t === "name" && !me.verified) { me.name = clean(msg.name, 16) || "크루"; dirty = true; }
     if (msg.t === "p") {
       const previousArea = me.presence && mediaArea(me.presence);
       me.presence = sanitize(msg.p);
@@ -345,11 +373,13 @@ wss.on("connection", (ws, request) => {
       }
     }
     if (msg.t === "ez") ezMessage(id, msg);
-    if (msg.t === "id" && !me.uid) { // 브라우저마다 고정된 uid: 개인 메시지 주소. 받자마자 지난 대화를 보낸다
-      me.uid = clean(msg.u, 24); dirty = true; if (!me.uid) return;
-      const dms = Object.entries(chatDm).filter(([k]) => k.split("|").includes(me.uid)).flatMap(([, v]) => v);
-      ws.send(JSON.stringify({ t: "chat", k: "history", all: chatAll, dm: dms }));
-    }
+    if (msg.t === "id") void ready.then(() => { // 브라우저의 비밀 uid → 공개 주소(로그인했으면 이미 정해져 있어 건너뛴다). 본인에게 공개 주소를 알려 주고 지난 대화를 보낸다
+      if (me.uid || !peers.has(id)) return;
+      const secret = clean(msg.u, 64); if (!secret) return;
+      me.uid = pubOf(secret); dirty = true;
+      ws.send(JSON.stringify({ t: "me", u: me.uid }));
+      sendHistory(me);
+    });
     if (msg.t === "chat" && ["near", "all", "dm"].includes(msg.k)) chatMessage(id, msg);
   });
   ws.on("close", () => { const me = peers.get(id); if (me) void retireMedia(me).catch(() => {}); cloudflareTest?.disconnected?.(id); mediaSwitch.disconnected(id); peers.delete(id); managedStack?.dailyPermissions.changed(); dirty = true; });
@@ -357,7 +387,7 @@ wss.on("connection", (ws, request) => {
 });
 setInterval(() => { // 초당 12번, 바뀐 게 있을 때만 모두에게 전체 상태를 보낸다
   if (!dirty) return; dirty = false;
-  const list = [...peers].filter(([, p]) => p.presence).map(([peer, p]) => ({ peer, name: p.name, u: p.uid || null, presence: p.presence }));
+  const list = [...peers].filter(([, p]) => p.presence).map(([peer, p]) => ({ peer, name: p.name, u: p.uid || null, ...(p.verified ? { hv: 1 } : {}), presence: p.presence }));
   const msg = JSON.stringify({ t: "peers", peers: list });
   for (const { ws } of peers.values()) if (ws.readyState === 1) ws.send(msg);
 }, 83);
