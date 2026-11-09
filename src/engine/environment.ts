@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { W, H, S, floorY, clamp } from "./world";
-import { campusSun } from "./solar";
+import { campusMoon, campusSun } from "./solar";
 import { createSky } from "./sky";
 
 type Weather = { code: number; clouds: number; forecastAt: number; fetchedAt: number };
@@ -11,7 +11,7 @@ type EnvironmentOptions = {
   sun: THREE.DirectionalLight;
   skyStars: THREE.Points[];
   moon: THREE.Sprite;
-  paintCity: (daylight: number) => void;
+  paintCity: (daylight: number, twilight: number, clouds: number) => void;
   ground: number;
 };
 
@@ -86,11 +86,29 @@ export function createEnvironment({ scene, camera, ambient, sun, skyStars, moon,
   let serverEpoch: number | null = null, clockAnchor = 0, requestFailed = false, pending = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let day = 0, night = 0, twilight = 0, clouds = 0, targetDay = 0, targetNight = 0, targetTwilight = 0, targetClouds = 0;
-  let initialized = false, nextSkyUpdate = 0, cityStep = -1;
+  let initialized = false, nextSkyUpdate = 0, cityDay = -1, cityTwilight = -1, cityClouds = -1;
+  let moonPaintMinute = -1;
   const currentTime = () => serverEpoch === null ? Date.now() : serverEpoch + (performance.now() - clockAnchor);
   const currentWeather = () => weather && currentTime() - weather.fetchedAt <= WEATHER_MAX_AGE && currentTime() - weather.forecastAt <= WEATHER_MAX_AGE ? weather : null;
   const sunDirection = new THREE.Vector3(0, -1, 0);
+  const moonDirection = new THREE.Vector3(0, -1, 0);
   const white = new THREE.Color(0xFFFFFF), eveningLight = new THREE.Color(0xFFC69D);
+
+  function paintMoon(fraction: number, tilt: number) {
+    const texture = (moon.material as THREE.SpriteMaterial).map as THREE.CanvasTexture;
+    const canvas = texture.image as HTMLCanvasElement, g = canvas.getContext("2d")!;
+    const size = canvas.width, image = g.createImageData(size, size), half = size / 2, radius = half - 2;
+    const depth = 2 * fraction - 1, side = Math.sqrt(Math.max(0, 1 - depth * depth));
+    const lightX = Math.sin(tilt) * side, lightY = -Math.cos(tilt) * side;
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      const nx = (x + .5 - half) / radius, ny = (y + .5 - half) / radius, r2 = nx * nx + ny * ny;
+      if (r2 >= 1 || nx * lightX + ny * lightY + Math.sqrt(1 - r2) * depth <= 0) continue;
+      const i = (y * size + x) * 4;
+      image.data[i] = 241; image.data[i + 1] = 237; image.data[i + 2] = 222;
+      image.data[i + 3] = Math.round(255 * Math.min(1, (1 - Math.sqrt(r2)) * radius));
+    }
+    g.putImageData(image, 0, 0); texture.needsUpdate = true;
+  }
 
   async function sync() {
     if (pending || document.hidden) return;
@@ -121,6 +139,10 @@ export function createEnvironment({ scene, camera, ambient, sun, skyStars, moon,
       nextSkyUpdate = 1;
       const position = campusSun(currentTime());
       sunDirection.set(position.x, position.y, position.z);
+      const moonPosition = campusMoon(currentTime());
+      moonDirection.set(moonPosition.x, moonPosition.y, moonPosition.z);
+      const minute = Math.floor(currentTime() / 60000);
+      if (minute !== moonPaintMinute) { moonPaintMinute = minute; paintMoon(moonPosition.fraction, moonPosition.tilt); }
       targetDay = position.daylight;
       targetTwilight = position.twilight;
       targetClouds = clamp((currentWeather()?.clouds ?? 0) / 100, 0, 1);
@@ -130,12 +152,18 @@ export function createEnvironment({ scene, camera, ambient, sun, skyStars, moon,
     day += (targetDay - day) * blend; night += (targetNight - night) * blend;
     twilight += (targetTwilight - twilight) * blend; clouds += (targetClouds - clouds) * blend;
     updateSky(day, twilight, clouds, sunDirection);
-    for (const stars of skyStars) { (stars.material as THREE.PointsMaterial).opacity = night; stars.visible = night > .01; }
-    (moon.material as THREE.SpriteMaterial).opacity = night; moon.visible = night > .01;
+    for (const stars of skyStars) { stars.position.copy(camera.position); (stars.material as THREE.PointsMaterial).opacity = night; stars.visible = night > .01; }
+    moon.position.copy(camera.position).addScaledVector(moonDirection, 440);
+    (moon.material as THREE.SpriteMaterial).opacity = (.14 + .86 * (1 - day)) * (1 - clouds * .92) * smooth(-.01, .015, moonDirection.y);
+    moon.visible = (moon.material as THREE.SpriteMaterial).opacity > .01;
     // 실내 조명은 밤에도 유지해 글과 캐릭터가 잘 보이게 한다.
     ambient.intensity = 1.2 + day * .4; ambient.color.set(0xDFE7FF).lerp(white, day).lerp(eveningLight, twilight * .12);
     sun.intensity = .8 + day * .7; sun.color.set(0xDFE7FF).lerp(white, day).lerp(eveningLight, twilight * .65);
-    const nextCityStep = Math.round(day * 40); if (nextCityStep !== cityStep) { cityStep = nextCityStep; paintCity(nextCityStep / 40); }
+    const nextDay = Math.round(day * 40), nextTwilight = Math.round(twilight * 40), nextClouds = Math.round(clouds * 20);
+    if (nextDay !== cityDay || nextTwilight !== cityTwilight || nextClouds !== cityClouds) {
+      cityDay = nextDay; cityTwilight = nextTwilight; cityClouds = nextClouds;
+      paintCity(cityDay / 40, cityTwilight / 40, cityClouds / 20);
+    }
     updatePrecipitation(dt, currentWeather() ? precipitationKind(currentWeather()!.code) : "none", day);
   }
 

@@ -7,6 +7,7 @@ import { AVATAR_COLOR_PARTS, AVATAR_COLORS, AVATAR_OPTIONS, AVATAR_PRESETS, LOCK
 import { dropDoll, makeDoll } from "./dolls";
 import { avatarPreview } from "../scene/avatarPreviewStore";
 import { createEnvironment } from "./environment";
+import { createCityscape } from "./cityscape";
 import { mountMediaControls } from "../media/controller";
 import type { MediaJoin } from "../media/types";
 import recruitPosterUrl from "../assets/recruit-poster-2026.png";
@@ -290,20 +291,8 @@ const monitor = (G, x, y, z, rot = 0, w = .42) => {
 };
 const screenTex = canvasTex(128, 72, (g) => { g.fillStyle = "#1C2B55"; g.fillRect(0, 0, 128, 72); const r = rng(9); for (let i = 0; i < 7; i++) { g.fillStyle = ["#FFD43B", "#7FCFAE", "#F7A6A0", "#7DB3F0", "#ffffff"][i % 5]; g.fillRect(10 + (i % 2) * 8, 10 + i * 8, 30 + r() * 70, 3); } });
 const slideTex = canvasTex(512, 288, (g) => { g.fillStyle = "#FFFFFF"; g.fillRect(0, 0, 512, 288); g.fillStyle = "#0E1E46"; g.fillRect(0, 0, 512, 58); g.fillStyle = "#FFD43B"; g.font = `700 34px ${HAND}`; g.textBaseline = "middle"; g.fillText("우아한테크코스", 22, 30); g.fillStyle = "#0E1E46"; g.font = `700 30px ${HAND}`; for (const [i, t] of ["오늘의 미션: 페어로 함께 풀기", "· 테스트 먼저, 작게 커밋", "· 질문은 언제든 환영"].entries()) g.fillText(t, 28, 112 + i * 56); });
-const moonTex = canvasTex(512, 512, (g) => {
-  const ink = "#16182E", yel = "#FFE94A"; g.lineCap = "round"; g.lineJoin = "round";
-  g.fillStyle = yel; g.beginPath(); g.arc(300, 230, 190, 0, 7); g.fill();
-  g.strokeStyle = yel; g.lineWidth = 10; for (const s of [0, 1]) { g.beginPath(); g.moveTo(120 + s * 60, 520); g.lineTo(200 + s * 60, 330); g.stroke(); }   // 달까지 걸친 사다리
-  for (let i = 0; i < 6; i++) { const t = i / 6; g.beginPath(); g.moveTo(120 + t * 80, 520 - t * 190); g.lineTo(180 + t * 80, 520 - t * 190); g.stroke(); }
-  g.fillStyle = ink; g.font = `900 150px "Gowun Dodum", sans-serif`; g.textAlign = "center"; g.textBaseline = "middle"; g.save(); g.translate(320, 175); g.rotate(-.12); g.fillText("도전", 0, 0); g.restore();
-  g.strokeStyle = ink; g.lineWidth = 7; g.fillStyle = "#FFFFFF";   // 행성 친구(얼굴 + 고리)
-  g.beginPath(); g.arc(230, 330, 62, 0, 7); g.fill(); g.stroke();
-  g.beginPath(); g.ellipse(230, 345, 105, 26, -.25, .2, Math.PI - .2); g.stroke();
-  g.fillStyle = ink; g.beginPath(); g.arc(212, 318, 5, 0, 7); g.arc(242, 318, 5, 0, 7); g.fill();
-  g.beginPath(); g.moveTo(275, 300); g.lineTo(330, 245); g.stroke();   // 붓 든 팔
-  g.fillStyle = "#FFFFFF"; g.save(); g.translate(338, 236); g.rotate(-.8); g.fillRect(-10, -26, 20, 30); g.strokeRect(-10, -26, 20, 30); g.fillStyle = ink; g.fillRect(-10, -42, 20, 16); g.restore();
-  for (const [x, y, r] of [[70, 70, 22], [470, 470, 18], [60, 300, 14]]) { g.fillStyle = yel; g.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); } g.fill(); }
-});
+// 달의 밝은 부분은 판교의 날짜와 위치에 따라 environment.ts에서 그린다.
+const moonTex = canvasTex(96, 96, () => {});
 // 2026 신입생 모집 포스터: 한 장의 그림을 여러 벽에 붙인다
 const recruitPosterTex = new THREE.TextureLoader().load(recruitPosterUrl); recruitPosterTex.colorSpace = THREE.SRGBColorSpace; recruitPosterTex.anisotropy = 4;
 const tekoTexOf = (cw) => canvasTex(cw, 288, (g) => { g.fillStyle = "#0E1E46"; g.fillRect(0, 0, cw, 288); g.fillStyle = "#FFD43B"; g.font = `700 80px ${HAND}`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("테코톡", cw / 2, 118); g.fillStyle = "#fff"; g.font = `700 30px ${HAND}`; g.fillText("오늘 발표: 나의 첫 리팩터링", cw / 2, 212); });
@@ -1523,62 +1512,29 @@ const scene = R3F.scene; scene.background = new THREE.Color(0x0E1E46);
 // 별과 달은 밤에만 보이고, 흐린 날에는 구름 뒤로 숨는다.
 const skyStars: THREE.Points[] = [];
 let moon: THREE.Sprite;
-{ const r = rng(77); for (const [n, color, size] of [[520, 0xFFE27A, .5], [380, 0xFFFFFF, .32]]) { const pos = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) { const a = r() * Math.PI * 2, e = .03 + r() * 1.25, d = 70 + r() * 40; pos.set([Math.cos(a) * Math.cos(e) * d, Math.sin(e) * d, Math.sin(a) * Math.cos(e) * d], i * 3); }
+{ const r = rng(77); for (const [n, color, size] of [[150, 0xF8EBC9, .5], [550, 0xFFFFFF, .32]]) { const pos = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { const a = r() * Math.PI * 2, e = .03 + r() * 1.25, d = 430 + r() * 20; pos.set([Math.cos(a) * Math.cos(e) * d, Math.sin(e) * d, Math.sin(a) * Math.cos(e) * d], i * 3); }
     const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
     const stars = new THREE.Points(g, new THREE.PointsMaterial({ color, size, transparent: true, sizeAttenuation: true, depthWrite: false })); skyStars.push(stars); scene.add(stars); }
-  // 달 이스터에그: 2026 모집 포스터처럼 노란 달에 행성 친구가 사다리를 타고 올라 붓으로 "도전"을 써 놓았다(늘 카메라를 본다)
-  moon = new THREE.Sprite(new THREE.SpriteMaterial({ map: moonTex, transparent: true, depthWrite: false })); moon.scale.set(26, 26, 1); moon.position.set(-55, 30, -70); scene.add(moon); }
-// 판교 건물과 거리의 색도 시간에 맞춰 바뀐다.
+  moon = new THREE.Sprite(new THREE.SpriteMaterial({ map: moonTex, transparent: true, depthWrite: false })); moon.scale.set(4, 4, 1); scene.add(moon); }
+// 위성지도와 거리뷰를 참고한 단지 주변 풍경
 const GROUND = -34;
-let campusTower = null;
-let paintCity = (_daylight: number) => {};
-{ const r = rng(2026);
-  const cells: { x: number; y: number; light: number }[] = [];
-  for (let y = 4; y < 124; y += 8) for (let x = 4; x < 60; x += 8) cells.push({ x, y, light: r() });
-  const cityCanvas = document.createElement("canvas"); cityCanvas.width = 64; cityCanvas.height = 128;
-  const g = cityCanvas.getContext("2d");
-  const winTex = new THREE.CanvasTexture(cityCanvas); winTex.colorSpace = THREE.SRGBColorSpace;
-  const cityTextures: THREE.Texture[] = [];
-  const roof = new THREE.MeshBasicMaterial({ color: 0x0C1838 });
-  const ground = new THREE.Mesh(new THREE.CircleGeometry(230, 48), new THREE.MeshBasicMaterial({ color: 0x08122C })); ground.rotation.x = -Math.PI / 2; ground.position.y = GROUND; scene.add(ground);
-  const tower = (x, z, w, d, h, ry) => { const t = winTex.clone(); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(Math.max(1, Math.round(w / 3)), Math.max(1, Math.round(h / 6))); t.needsUpdate = true; cityTextures.push(t); const side = new THREE.MeshBasicMaterial({ map: t });
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), [side, side, roof, roof, side, side]); m.position.set(x, GROUND + h / 2, z); m.rotation.y = ry; scene.add(m); return m; };
-  campusTower = tower(0, 0, W * S - .4, H * S - .4, -GROUND - .2, 0);   // 우리 건물 아래층들 (보고 있는 층 바로 밑까지)
-  for (let i = 0; i < 90; i++) { const a = r() * Math.PI * 2, d = 60 + r() * 90; tower(Math.cos(a) * d, Math.sin(a) * d, 5 + r() * 10, 5 + r() * 10, 10 + r() * (d < 85 ? 30 : 48), r() * Math.PI); }
-  const n = 900, pos = new Float32Array(n * 3); for (let i = 0; i < n; i++) { const a = r() * Math.PI * 2, d = 22 + r() * 140; pos.set([Math.cos(a) * d, GROUND + .3, Math.sin(a) * d], i * 3); }
-  const streetGeometry = new THREE.BufferGeometry(); streetGeometry.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-  const streetLights = new THREE.PointsMaterial({ color: 0xFFC94D, size: .7, transparent: true, sizeAttenuation: true, depthWrite: false });
-  scene.add(new THREE.Points(streetGeometry, streetLights));
-  const mix = (night: number, day: number, amount: number) => new THREE.Color(night).lerp(new THREE.Color(day), amount);
-  paintCity = (daylight) => {
-    g.fillStyle = mix(0x14224A, 0x9BB2C1, daylight).getStyle(); g.fillRect(0, 0, 64, 128);
-    for (const cell of cells) {
-      const night = cell.light > .6 ? (cell.light > .9 ? 0xFFF4C2 : 0xFFD86B) : 0x1E2E5C;
-      g.fillStyle = mix(night, 0x7596A9, daylight).getStyle(); g.fillRect(cell.x, cell.y, 5, 5);
-    }
-    for (const texture of cityTextures) texture.needsUpdate = true;
-    roof.color.copy(mix(0x0C1838, 0x899DAB, daylight));
-    (ground.material as THREE.MeshBasicMaterial).color.copy(mix(0x08122C, 0xA7B8B7, daylight));
-    streetLights.opacity = 1 - daylight;
-  };
-  paintCity(0);
-}
+const { city, campusTower, paintCity, updateTraffic } = createCityscape(scene, GROUND);
 // 별똥별: 몇 초에 한 번, 지금 보고 있는 하늘 쪽으로 긴 꼬리를 그으며 떨어진다
 const meteorTex = canvasTex(256, 16, (g) => { const gr = g.createLinearGradient(0, 0, 256, 0); gr.addColorStop(0, "rgba(255,255,255,0)"); gr.addColorStop(.5, "rgba(255,236,170,.5)"); gr.addColorStop(.85, "rgba(255,246,210,.95)"); gr.addColorStop(1, "rgba(255,255,255,1)"); g.fillStyle = gr; g.fillRect(0, 4, 256, 8); const hg = g.createRadialGradient(248, 8, 0, 248, 8, 8); hg.addColorStop(0, "rgba(255,255,255,1)"); hg.addColorStop(1, "rgba(255,240,190,0)"); g.fillStyle = hg; g.fillRect(232, 0, 24, 16); });
-const meteors = []; let meteorT = 2.5;
+const meteors = []; let meteorT = 60;
 const _mx = new THREE.Vector3(), _my = new THREE.Vector3(), _mz = new THREE.Vector3(), _mm = new THREE.Matrix4();
 function spawnMeteor() {
   const f = new THREE.Vector3(); camera.getWorldDirection(f); f.y = 0; if (f.lengthSq() < 1e-4) f.set(0, 0, -1); f.normalize();
   const right = new THREE.Vector3(-f.z, 0, f.x), e = (inside() ? .05 : .15) + Math.random() * .22, side = (Math.random() - .5) * 1.4;
   const dir = f.clone().multiplyScalar(Math.cos(e)).addScaledVector(right, side).setY(Math.sin(e)).normalize();
-  const pos = camera.position.clone().addScaledVector(dir, 80);
+  const pos = camera.position.clone().addScaledVector(dir, 420);
   const vel = right.clone().multiplyScalar(Math.random() < .5 ? -1 : 1).add(new THREE.Vector3(0, -.55 - Math.random() * .3, 0)).normalize().multiplyScalar(38 + Math.random() * 18);
   const m = new THREE.Mesh(new THREE.PlaneGeometry(14 + Math.random() * 8, .8), new THREE.MeshBasicMaterial({ map: meteorTex, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
   m.position.copy(pos); m.renderOrder = 5; scene.add(m); meteors.push({ m, vel, age: 0, life: 1.2 + Math.random() * .8 });
 }
 function tickMeteors(dt, visibility) {
-  meteorT -= dt; if (meteorT <= 0) { meteorT = 3 + Math.random() * 6; if (visibility > .25) spawnMeteor(); }
+  meteorT -= dt; if (meteorT <= 0) { meteorT = 90 + Math.random() * 180; if (visibility > .25) spawnMeteor(); }
   for (let i = meteors.length - 1; i >= 0; i--) { const s = meteors[i]; s.age += dt; s.m.position.addScaledVector(s.vel, dt);
     const k = s.age / s.life; s.m.material.opacity = (k < .2 ? k / .2 : Math.max(0, 1 - (k - .2) / .8)) * visibility;
     _mx.copy(s.vel).normalize(); _mz.copy(camera.position).sub(s.m.position).normalize(); _my.crossVectors(_mz, _mx).normalize(); _mz.crossVectors(_mx, _my); _mm.makeBasis(_mx, _my, _mz); s.m.quaternion.setFromRotationMatrix(_mm);
@@ -1597,7 +1553,7 @@ function adaptQuality(dt) {
   if (Q.level === 2) { const m = sun.shadow.mapSize.x / 2; sun.shadow.mapSize.set(m, m); sun.shadow.map?.dispose(); sun.shadow.map = null; }
   if (Q.level === 3) { renderer.shadowMap.type = THREE.PCFShadowMap; renderer.shadowMap.needsUpdate = true; scene.traverse((o: any) => { if (o.material) for (const m of [].concat(o.material)) m.needsUpdate = true; }); }
 }
-const camera = R3F.camera; camera.fov = 38; camera.near = .1; camera.far = 360; camera.updateProjectionMatrix();
+const camera = R3F.camera; camera.fov = 38; camera.near = .1; camera.far = 500; camera.updateProjectionMatrix();
 const ambient = new THREE.HemisphereLight(0xffffff, 0xCFD6E8, 1.6); scene.add(ambient);
 const sun = new THREE.DirectionalLight(0xffffff, 1.5); sun.castShadow = true; sun.shadow.mapSize.set(narrow() ? 1024 : 2048, narrow() ? 1024 : 2048);
 Object.assign(sun.shadow.camera, { left: -40, right: 40, top: 28, bottom: -28, near: 1, far: 95 }); sun.shadow.bias = -.0006; scene.add(sun, sun.target);
@@ -1696,9 +1652,9 @@ function polyHitsCell(pts, i, j) {
   }
   return true;
 }
-// 정적 묶기: 층을 지은 뒤 움직이지 않는 메시(가구 몸통·먹선 윤곽·판)를 재질·그림자·구역(8칸)별로 한 메시로 합친다.
+// 정적 묶기: 층을 지은 뒤 움직이지 않는 메시(가구 몸통·먹선 윤곽·판)를 재질·그림자·구역별로 한 메시로 합친다.
 // 모양·색은 그대로이고 그리기 호출만 수천 → 수백으로 준다. 따로 움직이거나 켜고 끄는 묶음(벽·표지판·천장·조명)은 그 안에서만 합친다
-const BATCH_CELL = 4;
+const BATCH_CELL = 16;
 function batchStatic(root, skip) {
   root.updateMatrixWorld(true);
   const inv = new THREE.Matrix4().copy(root.matrixWorld).invert(), buckets = new Map(), c = new THREE.Vector3();
@@ -2809,7 +2765,7 @@ function render(dt, t) {
   holdBrush(me, me.brush, ezPen.c);
   setPos(dog.doll, me.f, dog.x, dog.y); dog.doll.update(dt, t, dog.moving, dog.h);
   for (const n of NPCS) if (n.doll.root.visible) { setPos(n.doll, n.f, n.x, n.y); applyLie(n.doll, n.lie); n.doll.setSeated(n.seat); n.doll.update(dt, t, n.moving, n.lie ? 0 : n.seat ? n.seat.yaw : n.talk ? Math.atan2(me.x - n.x, me.y - n.y) : n.h, n.seed, performance.now() - n.sayAt < 2500, tickAct(n, dt));  applyWobble(n); }
-  environment.frame(dt); tickFx(dt); tickMeteors(dt, environment.nightVisibility()); tickFireworks(dt);
+  environment.frame(dt); updateTraffic(dt); tickFx(dt); tickMeteors(dt, environment.nightVisibility()); tickFireworks(dt);
   for (const s of spinners) s.rotation.y += dt * .9;
   tickFridges(dt);
   syncPeers(dt, t);
@@ -2842,6 +2798,7 @@ fontsReady.then(() => {
   ready = true;
   // 화면 점검용 손잡이: 주소 끝에 ?debug를 붙였을 때만
   if (new URLSearchParams(location.search).has("debug")) (window as any).__ez = ezState; (window as any).__t = { peers, gl: renderer, Q, me, NPCS, cam, goFloor, setView, setMyAv, useSkill, jump, lieDown, sitDown, nearSeat, sendPresence, AVATAR_PRESETS, get floor() { return floor; } };
+  if (new URLSearchParams(location.search).has("debug")) Object.assign((window as any).__t, { city, camera });
 });
 
 return { frame(dt: number) { if (!ready) return; const t = performance.now() / 1000; step(Math.min(.05, dt), t); render(Math.min(.05, dt), t); } };
