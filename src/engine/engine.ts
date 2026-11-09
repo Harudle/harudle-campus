@@ -10,13 +10,19 @@ import { createEnvironment } from "./environment";
 import { openWorldWindow } from "../worldFloor";
 import { loadShowcase, type ShowItem } from "../worldShowcase";
 import { drawFrame as drawEaselFrame, drawPaper as drawEaselPaper } from "../../world/src/scene/gallery/easelDrawing";
+import { createCityscape } from "./cityscape";
+import { mountMediaControls } from "../media/controller";
+import { mountStartrack } from "../startrack/controller";
+import { canControlStartrack, startrackScreenSize } from "../startrack/shared.mjs";
+import { screenProjection } from "../startrack/screen";
+import type { MediaJoin } from "../media/types";
 import recruitPosterUrl from "../assets/recruit-poster-2026.png";
 import comicWinterUrl from "../assets/booth/comic-winter.jpg";
 import comicCastellaUrl from "../assets/booth/comic-castella.jpg";
 import comicDanceUrl from "../assets/booth/comic-dance.jpg";
 import comicPassUrl from "../assets/booth/comic-pass.jpg";
 import boothBannerUrl from "../assets/booth/banner.jpg";
-import { W, H, S, FH, WALL, DOLL, CEIL, VIEW, inside, INK, BRAND, NAVY, WEAK, HAND, narrow, clamp, lerp, rng, hash, wx, wz, tX, tY, floorY, FLOOR_INFO, makeFloor, FLOORS, WALK_THROUGH, ELEV_SPAWN, solid, inRect, STEP, ARC_STEP, bleacherLevel, flightSteps, DECK_H, heightAt, topAt, canStand, R_ME, bagSpot, applyLie, fits, nearestFree, furnCells, TOPS, FN, NW, NH, navNext, sweep, buildNav } from "./world";
+import { W, H, S, FH, WALL, DOLL, CEIL, VIEW, inside, INK, BRAND, NAVY, WEAK, HAND, narrow, clamp, lerp, rng, hash, wx, wz, tX, tY, floorY, FLOOR_INFO, makeFloor, FLOORS, WALK_THROUGH, ELEV_SPAWN, solid, inRect, roomKeyAt, STEP, ARC_STEP, bleacherLevel, flightSteps, DECK_H, heightAt, topAt, canStand, R_ME, bagSpot, applyLie, fits, nearestFree, furnCells, TOPS, FN, NW, NH, navNext, sweep, buildNav } from "./world";
 
 // 아티팩트 런타임(window.claude)과 가벼운 DOM 도우미
 declare global { interface Window { claude?: any } }
@@ -349,11 +355,25 @@ function buildFloor(fl) {
     const cs = new THREE.Shape(); cs.moveTo(wx(0), wz(0)); cs.lineTo(wx(W), wz(0)); cs.lineTo(wx(W), wz(H)); cs.lineTo(wx(0), wz(H)); cs.closePath();
     const up = FLOORS[fl.f + 1]?.furn || [];   // 천장 구멍은 위층 바닥이 뚫린 자리
     for (const v of up.filter((o) => o.kind === "void")) { const h = new THREE.Path(); h.moveTo(wx(v.x), wz(v.y)); h.lineTo(wx(v.x + v.w), wz(v.y)); h.lineTo(wx(v.x + v.w), wz(v.y + v.h)); h.lineTo(wx(v.x), wz(v.y + v.h)); h.closePath(); cs.holes.push(h); }
+    if (fl.f === 13) { // 높은 스타트랙 화면이 천장에 가려지지 않도록 객석 위를 연다.
+      const h = new THREE.Path(); h.moveTo(wx(1), wz(10)); h.lineTo(wx(15), wz(10)); h.lineTo(wx(15), wz(39.5)); h.lineTo(wx(1), wz(39.5)); h.closePath(); cs.holes.push(h);
+    }
     const cg = new THREE.ShapeGeometry(cs); cg.rotateX(Math.PI / 2);
     const ceil = new THREE.Group(); ceil.position.y = CEIL[fl.f]; ceil.visible = false; G.add(ceil); fl.ceil = ceil;
     ceil.add(new THREE.Mesh(cg, new THREE.MeshToonMaterial({ color: 0xF1F0F5, gradientMap: gradient, map: grain, side: THREE.DoubleSide })));
+    if (fl.f === 13) {
+      const screen = fl.furn.find((o) => o.kind === "screenwall" && o.ratio169);
+      if (screen) {
+        const { height } = startrackScreenSize(screen.h * S - .2, CEIL[13] - .3, screen.wide || 1);
+        const rise = Math.max(0, height + .45 - CEIL[13]);
+        const roof = new THREE.Mesh(new THREE.PlaneGeometry(14 * S, 29.5 * S), new THREE.MeshToonMaterial({ color: 0xF1F0F5, gradientMap: gradient, map: grain, side: THREE.DoubleSide }));
+        roof.rotation.x = Math.PI / 2; roof.position.set(wx(8), rise, wz(24.75)); ceil.add(roof);
+        for (const x of [1, 15]) box(ceil, .06, rise, 29.5 * S, 0xF1F0F5, wx(x), 0, wz(24.75), { line: 0, cast: false });
+        for (const y of [10, 39.5]) box(ceil, 14 * S, rise, .06, 0xF1F0F5, wx(8), 0, wz(y), { line: 0, cast: false });
+      }
+    }
     const lamp = new THREE.MeshBasicMaterial({ color: 0xFFFDF2, side: THREE.DoubleSide }), lg = new THREE.PlaneGeometry(.9, .3); lg.rotateX(Math.PI / 2);
-    for (let y = 4; y < H - 2; y += 5) for (let x = 4; x < W - 2; x += 6) { if (up.some((o) => o.kind === "void" && inRect(o, x, y))) continue; const m = new THREE.Mesh(lg, lamp); m.position.set(wx(x), -.02, wz(y)); ceil.add(m); }
+    for (let y = 4; y < H - 2; y += 5) for (let x = 4; x < W - 2; x += 6) { if ((fl.f === 13 && x >= 1 && x <= 15 && y >= 10 && y <= 39.5) || up.some((o) => o.kind === "void" && inRect(o, x, y))) continue; const m = new THREE.Mesh(lg, lamp); m.position.set(wx(x), -.02, wz(y)); ceil.add(m); }
   }
   const LG = new THREE.Group(); LG.visible = false; G.add(LG); fl.lamps = LG;   // 천장에 매단 조명: 들어가서 볼 때만
   SEAT_SINK = fl.seats = [];
@@ -393,20 +413,8 @@ const monitor = (G, x, y, z, rot = 0, w = .42) => {
 };
 const screenTex = canvasTex(128, 72, (g) => { g.fillStyle = "#1C2B55"; g.fillRect(0, 0, 128, 72); const r = rng(9); for (let i = 0; i < 7; i++) { g.fillStyle = ["#FFD43B", "#7FCFAE", "#F7A6A0", "#7DB3F0", "#ffffff"][i % 5]; g.fillRect(10 + (i % 2) * 8, 10 + i * 8, 30 + r() * 70, 3); } });
 const slideTex = canvasTex(512, 288, (g) => { g.fillStyle = "#FFFFFF"; g.fillRect(0, 0, 512, 288); g.fillStyle = "#0E1E46"; g.fillRect(0, 0, 512, 58); g.fillStyle = "#FFD43B"; g.font = `700 34px ${HAND}`; g.textBaseline = "middle"; g.fillText("우아한테크코스", 22, 30); g.fillStyle = "#0E1E46"; g.font = `700 30px ${HAND}`; for (const [i, t] of ["오늘의 미션: 페어로 함께 풀기", "· 테스트 먼저, 작게 커밋", "· 질문은 언제든 환영"].entries()) g.fillText(t, 28, 112 + i * 56); });
-const moonTex = canvasTex(512, 512, (g) => {
-  const ink = "#16182E", yel = "#FFE94A"; g.lineCap = "round"; g.lineJoin = "round";
-  g.fillStyle = yel; g.beginPath(); g.arc(300, 230, 190, 0, 7); g.fill();
-  g.strokeStyle = yel; g.lineWidth = 10; for (const s of [0, 1]) { g.beginPath(); g.moveTo(120 + s * 60, 520); g.lineTo(200 + s * 60, 330); g.stroke(); }   // 달까지 걸친 사다리
-  for (let i = 0; i < 6; i++) { const t = i / 6; g.beginPath(); g.moveTo(120 + t * 80, 520 - t * 190); g.lineTo(180 + t * 80, 520 - t * 190); g.stroke(); }
-  g.fillStyle = ink; g.font = `900 150px "Gowun Dodum", sans-serif`; g.textAlign = "center"; g.textBaseline = "middle"; g.save(); g.translate(320, 175); g.rotate(-.12); g.fillText("도전", 0, 0); g.restore();
-  g.strokeStyle = ink; g.lineWidth = 7; g.fillStyle = "#FFFFFF";   // 행성 친구(얼굴 + 고리)
-  g.beginPath(); g.arc(230, 330, 62, 0, 7); g.fill(); g.stroke();
-  g.beginPath(); g.ellipse(230, 345, 105, 26, -.25, .2, Math.PI - .2); g.stroke();
-  g.fillStyle = ink; g.beginPath(); g.arc(212, 318, 5, 0, 7); g.arc(242, 318, 5, 0, 7); g.fill();
-  g.beginPath(); g.moveTo(275, 300); g.lineTo(330, 245); g.stroke();   // 붓 든 팔
-  g.fillStyle = "#FFFFFF"; g.save(); g.translate(338, 236); g.rotate(-.8); g.fillRect(-10, -26, 20, 30); g.strokeRect(-10, -26, 20, 30); g.fillStyle = ink; g.fillRect(-10, -42, 20, 16); g.restore();
-  for (const [x, y, r] of [[70, 70, 22], [470, 470, 18], [60, 300, 14]]) { g.fillStyle = yel; g.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); } g.fill(); }
-});
+// 달의 밝은 부분은 판교의 날짜와 위치에 따라 environment.ts에서 그린다.
+const moonTex = canvasTex(96, 96, () => {});
 // 2026 신입생 모집 포스터: 한 장의 그림을 여러 벽에 붙인다
 const recruitPosterTex = new THREE.TextureLoader().load(recruitPosterUrl); recruitPosterTex.colorSpace = THREE.SRGBColorSpace; recruitPosterTex.anisotropy = 4;
 const tekoTexOf = (cw) => canvasTex(cw, 288, (g) => { g.fillStyle = "#0E1E46"; g.fillRect(0, 0, cw, 288); g.fillStyle = "#FFD43B"; g.font = `700 80px ${HAND}`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("테코톡", cw / 2, 118); g.fillStyle = "#fff"; g.font = `700 30px ${HAND}`; g.fillText("오늘 발표: 나의 첫 리팩터링", cw / 2, 212); });
@@ -424,8 +432,8 @@ const bush = (G, px, pz, base, tall, rr, i) => {
 };
 const BALLS = [0xF15B5B, 0xFFD43B, 0x7DB3F0, 0x7FCFAE, 0xF7A6A0, 0xFFFFFF];
 // 화면: 놓을 자리 길이(len) 안에서 16:9 직사각형으로, 높이는 maxH까지. 바닥에서 bottom 높이에 걸고 다리로 받친다. rot 방향(+z 기준)을 본다
-function screen169(G, len, maxH, bottom, tex, cx, cz, rot, wide = 1) {   // wide: 높이는 그대로 두고 폭만 늘린다(천장에 막힐 때)
-  const h = Math.min(len * 9 / 16, maxH), w = Math.min(len, h * 16 / 9 * wide), g = new THREE.Group(); g.position.set(cx, 0, cz); g.rotation.y = rot; G.add(g);
+function screen169(G, len, maxH, bottom, tex, cx, cz, rot, wide = 1, ratio169 = false) {
+  const oldH = Math.min(len * 9 / 16, maxH), w = Math.min(len, oldH * 16 / 9 * wide), h = ratio169 ? startrackScreenSize(len, maxH, wide).height : oldH, g = new THREE.Group(); g.position.set(cx, 0, cz); g.rotation.y = rot; G.add(g);
   box(g, w + .08, h + .08, .06, C.dark, 0, bottom - .04, -.03, { line: .01 }); board(g, w, h, tex, 0, bottom + h / 2, .005);
   if (bottom > .1) box(g, .12, bottom - .04, .08, C.dark, 0, 0, -.05, { line: 0 });
 }
@@ -660,7 +668,7 @@ function buildFurn(G, o, fl) {
       else { const f = o.face === "w" ? -1 : 1; screen169(G, d * .9, maxH, bottom, tex, f > 0 ? wx(o.x) + .15 : wx(o.x + o.w) - .15, z, f * Math.PI / 2); }
       break; }
     case "screenwall": // 스타트랙 발표 화면: 16:9 큰 화면
-      if (o.face === "w") screen169(G, d - .2, o.big ? CEIL[fl.f] - .3 : 2.2, o.big ? .15 : .45, o.wide ? tekoWideTex : tekoTex, wx(o.x + o.w) - .1, z, -Math.PI / 2, o.wide || 1);   // big: 천장 바로 아래까지
+      if (o.face === "w") screen169(G, d - .2, o.big ? CEIL[fl.f] - .3 : 2.2, o.big ? .15 : .45, o.ratio169 ? tekoTex : o.wide ? tekoWideTex : tekoTex, wx(o.x + o.w) - .1, z, -Math.PI / 2, o.wide || 1, !!o.ratio169);
       else screen169(G, w - .2, 2.2, .45, tekoTex, x, wz(o.y) + .1, 0);
       break;
     case "arcbleacher": { // 화면을 중심으로 반원(기본 서쪽, face: "s"면 남쪽): 낮은 무대 + 바깥으로 갈수록 높아지는 객석
@@ -1830,62 +1838,29 @@ const scene = R3F.scene; scene.background = new THREE.Color(0x0E1E46);
 // 별과 달은 밤에만 보이고, 흐린 날에는 구름 뒤로 숨는다.
 const skyStars: THREE.Points[] = [];
 let moon: THREE.Sprite;
-{ const r = rng(77); for (const [n, color, size] of [[520, 0xFFE27A, .5], [380, 0xFFFFFF, .32]]) { const pos = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) { const a = r() * Math.PI * 2, e = .03 + r() * 1.25, d = 70 + r() * 40; pos.set([Math.cos(a) * Math.cos(e) * d, Math.sin(e) * d, Math.sin(a) * Math.cos(e) * d], i * 3); }
+{ const r = rng(77); for (const [n, color, size] of [[150, 0xF8EBC9, .5], [550, 0xFFFFFF, .32]]) { const pos = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { const a = r() * Math.PI * 2, e = .03 + r() * 1.25, d = 430 + r() * 20; pos.set([Math.cos(a) * Math.cos(e) * d, Math.sin(e) * d, Math.sin(a) * Math.cos(e) * d], i * 3); }
     const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
     const stars = new THREE.Points(g, new THREE.PointsMaterial({ color, size, transparent: true, sizeAttenuation: true, depthWrite: false })); skyStars.push(stars); scene.add(stars); }
-  // 달 이스터에그: 2026 모집 포스터처럼 노란 달에 행성 친구가 사다리를 타고 올라 붓으로 "도전"을 써 놓았다(늘 카메라를 본다)
-  moon = new THREE.Sprite(new THREE.SpriteMaterial({ map: moonTex, transparent: true, depthWrite: false })); moon.scale.set(26, 26, 1); moon.position.set(-55, 30, -70); scene.add(moon); }
-// 판교 건물과 거리의 색도 시간에 맞춰 바뀐다.
+  moon = new THREE.Sprite(new THREE.SpriteMaterial({ map: moonTex, transparent: true, depthWrite: false })); moon.scale.set(4, 4, 1); scene.add(moon); }
+// 위성지도와 거리뷰를 참고한 단지 주변 풍경
 const GROUND = -34;
-let campusTower = null;
-let paintCity = (_daylight: number) => {};
-{ const r = rng(2026);
-  const cells: { x: number; y: number; light: number }[] = [];
-  for (let y = 4; y < 124; y += 8) for (let x = 4; x < 60; x += 8) cells.push({ x, y, light: r() });
-  const cityCanvas = document.createElement("canvas"); cityCanvas.width = 64; cityCanvas.height = 128;
-  const g = cityCanvas.getContext("2d");
-  const winTex = new THREE.CanvasTexture(cityCanvas); winTex.colorSpace = THREE.SRGBColorSpace;
-  const cityTextures: THREE.Texture[] = [];
-  const roof = new THREE.MeshBasicMaterial({ color: 0x0C1838 });
-  const ground = new THREE.Mesh(new THREE.CircleGeometry(230, 48), new THREE.MeshBasicMaterial({ color: 0x08122C })); ground.rotation.x = -Math.PI / 2; ground.position.y = GROUND; scene.add(ground);
-  const tower = (x, z, w, d, h, ry) => { const t = winTex.clone(); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(Math.max(1, Math.round(w / 3)), Math.max(1, Math.round(h / 6))); t.needsUpdate = true; cityTextures.push(t); const side = new THREE.MeshBasicMaterial({ map: t });
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), [side, side, roof, roof, side, side]); m.position.set(x, GROUND + h / 2, z); m.rotation.y = ry; scene.add(m); return m; };
-  campusTower = tower(0, 0, W * S - .4, H * S - .4, -GROUND - .2, 0);   // 우리 건물 아래층들 (보고 있는 층 바로 밑까지)
-  for (let i = 0; i < 90; i++) { const a = r() * Math.PI * 2, d = 60 + r() * 90; tower(Math.cos(a) * d, Math.sin(a) * d, 5 + r() * 10, 5 + r() * 10, 10 + r() * (d < 85 ? 30 : 48), r() * Math.PI); }
-  const n = 900, pos = new Float32Array(n * 3); for (let i = 0; i < n; i++) { const a = r() * Math.PI * 2, d = 22 + r() * 140; pos.set([Math.cos(a) * d, GROUND + .3, Math.sin(a) * d], i * 3); }
-  const streetGeometry = new THREE.BufferGeometry(); streetGeometry.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-  const streetLights = new THREE.PointsMaterial({ color: 0xFFC94D, size: .7, transparent: true, sizeAttenuation: true, depthWrite: false });
-  scene.add(new THREE.Points(streetGeometry, streetLights));
-  const mix = (night: number, day: number, amount: number) => new THREE.Color(night).lerp(new THREE.Color(day), amount);
-  paintCity = (daylight) => {
-    g.fillStyle = mix(0x14224A, 0x9BB2C1, daylight).getStyle(); g.fillRect(0, 0, 64, 128);
-    for (const cell of cells) {
-      const night = cell.light > .6 ? (cell.light > .9 ? 0xFFF4C2 : 0xFFD86B) : 0x1E2E5C;
-      g.fillStyle = mix(night, 0x7596A9, daylight).getStyle(); g.fillRect(cell.x, cell.y, 5, 5);
-    }
-    for (const texture of cityTextures) texture.needsUpdate = true;
-    roof.color.copy(mix(0x0C1838, 0x899DAB, daylight));
-    (ground.material as THREE.MeshBasicMaterial).color.copy(mix(0x08122C, 0xA7B8B7, daylight));
-    streetLights.opacity = 1 - daylight;
-  };
-  paintCity(0);
-}
+const { city, campusTower, paintCity, updateTraffic } = createCityscape(scene, GROUND);
 // 별똥별: 몇 초에 한 번, 지금 보고 있는 하늘 쪽으로 긴 꼬리를 그으며 떨어진다
 const meteorTex = canvasTex(256, 16, (g) => { const gr = g.createLinearGradient(0, 0, 256, 0); gr.addColorStop(0, "rgba(255,255,255,0)"); gr.addColorStop(.5, "rgba(255,236,170,.5)"); gr.addColorStop(.85, "rgba(255,246,210,.95)"); gr.addColorStop(1, "rgba(255,255,255,1)"); g.fillStyle = gr; g.fillRect(0, 4, 256, 8); const hg = g.createRadialGradient(248, 8, 0, 248, 8, 8); hg.addColorStop(0, "rgba(255,255,255,1)"); hg.addColorStop(1, "rgba(255,240,190,0)"); g.fillStyle = hg; g.fillRect(232, 0, 24, 16); });
-const meteors = []; let meteorT = 2.5;
+const meteors = []; let meteorT = 60;
 const _mx = new THREE.Vector3(), _my = new THREE.Vector3(), _mz = new THREE.Vector3(), _mm = new THREE.Matrix4();
 function spawnMeteor() {
   const f = new THREE.Vector3(); camera.getWorldDirection(f); f.y = 0; if (f.lengthSq() < 1e-4) f.set(0, 0, -1); f.normalize();
   const right = new THREE.Vector3(-f.z, 0, f.x), e = (inside() ? .05 : .15) + Math.random() * .22, side = (Math.random() - .5) * 1.4;
   const dir = f.clone().multiplyScalar(Math.cos(e)).addScaledVector(right, side).setY(Math.sin(e)).normalize();
-  const pos = camera.position.clone().addScaledVector(dir, 80);
+  const pos = camera.position.clone().addScaledVector(dir, 420);
   const vel = right.clone().multiplyScalar(Math.random() < .5 ? -1 : 1).add(new THREE.Vector3(0, -.55 - Math.random() * .3, 0)).normalize().multiplyScalar(38 + Math.random() * 18);
   const m = new THREE.Mesh(new THREE.PlaneGeometry(14 + Math.random() * 8, .8), new THREE.MeshBasicMaterial({ map: meteorTex, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
   m.position.copy(pos); m.renderOrder = 5; scene.add(m); meteors.push({ m, vel, age: 0, life: 1.2 + Math.random() * .8 });
 }
 function tickMeteors(dt, visibility) {
-  meteorT -= dt; if (meteorT <= 0) { meteorT = 3 + Math.random() * 6; if (visibility > .25) spawnMeteor(); }
+  meteorT -= dt; if (meteorT <= 0) { meteorT = 90 + Math.random() * 180; if (visibility > .25) spawnMeteor(); }
   for (let i = meteors.length - 1; i >= 0; i--) { const s = meteors[i]; s.age += dt; s.m.position.addScaledVector(s.vel, dt);
     const k = s.age / s.life; s.m.material.opacity = (k < .2 ? k / .2 : Math.max(0, 1 - (k - .2) / .8)) * visibility;
     _mx.copy(s.vel).normalize(); _mz.copy(camera.position).sub(s.m.position).normalize(); _my.crossVectors(_mz, _mx).normalize(); _mz.crossVectors(_mx, _my); _mm.makeBasis(_mx, _my, _mz); s.m.quaternion.setFromRotationMatrix(_mm);
@@ -1904,11 +1879,11 @@ function adaptQuality(dt) {
   if (Q.level === 2) { const m = sun.shadow.mapSize.x / 2; sun.shadow.mapSize.set(m, m); sun.shadow.map?.dispose(); sun.shadow.map = null; }
   if (Q.level === 3) { renderer.shadowMap.type = THREE.PCFShadowMap; renderer.shadowMap.needsUpdate = true; scene.traverse((o: any) => { if (o.material) for (const m of [].concat(o.material)) m.needsUpdate = true; }); }
 }
-const camera = R3F.camera; camera.fov = 38; camera.near = .1; camera.far = 360; camera.updateProjectionMatrix();
+const camera = R3F.camera; camera.fov = 38; camera.near = .1; camera.far = 500; camera.updateProjectionMatrix();
 const ambient = new THREE.HemisphereLight(0xffffff, 0xCFD6E8, 1.6); scene.add(ambient);
 const sun = new THREE.DirectionalLight(0xffffff, 1.5); sun.castShadow = true; sun.shadow.mapSize.set(narrow() ? 1024 : 2048, narrow() ? 1024 : 2048);
 Object.assign(sun.shadow.camera, { left: -40, right: 40, top: 28, bottom: -28, near: 1, far: 95 }); sun.shadow.bias = -.0006; scene.add(sun, sun.target);
-const environment = createEnvironment({ scene, ambient, sun, skyStars, moon, paintCity, ground: GROUND });
+const environment = createEnvironment({ scene, camera, ambient, sun, skyStars, moon, paintCity, ground: GROUND });
 const cam = { eye: undefined as number | undefined, close: false, ip: .3, ipT: .3, id: 3.2, idT: 3.2, look: 0, lookT: 0, yaw: -.35, pitch: .95, dist: narrow() ? 24 : 29, yawT: -.35, pitchT: .95, distT: narrow() ? 24 : 29, target: new THREE.Vector3() };
 const eyeV = new THREE.Vector3(), lookV = new THREE.Vector3(); let fpDt = 0;
 // 들어가서 볼 때: 내 뒤(또는 눈높이)에서, 벽 앞에서 멈추고 천장 아래에 머문다
@@ -1916,10 +1891,11 @@ function placeInside() {
   const base = floorY(me.f) + heightAt(floor, me.x, me.y) + me.up + me.jz + seatLift(me.seat), ceil = Math.max(floorY(me.f) + CEIL[me.f] - .12, base + 1.4);   // 계단 위에서는 머리 위로 비켜 준다
   if (VIEW.mode === "first") {
     // 1인칭은 어지럽지 않게: 기울임·흔들림 없이, 눈높이는 계단·단을 오를 때 툭툭 끊기지 않게 부드럽게 따라가고, 고개는 제자리에서 돈다
-    const eyeT = base + (me.lie ? .45 : me.seat ? .72 : .92);
+    // 누우면 눈은 빈백 가운데가 아니라 applyLie로 눕힌 머리 자리(등받이 쪽으로 .39, 위로 .86): 낮으면 빈백 몸통 속에 묻혀 화면이 까맣게 가린다
+    const eyeT = base + (me.lie ? .86 : me.seat ? .72 : .92), back = me.lie ? -.39 : 0;
     cam.eye = cam.eye === undefined || Math.abs(cam.eye - eyeT) > 2 ? eyeT : lerp(cam.eye, eyeT, Math.min(1, fpDt * 12));
     const eye = cam.eye;
-    camera.position.set(wx(me.x), eye, wz(me.y));
+    camera.position.set(wx(me.x) + (me.lie ? Math.sin(me.lie.yaw) * back : 0), eye, wz(me.y) + (me.lie ? Math.cos(me.lie.yaw) * back : 0));
     lookV.set(camera.position.x - Math.sin(cam.yaw) * Math.cos(cam.look), eye + Math.sin(cam.look), camera.position.z - Math.cos(cam.yaw) * Math.cos(cam.look));
     camera.lookAt(lookV); return;
   }
@@ -1930,7 +1906,8 @@ function placeInside() {
   for (let k = .2; k <= flat + .3; k += .08) { const ix = Math.floor(me.x + dirX * k), iy = Math.floor(me.y + dirZ * k); if (ix < 0 || iy < 0 || ix >= W || iy >= H || floor.wgrid[iy * W + ix]) { d = Math.max(.15, (k - .3) * S / c); break; } }
   cam.close = d < .95;   // 너무 가까우면 내 캐릭터를 숨겨 시야를 가리지 않게
   camera.position.set(wx(me.x) + dirX * c * d, Math.min(ceil, head + .25 + Math.sin(cam.ip) * d), wz(me.y) + dirZ * c * d);
-  eyeV.set(wx(me.x) - dirX * 1.4, head - .05, wz(me.y) - dirZ * 1.4); camera.lookAt(eyeV);   // 내 앞쪽을 바라본다
+  eyeV.set(wx(me.x) - dirX * 1.4, head - .05, wz(me.y) - dirZ * 1.4);
+  camera.lookAt(eyeV);   // 내 앞쪽을 바라본다
 }
 function setView(mode) {
   VIEW.mode = mode;
@@ -2002,9 +1979,9 @@ function polyHitsCell(pts, i, j) {
   }
   return true;
 }
-// 정적 묶기: 층을 지은 뒤 움직이지 않는 메시(가구 몸통·먹선 윤곽·판)를 재질·그림자·구역(8칸)별로 한 메시로 합친다.
+// 정적 묶기: 층을 지은 뒤 움직이지 않는 메시(가구 몸통·먹선 윤곽·판)를 재질·그림자·구역별로 한 메시로 합친다.
 // 모양·색은 그대로이고 그리기 호출만 수천 → 수백으로 준다. 따로 움직이거나 켜고 끄는 묶음(벽·표지판·천장·조명)은 그 안에서만 합친다
-const BATCH_CELL = 4;
+const BATCH_CELL = 16;
 function batchStatic(root, skip) {
   root.updateMatrixWorld(true);
   const inv = new THREE.Matrix4().copy(root.matrixWorld).invert(), buckets = new Map(), c = new THREE.Vector3();
@@ -2082,12 +2059,15 @@ const ezBoards: THREE.Mesh[] = [];
 // 함께 그리는 판은 여럿: "easel"(하루들 부스 네컷 이젤), "wb"(12층 코워킹 존 벽 화이트보드). 그림판이 지금 여는 판은 ezCur
 let ezCur = "easel";
 const ezBoardsState = new Map();
+/* 크루 주소: ww.uid는 이 브라우저만 아는 비밀값이라 서버에만 보낸다. 다른 크루에게 보이는 내 주소(p_…)는 서버가 접속 때 알려 준다(WS "me") */
+const secretUid = () => { let v = LS.get("ww.uid"); if (!v || v.length < 20) { const a = new Uint8Array(16); crypto.getRandomValues(a); v = [...a].map((x) => x.toString(16).padStart(2, "0")).join(""); LS.set("ww.uid", v); } return v; };
+let myPub: string | null = null;
+const selfU = () => myPub || "local";
 function ezState(b = ezCur) {
   if (ezBoardsState.has(b)) return ezBoardsState.get(b);
   const mk = () => { const c = document.createElement("canvas"); c.width = c.height = 1024; return c; };
   const base = mk(), show = mk(); show.id = "ezCanvas";
-  const uid = LS.get("ww.uid") || (() => { const v = Math.random().toString(36).slice(2, 12); LS.set("ww.uid", v); return v; })();
-  const s0 = { b, base, show, bg: base.getContext("2d"), sg: show.getContext("2d"), tex: null, strokes: [] as any[], live: new Map(), redo: [] as string[], uid, n: 0, cur: null, need: 2 } as any;
+  const s0 = { b, base, show, bg: base.getContext("2d"), sg: show.getContext("2d"), tex: null, strokes: [] as any[], live: new Map(), redo: [] as string[], n: 0, cur: null, need: 2 } as any;
   ezBoardsState.set(b, s0); return s0;
 }
 function ezTexture(b = "easel") { const S = ezState(b); if (!S.tex) { S.tex = new THREE.CanvasTexture(S.show); S.tex.colorSpace = THREE.SRGBColorSpace; S.tex.anisotropy = 8; ezRedraw(true, S); } return S.tex; }
@@ -2128,12 +2108,12 @@ function easelNet(m) {
   else if (m.k === "vis") { const st = S.strokes.find((x) => x.id === m.id); if (st) { st.h = m.h; ezRedraw(true, S); } }
 }
 // 그리기(내 획): 누르면 시작, 움직이면 점을 더하고 0.05초마다 조각으로 보낸다, 떼면 끝
-function ezBegin(x, y, c, w) { const S = ezState(); S.cur = { id: `${S.uid}-${Date.now().toString(36)}-${S.n++}`, u: S.uid, c, w, p: [x, y], h: 0 }; S.sent = 0; S.lastSend = 0; S.redo = []; ezRedraw(); }
+function ezBegin(x, y, c, w) { const S = ezState(); S.cur = { id: `${selfU()}-${Date.now().toString(36)}-${S.n++}`, u: selfU(), c, w, p: [x, y], h: 0 }; S.sent = 0; S.lastSend = 0; S.redo = []; ezRedraw(); }
 function ezMove(x, y) { const S = ezState(), st = S.cur; if (!st) return; const n = st.p.length; if (Math.hypot(st.p[n - 2] - x, st.p[n - 1] - y) < 1.5) return; st.p.push(x, y); ezRedraw(); const now = performance.now(); if (now - S.lastSend > 50) ezFlush(); }
-function ezFlush() { const S = ezState(), st = S.cur; if (!st || st.p.length <= S.sent) return; const from = Math.max(0, S.sent), chunk = st.p.slice(from, from + 400); if (chunk.length < 2) return; netSend({ t: "ez", b: S.b, k: "seg", u: S.uid, id: st.id, c: st.c, w: st.w, p: chunk }); S.sent = from + chunk.length; S.lastSend = performance.now(); if (S.sent < st.p.length) ezFlush(); }
-function ezEnd() { const S = ezState(), st = S.cur; if (!st) return; ezFlush(); netSend({ t: "ez", b: S.b, k: "end", u: S.uid, id: st.id }); S.cur = null; ezCommit(st); }
-function ezUndo() { const S = ezState(); for (let i = S.strokes.length - 1; i >= 0; i--) { const st = S.strokes[i]; if (st.u === S.uid && !st.h) { st.h = 1; S.redo.push(st.id); netSend({ t: "ez", b: S.b, k: "undo", u: S.uid }); ezRedraw(true); return; } } }
-function ezRedoOne() { const S = ezState(), id = S.redo.pop(), st = id && S.strokes.find((x) => x.id === id); if (st) { st.h = 0; netSend({ t: "ez", b: S.b, k: "redo", u: S.uid }); ezRedraw(true); } }
+function ezFlush() { const S = ezState(), st = S.cur; if (!st || st.p.length <= S.sent) return; const from = Math.max(0, S.sent), chunk = st.p.slice(from, from + 400); if (chunk.length < 2) return; netSend({ t: "ez", b: S.b, k: "seg", id: st.id, c: st.c, w: st.w, p: chunk }); S.sent = from + chunk.length; S.lastSend = performance.now(); if (S.sent < st.p.length) ezFlush(); }
+function ezEnd() { const S = ezState(), st = S.cur; if (!st) return; ezFlush(); netSend({ t: "ez", b: S.b, k: "end", id: st.id }); S.cur = null; ezCommit(st); }
+function ezUndo() { const S = ezState(); for (let i = S.strokes.length - 1; i >= 0; i--) { const st = S.strokes[i]; if (st.u === selfU() && !st.h) { st.h = 1; S.redo.push(st.id); netSend({ t: "ez", b: S.b, k: "undo" }); ezRedraw(true); return; } } }
+function ezRedoOne() { const S = ezState(), id = S.redo.pop(), st = id && S.strokes.find((x) => x.id === id); if (st) { st.h = 0; netSend({ t: "ez", b: S.b, k: "redo" }); ezRedraw(true); } }
 // 바로가기: harudle.com · 인스타그램. 누르거나(클릭·탭) 앞에서 F → 새 탭
 const linkBoards: THREE.Mesh[] = [];
 function openLink(url) { if (locked()) document.exitPointerLock(); window.open(url, "_blank", "noopener"); showToast("새 탭으로 열었어요", url.replace(/^https:\/\/(www\.)?/, "").replace(/\/$/, ""), 2000);
@@ -2289,8 +2269,8 @@ const mkLabel = (cls, text) => { const e = document.createElement("div"); e.clas
 let roomTags = [];
 function refreshRoomTags() {
   roomTags.forEach((t) => t.el.remove()); roomTags = [];
-  for (const r of floor.rooms) if (r.name) roomTags.push({ el: mkLabel(`room-tag${r.planet ? " planet" : ""}`, r.name), x: wx(r.x + r.w / 2), y: WALL + .35, z: wz(r.y + .5) });
-  for (const z of floor.zones) if (z.desc && !floor.rooms.some((r) => r.name && z.name.includes(r.name)) && !["엘리베이터 홀", "회의실"].includes(z.name)) roomTags.push({ el: mkLabel("room-tag", z.name), x: wx(z.x + z.w / 2), y: .9, z: wz(z.y + z.h / 2) });
+  for (const r of floor.rooms) if (r.name) roomTags.push({ el: mkLabel(`room-tag${r.planet ? " planet" : ""}`, r.name), x: wx(r.x + r.w / 2), y: WALL + .35, z: wz(r.y + .5), place: true });
+  for (const z of floor.zones) if (z.desc && !floor.rooms.some((r) => r.name && z.name.includes(r.name)) && !["엘리베이터 홀", "회의실"].includes(z.name)) roomTags.push({ el: mkLabel("room-tag", z.name), x: wx(z.x + z.w / 2), y: .9, z: wz(z.y + z.h / 2), place: true });
   for (const p of floor.portals) roomTags.push({ el: mkLabel("room-tag port", "⇅ " + p.label), x: wx(p.x + p.w / 2), y: 1.1, z: wz(p.y + p.h / 2) });
   roomTags.push({ el: mkLabel("room-tag", "엘리베이터"), x: wx(ELEV_SPAWN[0]), y: 2.0, z: wz(13.5) });
 }
@@ -2325,7 +2305,7 @@ addEventListener("keydown", (e) => {
     if (c === "Escape") closeTour(); else if (c === "ArrowLeft" || c === "KeyA") showTourStep(tourAt - 1); else if (c === "ArrowRight" || c === "KeyD" || c === "Enter" || c === "Space" || c === "KeyF") tourNext.click();
     return;
   }
-  if (!guide.hidden) { if (c === "Escape" || c === "Enter" || c === "Space" || c === "KeyF") { e.preventDefault(); closeGuide(); } return; }
+  if ($("loginAsk")?.hidden === false) { if (c === "Escape") { e.preventDefault(); closeLoginAsk(); } return; }   // 연동 안내 창: Esc로 닫기, 다른 키는 게임으로 가지 않게
   if (c === "Escape") {
     // 설정창이 떠 있으면 닫는다(막 열린 직후 같은 Esc는 무시). 여기서 바로 마우스를 고정하면 브라우저가 그 Esc로 다시 풀어 버려서
     // pointerlockchange가 설정창을 또 열었다 → 고정은 다음 키나 클릭으로 미루고, 그사이 풀림 신호는 무시한다
@@ -2394,8 +2374,7 @@ function useItem(id) {
   }
   inv.hidden = true; syncCursor();
 }
-document.getElementById("jumpBtn").onclick = jump;
-const runBtn = document.getElementById("runBtn"); runBtn.onclick = () => { me.runToggle = !me.runToggle; runBtn.setAttribute("aria-pressed", String(me.runToggle)); mRun.setAttribute("aria-pressed", String(me.runToggle)); };
+document.getElementById("dFire").onclick = () => fireFirework();   // 아래 독의 폭죽(C와 같다)
 /* ───── 모바일: 조이스틱 · 버튼 묶음 ───── */
 const mRun = document.getElementById("mRun");
 const joy = { on: false, x: 0, y: 0, id: -1, cx: 0, cy: 0 };
@@ -2406,13 +2385,13 @@ const joy = { on: false, x: 0, y: 0, id: -1, cx: 0, cy: 0 };
   pad.addEventListener("pointerdown", (e) => { e.preventDefault(); pad.setPointerCapture(e.pointerId); const r = pad.getBoundingClientRect(); joy.cx = r.left + r.width / 2; joy.cy = r.top + r.height / 2; joy.on = true; joy.id = e.pointerId; stopFollow(); me.path = null; me.goal = null; pad.classList.add("on"); move(e); });
   pad.addEventListener("pointermove", (e) => { if (e.pointerId === joy.id) move(e); });
   pad.addEventListener("pointerup", end); pad.addEventListener("pointercancel", end);
-  mRun.onclick = () => runBtn.click();
+  mRun.onclick = () => { me.runToggle = !me.runToggle; mRun.setAttribute("aria-pressed", String(me.runToggle)); };
   document.getElementById("mJump").addEventListener("pointerdown", (e) => { e.preventDefault(); jump(); });
   document.getElementById("mInv").onclick = () => toggleInv();
   document.getElementById("mFire").onclick = () => fireFirework(me.act?.name === "gun");   // 모바일: 종이 총을 들었으면 총알, 아니면 폭죽
   $all("#mPad [data-skill]").forEach((b) => (b.onclick = () => useSkill(b.dataset.skill)));
   const chatBtn = document.getElementById("mChat"), sayIn = $<HTMLInputElement>("sayInput");
-  chatBtn.onclick = () => { if (document.body.classList.toggle("chatting")) { setSide("chat"); sayIn.focus(); } else sayIn.blur(); };
+  chatBtn.onclick = () => { if (document.body.classList.toggle("chatting")) { document.body.classList.remove("peopleOpen"); sayIn.focus(); } else sayIn.blur(); };
   sayIn.addEventListener("blur", () => { if (TOUCH) setTimeout(() => document.body.classList.remove("chatting"), 150); });
 }
 addEventListener("blur", () => { keys.clear(); me.runHold = false; if (me.moving) { me.moving = false; wasMoving = false; sendPresence(true); } pointers.clear(); drag = null; canvas.classList.remove("dragging"); });   // 알트탭: 떼지 못한 클릭이 남아 다음 클릭을 막지 않게
@@ -2444,9 +2423,9 @@ const endDrag = (e) => {
 // 배그처럼: 들어가서 볼 때는 커서를 숨기고 화면에 고정한다. 마우스를 움직인 만큼(화면 끝 없이) 고개가 돌고, 가운데 조준점이 뜬다. Esc로 풀린다
 let lockFailed = false;
 const locked = () => document.pointerLockElement === canvas;
-// 경계: 창(층 고르기·크루 피드·사진·캐릭터 꾸미기·조작법)이 떠 있는 동안은 커서를 꺼내 두고, 다 닫히면 게임으로 돌아와 다시 고정한다.
+// 경계: 창(층 고르기·크루 피드·사진·캐릭터 꾸미기·설정)이 떠 있는 동안은 커서를 꺼내 두고, 다 닫히면 게임으로 돌아와 다시 고정한다.
 // 채팅창에 쓰는 동안도 커서를 꺼내 둔다
-const uiOpen = () => !easelEd.hidden || !menu.hidden || !profile.hidden || !tour.hidden || !inv.hidden || !picker.hidden || panel.classList.contains("open") || !avPanel.hidden || !guide.hidden || !lb.hidden;
+const uiOpen = () => !easelEd.hidden || $("loginAsk")?.hidden === false || !$("startrackPanel").hidden || !menu.hidden || !profile.hidden || !tour.hidden || !inv.hidden || !picker.hidden || panel.classList.contains("open") || !avPanel.hidden || !lb.hidden;
 const typing = () => document.activeElement === sayInput;   // 채팅창에 쓰는 중: 커서를 꺼내 둔다
 function syncCursor() { if (uiOpen()) { if (locked()) document.exitPointerLock(); } else lockMouse(); }
 function lockMouse() {
@@ -2555,10 +2534,12 @@ function standUp() {
   if (!me.lie) return; for (const o of floor.furn) if (o.taken === "me") o.taken = false; [me.x, me.y] = nearestFree(floor, me.x + Math.sin(me.lie.yaw) * 1.2, me.y + Math.cos(me.lie.yaw) * 1.2); me.lie = null; sendPresence(true);
 }
 const atCall = () => floor.calls.some((k) => inRect({ x: k.x - .2, y: k.y - .3, w: k.w + .4, h: k.h + .6 }, me.x, me.y));
+const nearStartrackScreen = () => !me.lie && !me.seat && me.f === 13 && me.x >= 11.2 && me.x <= 14.6 && Math.abs(me.y - 24.5) <= 5 && canControlStartrack({ f: me.f, x: me.x, y: me.y, rm: roomKeyAt(me.f, me.x, me.y) });
 function interact() {
   const stand = nearScoop(); if (stand) { openShow(stand.view ?? "scoop"); return; }
   const sh = nearShow(); if (sh) { openItem(showItem(sh)); return; }
   if (!me.lie && !me.seat && me.f === 12) { if (nearWb(2.4)) { openEasel("wb"); return; } if (me.brush && nearFurn("painteasel", 2.1)) { tryEasel(); return; } if (nearFurn("brushcup", 1.7)) { toggleBrush(); return; } if (nearFurn("painteasel", 2.1)) { tryEasel(); return; } if (nearFurn("linkkiosk", 1.7)) { openLink("https://www.harudle.com/"); return; } if (nearFurn("instaboard", 1.7)) { openLink("https://www.instagram.com/harudle.official/"); return; } }   // 하루들 부스: 붓 꽂이 · 함께 그리는 이젤   // 붓을 들었으면 이젤이 먼저
+  if (nearStartrackScreen()) { startrack.openSettings(); return; }
   { const fr = nearFridge(); if (fr) { fr.want = !fr.want; return; } }   // 냉장고 앞: 문 열기·닫기
   if (me.act?.name === "gun" && !me.lie && !me.seat && !atCall()) { fireFirework(true); return; }   // 종이 총을 들었으면 F도 발사(엘리베이터 앞만 예외)
   if (me.lie || me.seat) { standUp(); return; } const st = nearSeat(); if (st && !(nearNPC() && Math.hypot(st.x - me.x, st.y - me.y) > .55)) { sitDown(st); return; } const n = nearNPC(); if (n) { n.say = "반가워!"; n.sayAt = performance.now(); NPCS.forEach((o) => (o.talk = o === n)); openPanel(n.p); return; } const bag = nearBag(); if (bag) { lieDown(bag); return; } if (atCall()) { openPicker(); return; } }   // 폭죽은 C
@@ -2649,8 +2630,8 @@ const TOUR = [
     kb: "<kbd>V</kbd>를 누를 때마다 위에서 보기 → 들어가서 보기 → 1인칭으로 바뀌어요. 들어가서 볼 때는 마우스로 둘러보고, <kbd>Esc</kbd>로 커서를 꺼내요.", touch: "오른쪽 아래 시점 버튼으로 위에서·들어가서·1인칭을 오가요. 화면을 끌어서 둘러봐요." },
   { title: "Tab으로 가방 열기", art: `<div class="tart tart-tab"><div class="tbar"><span class="tslot"><i>1</i>${ICON.laptop}</span><span class="tslot"><i>2</i>${ICON.coffee}</span><span class="tslot vacant"></span><span class="tslot vacant"></span></div><kbd class="tkey wide">Tab</kbd></div>`,
     kb: "<kbd>Tab</kbd>을 누르면 인벤토리가 열려요. 칸을 누르거나 숫자키로 써요. 노트북은 의자에 앉아서 펼치고, 아이스 아메리카노는 언제든 한 모금!", touch: "🎒 버튼으로 인벤토리를 열고 칸을 눌러 써요. 노트북은 앉아서 펼치고, 아이스 아메리카노는 언제든 한 모금!" },
-  { title: "조작 한눈에 보기", art: `<div class="tart tkeys">${[["WASD", "걷기"], ["Shift", "달리기"], ["Space", "점프 · 두 번 더블"], ["F", "상호작용"], ["C", "폭죽"], ["Enter", "채팅"], ["Tab", "인벤토리"], ["1 2 3", "네 컷 · 인사 · 하트"], ["Z", "춤 켜고 끄기"], ["클릭", "종이 총 발사"], ["V", "시점 바꾸기"], ["\\", "사이드바 접기"], ["Esc", "설정"]].map(([k, t]) => `<span><kbd>${k}</kbd>${t}</span>`).join("")}</div>`,
-    kb: "왼쪽 아래 <b>조작법</b>이나 Esc 설정창에서 언제든 다시 볼 수 있어요. 채팅과 같이 있는 크루는 오른쪽 💬 👥 버튼으로 열어요.", touch: "왼쪽 조이스틱으로 걷고, 오른쪽 버튼으로 점프·표현·채팅을 해요. 화면을 끌면 둘러봐요." },
+  { title: "조작 한눈에 보기", art: `<div class="tart tkeys">${[["WASD", "걷기"], ["Shift", "달리기"], ["Space", "점프 · 두 번 더블"], ["F", "상호작용"], ["C", "폭죽"], ["Enter", "채팅"], ["Tab", "인벤토리"], ["1 2 3", "네 컷 · 인사 · 하트"], ["Z", "춤 켜고 끄기"], ["클릭", "종이 총 발사"], ["V", "시점 바꾸기"], ["Q E", "화면 돌리기"], ["\\", "사이드바 접기"], ["Esc", "설정"]].map(([k, t]) => `<span><kbd>${k}</kbd>${t}</span>`).join("")}</div>`,
+    kb: "왼쪽 위 ⚙️(또는 Esc) 설정창의 <b>조작법</b> 탭에서 언제든 다시 볼 수 있어요. 채팅과 같이 있는 크루는 오른쪽 💬 👥 버튼으로 열어요.", touch: "왼쪽 조이스틱으로 걷고, 오른쪽 버튼으로 점프·표현·채팅을 해요. 화면을 끌면 둘러봐요. 설정과 조작법은 왼쪽 위 ⚙️에서 봐요." },
 ];
 let tourAt = 0;
 tourDots.innerHTML = TOUR.map(() => "<i></i>").join("");
@@ -2666,11 +2647,6 @@ function closeTour() { tour.hidden = true; LS.set("ww.tour", "1"); syncCursor();
 tourNext.onclick = () => (tourAt === TOUR.length - 1 ? closeTour() : showTourStep(tourAt + 1));
 tourPrev.onclick = () => showTourStep(tourAt - 1);
 document.getElementById("tourSkip").onclick = closeTour;
-const guide = document.getElementById("guide");
-function openGuide() { guide.hidden = false; if (locked()) document.exitPointerLock(); document.getElementById("guideOk").focus(); }
-function closeGuide() { guide.hidden = true; LS.set("ww.guide", "1"); syncCursor(); }
-document.getElementById("guideOk").onclick = closeGuide; document.getElementById("guideBtn").onclick = openGuide;
-guide.addEventListener("click", (e) => { if (e.target === guide) closeGuide(); });
 // 걷기만 하고 달려 본 적이 없으면 한 번 알려 준다
 let walkFor = 0, runTipShown = false;
 const actBtn = document.getElementById("act"); actBtn.onclick = interact;
@@ -2726,23 +2702,65 @@ avPanel.addEventListener("click", (e) => {
 });
 function openAvPanel() { if (locked()) document.exitPointerLock(); avPanel.hidden = false; renderAvPanel(); avatarPreview.set({ open: true, config: { ...DEFAULT_AV, ...myAv } }); if (!inside()) { avCamBack = cam.distT; cam.distT = 6; cam.yawT = me.h; cam.pitchT = .5; } /* 얼굴이 보이게 앞쪽에서 */ document.getElementById("avDone").focus(); }
 function closeAvPanel() { const was = !avPanel.hidden; avPanel.hidden = true; avColorOpen = false; renderColorPop(); avatarPreview.set({ open: false }); if (was) syncCursor(); if (avCamBack !== null) { cam.distT = avCamBack; avCamBack = null; } }
-/* ───── Esc 설정창: 프로필 수정 · 캐릭터 외형 수정 ───── */
+/* ───── 설정창(Esc · 왼쪽 위 ⚙️): 설정 탭(프로필 수정 · 캐릭터 외형 수정) · 조작법 탭 ───── */
 const menu = document.getElementById("menu"), profile = document.getElementById("profile"), profileName = $<HTMLInputElement>("profileName");
 let menuAt = 0, renameMe: ((v: string) => void) | null = null, myNameNow = () => "";
-function openMenu() { if (locked()) document.exitPointerLock(); keys.clear(); me.runHold = false; menu.hidden = false; menuAt = performance.now(); $("menuClose").focus(); }
+function setMenuTab(t) { menu.querySelectorAll<HTMLElement>("[data-mtab]").forEach((el) => { if (el.getAttribute("role") === "tab") el.setAttribute("aria-selected", String(el.dataset.mtab === t)); else el.hidden = el.dataset.mtab !== t; }); }
+function openMenu(tab = "main") { if (locked()) document.exitPointerLock(); keys.clear(); me.runHold = false; setMenuTab(tab); menu.hidden = false; menuAt = performance.now(); $("menuClose").focus(); }
 function closeMenu() { menu.hidden = true; syncCursor(); }
-function openProfile() { menu.hidden = true; profile.hidden = false; profileName.value = myNameNow(); profileName.focus(); profileName.select(); }
+function openProfile() { if (account.user) { menu.hidden = true; syncCursor(); showToast("이름은 하루들 닉네임이에요", "하루들에서 닉네임을 바꾸고 다시 연동하면 여기에도 바뀌어요.", 3600); return; } menu.hidden = true; profile.hidden = false; profileName.value = myNameNow(); profileName.focus(); profileName.select(); }
 function closeProfile(back = true) { profile.hidden = true; if (back) openMenu(); else syncCursor(); }
+/* ───── 하루들 연동(로그인) ─────
+   서버가 연동을 켰을 때만 버튼이 보인다(/api/me의 enabled). 연동하면 이름은 하루들 닉네임으로 고정되고, 다른 크루에게도 그렇게 보인다.
+   연동이 필요한 기능은 requireLogin("이유")을 먼저 부른다: 연동돼 있으면 true, 아니면 안내 창을 띄우고 false */
+type HarudleUser = { id: string; nickname: string; profileImageUrl: string | null };
+const account: { enabled: boolean; user: HarudleUser | null } = { enabled: false, user: null };
+const loginAsk = $("loginAsk");
+function applyAccount() {
+  const btn = $("menuLogin"), line = $("menuAccount"), u = account.user;
+  btn.hidden = !account.enabled; btn.textContent = u ? "하루들 연동 끊기" : "하루들 연동하기";
+  line.hidden = !u; line.textContent = u ? `하루들 ${u.nickname}(으)로 연동됨` : "";
+  if (u) { myNameNow = () => u.nickname; myTag.textContent = u.nickname; const nb = $("nameBtn"); nb.textContent = `하루들: ${u.nickname}`; nb.title = "하루들 닉네임으로 보여요"; }
+}
+function startHarudleLogin() { location.href = "/auth/harudle/start"; }
+async function harudleLogout() {
+  try { const r = await fetch("/auth/logout", { method: "POST", credentials: "same-origin" }); if (!r.ok && r.status !== 204) throw new Error(String(r.status)); location.reload(); }
+  catch { showToast("연동을 끊지 못했어요", "잠시 뒤에 다시 시도해 주세요.", 3200); }
+}
+function requireLogin(reason: string) {
+  if (account.user) return true;
+  if (!account.enabled) { showToast("지금은 하루들 연동을 쓸 수 없어요", reason, 3200); return false; }
+  if (locked()) document.exitPointerLock();
+  $("loginAskReason").textContent = reason; loginAsk.hidden = false; $("loginAskGo").focus();
+  return false;
+}
+function closeLoginAsk() { loginAsk.hidden = true; syncCursor(); }
+$("loginAskGo").onclick = startHarudleLogin;
+$("loginAskLater").onclick = closeLoginAsk;
+loginAsk.addEventListener("click", (e) => { if (e.target === loginAsk) closeLoginAsk(); });
+$("menuLogin").onclick = () => { if (account.user) void harudleLogout(); else startHarudleLogin(); };
+async function loadAccount() {
+  const q = new URLSearchParams(location.search), result = q.get("login");
+  if (result) { q.delete("login"); history.replaceState(null, "", location.pathname + (q.toString() ? `?${q}` : "") + location.hash); }
+  if (STANDALONE) try {
+    const r = await fetch("/api/me", { credentials: "same-origin", cache: "no-store" });
+    if (r.ok) { const d = await r.json(); account.enabled = !!d.enabled; account.user = d.loggedIn && d.user ? d.user : null; }
+  } catch { }
+  applyAccount();
+  if (result === "ok" && account.user) setTimeout(() => showToast("하루들과 연동했어요", `${account.user.nickname}(으)로 들어왔어요.`, 4200), 600);
+  else if (result) setTimeout(() => showToast("하루들과 연동하지 못했어요", "다시 시도해 주세요. 하루들 앱 안에서 열었다면 브라우저에서 열어 주세요.", 5200), 600);
+}
 $("menuClose").onclick = closeMenu;
 $("menuProfile").onclick = openProfile;
 $("menuLook").onclick = () => { menu.hidden = true; openAvPanel(); };
-$("menuGuide").onclick = () => { menu.hidden = true; openGuide(); };
+menu.querySelector(".mtabs").addEventListener("click", (e) => { const b = (e.target as HTMLElement).closest<HTMLElement>("[data-mtab]"); if (b) setMenuTab(b.dataset.mtab); });
+$("setBtn").onclick = () => openMenu();
 $("profileCancel").onclick = () => closeProfile();
 $("profileForm").addEventListener("submit", (e) => { e.preventDefault(); const v = profileName.value.trim().slice(0, 16); if (v && renameMe) renameMe(v); closeProfile(false); showToast("프로필을 바꿨어요", `이제 ${myNameNow()}(으)로 보여요.`, 2200); });
 profileName.addEventListener("keydown", (e) => { if (e.code === "Escape") { e.preventDefault(); e.stopPropagation(); closeProfile(); } });
 // 채팅: Enter로 들어가고, 쓰고 Enter면 보내고 나온다(빈 채로 Enter·Esc면 그냥 나온다). 나오면 다시 마우스를 고정한다
 const sayInput = $<HTMLInputElement>("sayInput");
-function openChat() { keys.clear(); me.runHold = false; if (sideTucked) tuckSide(false); setSide("chat"); sayInput.focus(); if (locked()) document.exitPointerLock(); }   // 채팅창에 들어가면 커서를 꺼낸다(나오면 closeChat이 다시 고정)
+function openChat() { keys.clear(); me.runHold = false; sayInput.focus(); if (locked()) document.exitPointerLock(); }   // 채팅창에 들어가면 커서를 꺼낸다(나오면 closeChat이 다시 고정)
 function closeChat() { sayInput.blur(); lockMouse(); }
 document.getElementById("sayForm").addEventListener("submit", (e) => { e.preventDefault(); const v = sayInput.value.trim(); if (v) { sendChat(v); sayInput.value = ""; } closeChat(); });
 sayInput.addEventListener("keydown", (e) => { if (e.code === "Escape") { e.preventDefault(); sayInput.value = ""; holdLock = true; closeChat(); holdLock = false; menuQuietUntil = performance.now() + 800; relockOnKey = true; } else if (e.code === "Tab") { e.preventDefault(); setChatTab(CHAT_TABS[(CHAT_TABS.indexOf(chatTab) + (e.shiftKey ? 2 : 1)) % 3]); } });   // Esc: 채팅만 닫고 설정창은 안 띄운다(고정은 다음 키에서) · 입력 중 Tab: 근처 → 전체 → 개인
@@ -2750,7 +2768,7 @@ let curZone = null, toastTimer = 0; const toast = document.getElementById("zoneT
 function showToast(h, p, ms = 3800) { toast.querySelector("h2").textContent = h; toast.querySelector("p").textContent = p; toast.style.opacity = "1"; clearTimeout(toastTimer); toastTimer = window.setTimeout(() => (toast.style.opacity = "0"), ms); }
 function checkZone() {
   let z = null; for (const zz of floor.zones) if (inRect(zz, me.x, me.y) && zz.desc) { if (!z || zz.w * zz.h < z.w * z.h) z = zz; }
-  if (z !== curZone) { curZone = z; if (z) showToast(z.name, z.desc); }
+  if (z !== curZone) { curZone = z; if (z) showToast(z.name, "", 2400); }   // 들어가면 공간 이름만
 }
 /* 피드 묶음: 함께 올린 feed.json → 없으면 이 브라우저에 불러 둔 파일(IndexedDB) */
 const idb = {
@@ -2775,6 +2793,17 @@ async function loadFeed() {
 
 /* ════════════════ 12. 같이 있는 크루 (room presence) ════════════════ */
 let room = null, user = null, peerList = [], names = {}, lastSent = 0;
+let requestMediaJoin: (area: string) => Promise<MediaJoin> = async () => { throw new Error("not_ready"); };
+let requestMediaRenew: () => Promise<number> = async () => { throw new Error("not_ready"); };
+let requestCloudflareMedia: (operation: string, data?: Record<string, unknown>) => Promise<any> = async () => { throw new Error("not_ready"); };
+let requestMeeting: (operation: string, data?: Record<string, unknown>) => Promise<any> = async () => { throw new Error("not_ready"); };
+let acknowledgeMediaSwitch: (revision: number) => void = () => {};
+let notifyMediaLeft: () => void = () => {};
+let notifyDailyReady: () => void = () => {};
+const media = mountMediaControls({ requestJoin: (area) => requestMediaJoin(area), requestRenew: () => requestMediaRenew(), requestCloudflare: (operation, data) => requestCloudflareMedia(operation, data), requestMeeting: (operation, data) => requestMeeting(operation, data), notifyDailyReady: () => notifyDailyReady(), notifyLeft: () => notifyMediaLeft(), acknowledgeSwitch: (revision) => acknowledgeMediaSwitch(revision), meetingChanged: () => renderChat() });
+media.setAvailable(STANDALONE);
+const startrack = mountStartrack((message) => { if (!netUp) return false; sendPresence(true); netSend(message); return true; }, () => screenProjection(camera));
+function updateMediaWorld() { const x = Math.round(me.x * 100) / 100, y = Math.round(me.y * 100) / 100; const position = { f: me.f, x, y, rm: roomKeyAt(me.f, x, y) }; media.updateWorld(position, peerList); startrack.updateWorld(position); }
 /* ───── 로컬 테스트용 가짜 크루(목록·따라가기 확인용) ─────
    vite 개발 서버(npm run dev)에서는 저절로, localhost에서 빌드본을 볼 땐 ?mock 을 붙이면 나온다. ?nomock 이면 끈다. 배포 서버에서는 절대 안 나온다 */
 const MOCK = !new URLSearchParams(location.search).has("nomock") && (import.meta.env.DEV || (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && new URLSearchParams(location.search).has("mock")));
@@ -2805,10 +2834,16 @@ document.addEventListener("visibilitychange", () => { if (document.hidden && me.
 function sendPresence(force) {
   if (!room) return; const now = performance.now(); if (!force && now - lastSent < 90) return; lastSent = now;
   room.presence({ f: me.f, x: Math.round(me.x * 100) / 100, y: Math.round(me.y * 100) / 100, u: Math.round(me.up * 100) / 100, h: Math.round(me.h * 100) / 100, lp: me.act?.name === "laptop" ? 1 : 0, rd: me.act?.name === "read" ? 1 : 0, gn: me.act?.name === "gun" ? 1 : 0, br: me.brush ? 1 : 0, bc: ezPen.c, fk: me.fk, hc: me.hc, hd: Math.round(me.hd * 100) / 100, fc: me.fc, fh: Math.round(me.fh * 100) / 100, dn: me.act?.name === "dance" ? me.act.style + 1 : 0, m: me.moving ? 1 : 0, r: running() ? 1 : 0, l: me.lie ? 1 : 0, st: me.seat ? 1 : 0, ly: me.lie ? Math.round(me.lie.yaw * 100) / 100 : 0, jc: me.jc, ac: me.ac, an: me.an, as: me.as, look: 0, av: avEncode(myAv), rm: roomKey() }).catch(() => { });
+  updateMediaWorld();
 }
 // EC2에서는 직접 만든 WebSocket 서버가 room 역할을 한다
 function wsRoom() {
   let ws = null, handler = null, last = null, retry = 800;
+  let mediaSeq = 0;
+  const pendingMedia = new Map<string, { resolve: (join: MediaJoin) => void; reject: (error: Error) => void; timer: number }>();
+  const pendingRenew = new Map<string, { resolve: (expiresAt: number) => void; reject: (error: Error) => void; timer: number }>();
+  const pendingCloudflare = new Map<string, { resolve: (result: any) => void; reject: (error: Error) => void; timer: number }>();
+  const pendingMeetings = new Map<string, { resolve: (result: any) => void; reject: (error: Error) => void; timer: number }>();
   const nameKey = "ww.name";
   let myName = LS.get(nameKey) || `크루${Math.floor(Math.random() * 900 + 100)}`; LS.set(nameKey, myName);
   const nameBtn = document.getElementById("nameBtn"), nameForm = document.getElementById("nameForm"), nameInput = $<HTMLInputElement>("nameInput");
@@ -2819,19 +2854,61 @@ function wsRoom() {
   const saveName = () => { const v = nameInput.value.trim().slice(0, 16); if (v) { myName = v; LS.set(nameKey, v); send({ t: "name", name: v }); } nameForm.hidden = true; nameBtn.hidden = false; nameBtn.textContent = `이름: ${myName}`; myTag.textContent = myName; };
   nameForm.addEventListener("submit", (e) => { e.preventDefault(); saveName(); }); nameInput.addEventListener("blur", saveName);
   const send = (m) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m)); };
+  const probeStartrackClock = () => send({ t: "startrack:clock", sentAt: performance.now() });
+  acknowledgeMediaSwitch = (revision) => send({ t: "media:switch-ack", revision });
+  notifyMediaLeft = () => send({ t: "media:left" });
+  notifyDailyReady = () => send({ t: "media:daily-ready" });
+  requestMediaJoin = (area) => new Promise((resolve, reject) => {
+    if (!ws || ws.readyState !== 1) { reject(new Error("not_ready")); return; }
+    const id = `m${++mediaSeq}`;
+    const timer = window.setTimeout(() => { pendingMedia.delete(id); reject(new Error("timeout")); }, 30000);
+    pendingMedia.set(id, { resolve, reject, timer });
+    send({ t: "media:join", id, area });
+  });
+  requestMediaRenew = () => new Promise((resolve, reject) => {
+    if (!ws || ws.readyState !== 1) { reject(new Error("not_ready")); return; }
+    const id = `m${++mediaSeq}`;
+    const timer = window.setTimeout(() => { pendingRenew.delete(id); reject(new Error("timeout")); }, 10000);
+    pendingRenew.set(id, { resolve, reject, timer });
+    send({ t: "media:renew", id });
+  });
+  requestCloudflareMedia = (operation, data) => new Promise((resolve, reject) => {
+    if (!ws || ws.readyState !== 1) { reject(new Error("not_ready")); return; }
+    const id = `c${++mediaSeq}`;
+    const timer = window.setTimeout(() => { pendingCloudflare.delete(id); reject(new Error("timeout")); }, 30000);
+    pendingCloudflare.set(id, { resolve, reject, timer });
+    send({ t: "media:cf", id, op: operation, data: data || {} });
+  });
+  requestMeeting = (operation, data) => new Promise((resolve, reject) => {
+    if (!ws || ws.readyState !== 1) { reject(new Error("not_ready")); return; }
+    // 회의 요청보다 현재 위치를 먼저 보내 서버와 화면의 회의실을 맞춘다.
+    sendPresence(true);
+    const id = `r${++mediaSeq}`;
+    const timer = window.setTimeout(() => { pendingMeetings.delete(id); reject(new Error("timeout")); }, 10000);
+    pendingMeetings.set(id, { resolve, reject, timer });
+    send({ t: "media:meeting", id, op: operation, data: data || {} });
+  });
   netSend = send;   // 이젤 획도 같은 연결로
   let myId = null, firstV = null;
   // 서버가 새 버전으로 바뀌면 페이지는 그대로 두고, 새로고침을 권하는 버튼만 띄운다
   const showUpdate = () => { if (document.getElementById("updateChip")) return; const b = document.createElement("button"); b.id = "updateChip"; b.type = "button"; b.textContent = "새 버전이 나왔어요 · 새로고침"; b.onclick = () => location.reload(); document.body.append(b); };
   const connect = () => {
     ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
-    ws.onopen = () => { netUp = true; retry = 800; send({ t: "id", u: ezState().uid }); send({ t: "name", name: myName }); if (last) send({ t: "p", p: last }); };
+    ws.onopen = () => { netUp = true; retry = 800; send({ t: "id", u: secretUid() }); send({ t: "name", name: myName }); if (last) send({ t: "p", p: last }); media.setNetwork(true); startrack.setNetwork(true); probeStartrackClock(); setTimeout(probeStartrackClock, 1500); setTimeout(probeStartrackClock, 5000); };
     ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch { return; }
-      if (m.t === "hello") { myId = m.id; if (m.v) { if (!firstV) firstV = m.v; else if (m.v !== firstV) showUpdate(); } }
+      if (m.t === "hello") { myId = m.id; media.setMeetingEnabled(!!m.meetingTest); if (m.v) { if (!firstV) firstV = m.v; else if (m.v !== firstV) showUpdate(); } }
+      if (m.t === "media:join") { const pending = pendingMedia.get(m.id); if (pending) { clearTimeout(pending.timer); pendingMedia.delete(m.id); if (m.join) pending.resolve(m.join); else pending.reject(new Error(m.error || "unavailable")); } }
+      if (m.t === "media:renew") { const pending = pendingRenew.get(m.id); if (pending) { clearTimeout(pending.timer); pendingRenew.delete(m.id); if (Number.isSafeInteger(m.expiresAt)) pending.resolve(m.expiresAt); else pending.reject(new Error(m.error || "unavailable")); } }
+      if (m.t === "media:cf") { const pending = pendingCloudflare.get(m.id); if (pending) { clearTimeout(pending.timer); pendingCloudflare.delete(m.id); if (!m.error) pending.resolve(m.result); else pending.reject(new Error(m.error)); } }
+      if (m.t === "media:meeting") { const pending = pendingMeetings.get(m.id); if (pending) { clearTimeout(pending.timer); pendingMeetings.delete(m.id); if (!m.error) pending.resolve(m.result); else pending.reject(new Error(m.error)); } }
+      if (m.t === "media:switch" && Number.isSafeInteger(m.revision)) media.switchProvider(m.revision);
+      if (m.t === "me" && typeof m.u === "string") { myPub = m.u; renderChat(); }   // 서버가 정한 내 주소(게스트 p_… · 하루들 연동 h_…)
+      if (m.t === "startrack") startrack.receive(m);
+      if (m.t === "startrack:clock") startrack.syncClock(m.sentAt, m.serverTime);
       if (m.t === "ez") easelNet(m);
       if (m.t === "chat") chatNet(m);
       if (m.t === "bye") retry = 150; /* 서버가 새 버전으로 바뀌는 중: 곧바로 다시 붙는다 */ if (m.t === "peers" && handler) handler({ peers: m.peers.map((p) => ({ ...p, kind: "viewer", sameTab: p.peer === myId })) }); };
-    ws.onclose = () => { netUp = false; setTimeout(connect, retry); retry = Math.min(10000, retry * 1.6); };
+    ws.onclose = () => { netUp = false; media.setNetwork(false); startrack.setNetwork(false); for (const pending of [...pendingMedia.values(), ...pendingRenew.values(), ...pendingCloudflare.values(), ...pendingMeetings.values()]) { clearTimeout(pending.timer); pending.reject(new Error("not_ready")); } pendingMedia.clear(); pendingRenew.clear(); pendingCloudflare.clear(); pendingMeetings.clear(); setTimeout(connect, retry); retry = Math.min(10000, retry * 1.6); };
   };
   connect();
   return { presence: async (p) => { last = p; send({ t: "p", p }); }, onPeers: (fn) => { handler = fn; } };
@@ -2842,6 +2919,7 @@ async function joinRoom() {
       room = wsRoom();
       room.onPeers((ch) => {
         peerList = [...ch.peers.filter((p) => !p.sameTab), ...mockPeers];
+        updateMediaWorld();
         for (const [k, v] of peers) if (!peerList.some((p) => p.peer === k)) { endAct(v); holdBrush(v, false); dropDoll(v.doll); v.tag.remove(); v.bub.remove(); v.zzz.remove(); peers.delete(k); }
         online.textContent = peerList.length ? `같이 있는 크루 ${peerList.length + 1}명` : "혼자 둘러보는 중";
       });
@@ -2920,47 +2998,34 @@ try { chatLogs.near = JSON.parse(LS.get("ww.chatNear") || "[]"); } catch { }
 const uidOf = (peer) => peerList.find((p) => p.peer === peer)?.u || null;
 // 지금 있는 방: 회의실·강의실 같은 닫힌 대화 공간이면 그 이름(층 포함), 아니면 ""
 function roomKey() {
-  let best = null; for (const z of floor.zones || []) if (/강의실|회의실|페어룸|상담실/.test(z.name) && inRect(z, me.x, me.y) && (!best || z.w * z.h < best.w * best.h)) best = z;
-  return best ? `${me.f}:${best.name}` : "";
+  return roomKeyAt(me.f, me.x, me.y);
 }
 function chatNet(m) {
-  const mine = m.from?.u === ezState().uid;
+  const mine = m.from?.u === selfU();
   if (m.k === "history") { chatLogs.all = m.all || []; chatLogs.dm = (m.dm || []).sort((a, b) => a.at - b.at); renderChat(); return; }
-  if (m.k === "sys") { chatLogs[chatTab].push({ k: "sys", text: m.text, at: Date.now() }); renderChat(); return; }
+  if (m.k === "sys") { chatLogs[chatTab].push({ k: "sys", text: m.text, at: Date.now(), ...(chatTab === "near" && media.meetingScope() ? { scope: media.meetingScope() } : {}) }); renderChat(); return; }
   const list = chatLogs[m.k]; if (!list) return; if (list.some((x) => x.id === m.id)) return;
   list.push(m); if (list.length > (m.k === "dm" ? 400 : 200)) list.splice(0, list.length - (m.k === "dm" ? 400 : 200));
   if (m.k === "near") LS.set("ww.chatNear", JSON.stringify(chatLogs.near.slice(-100)));
   if (!mine && m.k !== "dm") { const v = peers.get(m.from.peer); if (v) { v.chatSay = m.text.slice(0, 40); v.chatAt = Date.now(); } }   // 머리 위 말풍선
-  if (!mine && (m.k !== chatTab || sideView !== "chat" || sideTucked)) unread[m.k]++;
-  if (!mine && sideTucked) chatPing(m);
+  if (!mine && m.k !== chatTab) unread[m.k]++;
   if (!mine && m.k === "dm" && !dmTo) { dmTo = m.from.u; dmToName = m.from.name; }
   renderChat();
 }
-// 사이드바를 접어 둔 채 새 채팅이 오면: 채팅 버튼을 톡 튀기고 아래에 보낸 사람·내용을 잠깐 띄운다(누르면 그 탭으로 채팅을 연다)
-let peekTimer = 0, peekTab = "near";
-function chatPing(m) {
-  const btn = $("showChat"), peek = $("chatPeek"); btn.classList.remove("ping"); void btn.offsetWidth; btn.classList.add("ping");
-  peekTab = m.k; peek.querySelector("b").textContent = `${CHAT_LABEL[m.k] || ""} · ${m.from?.name || "크루"}`; peek.querySelector("span").textContent = m.text;
-  peek.hidden = false; requestAnimationFrame(() => peek.classList.add("on"));
-  clearTimeout(peekTimer); peekTimer = window.setTimeout(() => peek.classList.remove("on"), 4200);
-}
-$("showChat").addEventListener("animationend", (e) => { if (e.animationName === "chatPing") $("showChat").classList.remove("ping"); });
-$("chatPeek").onclick = () => { $("chatPeek").classList.remove("on"); tuckSide(false); setSide("chat"); setChatTab(peekTab); };
 function sendChat(text) {
   if (chatTab === "dm" && !dmTo) { chatLogs.dm.push({ k: "sys", text: "받는 사람을 먼저 골라 주세요", at: Date.now() }); renderChat(); return; }
   if (chatTab !== "dm") { me.say = text.slice(0, 40); me.sayAt = Date.now(); }   // 내 말풍선
   netSend({ t: "chat", k: chatTab, text, to: chatTab === "dm" ? dmTo : undefined });
-  if (!netUp) chatNet({ id: "local" + Date.now(), k: chatTab, text, at: Date.now(), to: dmTo, from: { u: ezState().uid, name: myNameNow() || "나", f: me.f } });   // 서버 없이 볼 때
+  if (!netUp) chatNet({ id: "local" + Date.now(), k: chatTab, text, at: Date.now(), to: dmTo, from: { u: selfU(), name: myNameNow() || "나", f: me.f } });   // 서버 없이 볼 때
 }
 function setChatTab(t) { chatTab = t; unread[t] = 0; renderChat(); }
 function openDm(u, name) { dmTo = u; dmToName = name || "크루"; setChatTab("dm"); openChat(); }
 const hhmm = (ms) => { const d = new Date(ms); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
 let chatKey = "";
 function renderChat() {
-  const uid = ezState().uid;
+  const uid = selfU();
   $all<HTMLButtonElement>("#chat .ctabs button").forEach((b2) => { const t = b2.dataset.tab; b2.setAttribute("aria-selected", String(t === chatTab)); const bd = b2.querySelector("b"); bd.textContent = String(unread[t]); bd.classList.toggle("on", unread[t] > 0 && t !== chatTab); });
   $("chatDmBar").hidden = chatTab !== "dm";
-  { const tot = unread.near + unread.all + unread.dm, rb = $("railChatBadge"), tb = $("sideTab").querySelector("b"); rb.textContent = tb.textContent = $("sideShowBadge").textContent = String(tot); $("sideShowBadge").classList.toggle("on", tot > 0 && sideTucked); $("showChat").classList.toggle("hasNew", tot > 0 && sideTucked); if (!sideTucked) $("chatPeek").classList.remove("on"); rb.classList.toggle("on", tot > 0 && sideView !== "chat"); tb.classList.toggle("on", tot > 0 && sideTucked); }
   if (chatTab === "dm") { // 받는 사람: 지금 접속한 크루 + 대화했던 크루
     const opts = new Map(); for (const p of peerList) if (p.u) opts.set(p.u, p.name || "크루");
     for (const m of chatLogs.dm) { const other = m.from?.u === uid ? m.to : m.from?.u; if (other && !opts.has(other)) opts.set(other, m.from?.u === uid ? (dmToName && dmTo === other ? dmToName : "크루") : m.from.name); }
@@ -2968,36 +3033,24 @@ function renderChat() {
     const sel = $<HTMLSelectElement>("chatDmTo"), html2 = `<option value="">고르기</option>` + [...opts].map(([u, n]) => `<option value="${esc(u)}" ${u === dmTo ? "selected" : ""}>${esc(n)}</option>`).join("");
     if (sel.innerHTML !== html2) sel.innerHTML = html2;
   }
-  const rows = chatTab === "dm" ? chatLogs.dm.filter((m) => m.k === "sys" || (dmTo && (m.from?.u === dmTo && m.to === uid || m.from?.u === uid && m.to === dmTo))) : chatLogs[chatTab];
+  const rows = chatTab === "dm" ? chatLogs.dm.filter((m) => m.k === "sys" || (dmTo && (m.from?.u === dmTo && m.to === uid || m.from?.u === uid && m.to === dmTo))) : chatTab === "near" ? chatLogs.near.filter((m) => (m.scope || null) === media.meetingScope()) : chatLogs[chatTab];
   const html = rows.length ? rows.map((m) => m.k === "sys" ? `<li class="sys">${esc(m.text)}</li>` : `<li class="${m.from?.u === uid ? "mine" : ""}"><span class="who" data-u="${esc(m.from?.u || "")}" data-n="${esc(m.from?.name || "")}">${esc(m.from?.name || "크루")}</span>${esc(m.text)}<span class="meta">${hhmm(m.at)}${m.k !== "dm" && m.from?.f ? ` · ${m.from.f}F` : ""}</span></li>`).join("")
-    : `<li class="empty">${chatTab === "near" ? (roomKey() ? "이 방 사람끼리만 보여요" : "6칸 안에 있는 크루에게 보여요") : chatTab === "all" ? "캠퍼스의 모두에게 보여요" : dmTo ? `${esc(dmToName)}님과의 대화예요` : "받는 사람을 고르거나 크루 목록에서 💬를 눌러요"}</li>`;
+    : `<li class="empty">${chatTab === "near" ? (media.meetingScope() ? "같은 회의 사람에게만 보여요" : media.meetingRequired() ? "회의를 선택하지 않은 이 방 사람에게 보여요" : roomKey() ? "이 방 사람끼리만 보여요" : canControlStartrack({ f: me.f, x: me.x, y: me.y, rm: roomKey() }) ? "스타트랙의 모든 객석에 보여요" : "6칸 안에 있는 크루에게 보여요") : chatTab === "all" ? "캠퍼스의 모두에게 보여요" : dmTo ? `${esc(dmToName)}님과의 대화예요` : "받는 사람을 고르거나 크루 목록에서 💬를 눌러요"}</li>`;
   const log = $("chatLog"); if (html !== chatKey) { const atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 30; chatKey = html; log.innerHTML = html; if (atEnd || true) log.scrollTop = log.scrollHeight; }
   sayInput.placeholder = chatTab === "dm" ? (dmTo ? `${dmToName}님에게 · Tab 바꾸기` : "받는 사람을 골라요") : `${CHAT_LABEL[chatTab]}${chatTab === "near" && roomKey() ? "(이 방)" : ""}에 말하기 · Tab 바꾸기`;
 }
 $all<HTMLButtonElement>("#chat .ctabs button").forEach((b2) => (b2.onclick = () => setChatTab(b2.dataset.tab as any)));
-// 오른쪽 사이드: 레일 아이콘으로 채팅·사람을 고르고, 같은 아이콘을 다시 누르거나 ›로 접는다
-let sideView: "chat" | "people" = LS.get("ww.side") === "people" ? "people" : "chat";   // 채팅과 크루 중 하나는 늘 펼쳐 둔다
-function setSide(v) {
-  if (!v) v = sideView || "chat";   // 접기는 없다: 둘 중 하나는 늘 보인다
-  sideView = v; LS.set("ww.side", v || "");
-  const side = $("side"); side.classList.toggle("closed", !v); document.body.classList.toggle("sideOpen", !!v);
-  $all<HTMLButtonElement>(".srail button").forEach((b2) => b2.setAttribute("aria-pressed", String(b2.dataset.view === v)));
-  for (const sec of $all<HTMLElement>(".sview")) sec.hidden = sec.dataset.view !== v;
-  $("sideTitle").textContent = v === "people" ? "같이 있는 크루" : "채팅";
-  if (v === "chat") unread[chatTab] = 0;
-  renderChat();
-}
-$all<HTMLButtonElement>(".srail button").forEach((b2) => (b2.onclick = () => setSide(b2.dataset.view)));   // 누르면 그 화면으로 바뀐다(같은 걸 눌러도 접히지 않는다)
-
-// 접기: 손잡이(또는 \ 키)로 패널을 오른쪽으로 집어넣는다. 접혀 있어도 Enter로 채팅하면 다시 나온다
+// 오른쪽 사이드: 같이 있는 크루. 손잡이(또는 \ 키)로 오른쪽으로 집어넣고, 접히면 오른쪽 위 인원 버튼으로 다시 편다
+// 모바일은 사이드를 늘 숨겨 두고, 인원 버튼으로 위쪽에 띄웠다 닫는다(채팅과 번갈아)
 let sideTucked = LS.get("ww.sideTucked") === "1";
-function tuckSide(on) { sideTucked = on; LS.set("ww.sideTucked", on ? "1" : ""); $("side").classList.toggle("tucked", on); document.body.classList.toggle("sideTucked", on); $("sideTab").setAttribute("aria-expanded", String(!on)); if (!on && sideView === "chat" && booted) { unread[chatTab] = 0; renderChat(); } }
+function tuckSide(on) { sideTucked = on; LS.set("ww.sideTucked", on ? "1" : ""); $("side").classList.toggle("tucked", on); document.body.classList.toggle("sideTucked", on); $("sideTab").setAttribute("aria-expanded", String(!on)); }
+const peopleOpen = (on) => { document.body.classList.toggle("peopleOpen", on); if (on) { document.body.classList.remove("chatting"); sayInput.blur(); } };
 $("sideTab").onclick = () => tuckSide(!sideTucked);
-$("sideHide").onclick = () => tuckSide(true); $("showPeople").onclick = () => { tuckSide(false); setSide("people"); }; $("showChat").onclick = () => { tuckSide(false); setSide("chat"); };
-let booted = false; tuckSide(sideTucked); requestAnimationFrame(() => (booted = true));
-requestAnimationFrame(() => setSide(sideView));
+$("sideHide").onclick = () => (TOUCH ? peopleOpen(false) : tuckSide(true));
+$("showPeople").onclick = () => (TOUCH ? peopleOpen(!document.body.classList.contains("peopleOpen")) : tuckSide(false));
+tuckSide(sideTucked);
 $("chatDmTo").addEventListener("change", () => { const sel = $<HTMLSelectElement>("chatDmTo"); dmTo = sel.value || null; dmToName = sel.selectedOptions[0]?.textContent || ""; renderChat(); });
-$("chatLog").addEventListener("click", (e) => { const w = (e.target as HTMLElement).closest(".who") as HTMLElement; if (w && w.dataset.u && w.dataset.u !== ezState().uid) openDm(w.dataset.u, w.dataset.n); });
+$("chatLog").addEventListener("click", (e) => { const w = (e.target as HTMLElement).closest(".who") as HTMLElement; if (w && w.dataset.u && w.dataset.u !== selfU()) openDm(w.dataset.u, w.dataset.n); });
 setInterval(() => { if (chatTab === "near") renderChat(); }, 1000);   // 방을 드나들면 안내 문구가 바뀐다
 /* ───── 같이 있는 크루 목록: 나 · 같은 층 · 다른 층 순, 이름 옆에 층, 따라가기 ───── */
 const plistBody = document.getElementById("plistBody");
@@ -3099,8 +3152,8 @@ function step(dt, t) {
   }
   checkZone();
   const near = nearNPC(), call = atCall(), bag = nearBag(), seat = nearSeat();
-  const ez0 = !me.lie && !me.seat && nearFurn("painteasel", 2.1), cup = !(me.brush && ez0) && !me.lie && !me.seat && nearFurn("brushcup", 1.7), ez = !cup && ez0, site = !cup && !ez && nearFurn("linkkiosk", 1.7), insta = !cup && !ez && !site && nearFurn("instaboard", 1.7), wb = !me.lie && !me.seat && nearWb(2.4), fr = nearFridge(), scoop = nearScoop(), shown = !scoop && nearShow();   // 하루들 부스
-  actBtn.hidden = !(me.lie || me.seat || near || bag || call || seat || cup || ez || site || insta || wb || fr || scoop || shown); actBtn.textContent = scoop ? scoop.action ?? "오늘의 특종 보기" : shown ? showItem(shown).action : wb ? "화이트보드에 쓰기" : fr ? (fr.want ? "냉장고 닫기" : "냉장고 열기") : cup ? (me.brush ? "붓 꽂기" : "붓 들기") : ez ? "함께 그리기" : site ? "하루들 바로가기" : insta ? "인스타 바로가기" : me.lie || me.seat ? "일어나기" : seat && !(near && Math.hypot(seat.x - me.x, seat.y - me.y) > .55) ? "앉기" : near ? `${withJosa(near.p.nick, "와", "과")} 대화하기` : bag ? "빈백에 눕기" : "엘리베이터 타기";
+  const ez0 = !me.lie && !me.seat && nearFurn("painteasel", 2.1), cup = !(me.brush && ez0) && !me.lie && !me.seat && nearFurn("brushcup", 1.7), ez = !cup && ez0, site = !cup && !ez && nearFurn("linkkiosk", 1.7), insta = !cup && !ez && !site && nearFurn("instaboard", 1.7), wb = !me.lie && !me.seat && nearWb(2.4), fr = nearFridge(), scoop = nearScoop(), shown = !scoop && nearShow(), screenNear = !scoop && !shown && nearStartrackScreen();   // 하루들 부스
+  actBtn.hidden = !(me.lie || me.seat || near || bag || call || seat || cup || ez || site || insta || wb || fr || scoop || shown || screenNear); actBtn.textContent = screenNear ? "스타트랙 영상 설정" : scoop ? scoop.action ?? "오늘의 특종 보기" : shown ? showItem(shown).action : wb ? "화이트보드에 쓰기" : fr ? (fr.want ? "냉장고 닫기" : "냉장고 열기") : cup ? (me.brush ? "붓 꽂기" : "붓 들기") : ez ? "함께 그리기" : site ? "하루들 바로가기" : insta ? "인스타 바로가기" : me.lie || me.seat ? "일어나기" : seat && !(near && Math.hypot(seat.x - me.x, seat.y - me.y) > .55) ? "앉기" : near ? `${withJosa(near.p.nick, "와", "과")} 대화하기` : bag ? "빈백에 눕기" : "엘리베이터 타기";
   if (me.say && Date.now() - me.sayAt > 6000) { me.say = ""; sendPresence(true); }
 }
 const tgt = new THREE.Vector3();
@@ -3109,7 +3162,7 @@ function render(dt, t) {
   // 1인칭 고개는 마우스를 그대로 따른다(뒤따라 미끄러지는 느낌이 어지럽다). Q·E처럼 크게 돌릴 때만 부드럽게
   if (VIEW.mode === "first" && Math.abs(cam.yawT - cam.yaw) < .35) cam.yaw = cam.yawT; else cam.yaw = lerp(cam.yaw, cam.yawT, Math.min(1, dt * 8));
   if (VIEW.mode === "first") cam.look = cam.lookT;
-  const fov = VIEW.mode === "first" ? 62 : 38; if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }   // 1인칭은 넓게 봐야 덜 어지럽다
+  const fov = VIEW.mode === "first" ? 62 : 38; if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
   cam.pitch = lerp(cam.pitch, cam.pitchT, Math.min(1, dt * 8)); cam.dist = lerp(cam.dist, cam.distT, Math.min(1, dt * 8));   // 위에서 볼 때 기울기·거리(휠·핀치 확대)
   cam.ip = lerp(cam.ip, cam.ipT, Math.min(1, dt * 8)); cam.id = lerp(cam.id, cam.idT, Math.min(1, dt * 8)); cam.look = lerp(cam.look, cam.lookT, Math.min(1, dt * 10));
   tgt.set(wx(me.x), floorY(me.f) + .4, wz(me.y)); cam.target.lerp(tgt, Math.min(1, dt * 6));
@@ -3127,7 +3180,7 @@ function render(dt, t) {
   holdBrush(me, me.brush, ezPen.c);
   setPos(dog.doll, me.f, dog.x, dog.y); dog.doll.update(dt, t, dog.moving, dog.h);
   for (const n of NPCS) if (n.doll.root.visible) { setPos(n.doll, n.f, n.x, n.y); applyLie(n.doll, n.lie); n.doll.setSeated(n.seat); n.doll.update(dt, t, n.moving, n.lie ? 0 : n.seat ? n.seat.yaw : n.talk ? Math.atan2(me.x - n.x, me.y - n.y) : n.h, n.seed, performance.now() - n.sayAt < 2500, tickAct(n, dt));  applyWobble(n); }
-  environment.frame(dt); tickFx(dt); tickMeteors(dt, environment.nightVisibility()); tickFireworks(dt);
+  environment.frame(dt); updateTraffic(dt); tickFx(dt); tickMeteors(dt, environment.nightVisibility()); tickFireworks(dt);
   for (const s of spinners) s.rotation.y += dt * .9;
   tickFridges(dt);
   syncPeers(dt, t);
@@ -3143,9 +3196,9 @@ function render(dt, t) {
     bub.hidden = !(n.say && performance.now() - n.sayAt < 2500); if (!bub.hidden) { bub.textContent = n.say; project(bub, p.x, p.y + DOLL, p.z); }
     showZzz(zzz, n.doll, !!n.lie && bub.hidden);
   }
-  for (const rt of roomTags) { // 들어가 있으면 가까운 이름표만
-    if (inside() && Math.hypot(rt.x - wx(me.x), rt.z - wz(me.y)) > 12) { rt.el.style.display = "none"; continue; }
-    project(rt.el, rt.x, floorY(me.f) + (inside() && rt.y === WALL + .35 ? 1.6 : rt.y), rt.z); }
+  for (const rt of roomTags) { // 들어가 있으면 공간 이름표는 숨기고(들어설 때 뜨는 이름으로 충분) 층 이동 · 엘리베이터 표지만 가까운 것. 1인칭에선 눈높이(.92) 위로
+    if (inside() && (rt.place || Math.hypot(rt.x - wx(me.x), rt.z - wz(me.y)) > 12)) { rt.el.style.display = "none"; continue; }
+    project(rt.el, rt.x, floorY(me.f) + (inside() && rt.y === WALL + .35 ? 1.6 : VIEW.mode === "first" ? Math.max(rt.y, 1.6) : rt.y), rt.z); }
 }
 
 /* ════════════════ 시작 ════════════════ */
@@ -3155,12 +3208,13 @@ fontsReady.then(() => {
   cam.target.set(wx(me.x), 0, wz(me.y)); placeCamera();
   const ld = document.getElementById("loading"); ld.style.opacity = "0"; setTimeout(() => ld.remove(), 450);
   showToast("11층에 도착했어요", "1번을 눌러 네 컷을 그려 보세요. 캐릭터를 누르면 그 크루의 하루들 피드가 열려요.", 5000);
-  if (!LS.get("ww.tour")) openTour();   // 처음 오면 세 장짜리 안내(전체 조작법은 「조작법」 버튼)
-  loadFeed(); joinRoom();
+  if (!LS.get("ww.tour")) openTour();   // 처음 오면 세 장짜리 안내(전체 조작법은 설정창 「조작법」 탭)
+  loadFeed(); joinRoom(); void loadAccount();
   ready = true;
   // 화면 점검용 손잡이: 주소 끝에 ?debug를 붙였을 때만
-  if (new URLSearchParams(location.search).has("debug")) (window as any).__ez = ezState; (window as any).__t = { peers, gl: renderer, Q, me, NPCS, cam, goFloor, setView, setMyAv, useSkill, jump, lieDown, sitDown, nearSeat, AVATAR_PRESETS, get floor() { return floor; } };
+  if (new URLSearchParams(location.search).has("debug")) (window as any).__ez = ezState; (window as any).__t = { peers, gl: renderer, Q, me, NPCS, cam, goFloor, setView, setMyAv, useSkill, jump, lieDown, sitDown, nearSeat, sendPresence, AVATAR_PRESETS, get floor() { return floor; } };
+  if (new URLSearchParams(location.search).has("debug")) Object.assign((window as any).__t, { city, camera, startrack });
 });
 
-return { frame(dt: number) { if (!ready || inWorld) return; const t = performance.now() / 1000; step(Math.min(.05, dt), t); render(Math.min(.05, dt), t); } };
+return { frame(dt: number) { if (!ready || inWorld) return; const t = performance.now() / 1000; step(Math.min(.05, dt), t); render(Math.min(.05, dt), t); startrack.frame(); } };
 }

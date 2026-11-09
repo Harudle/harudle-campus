@@ -227,7 +227,7 @@ function makeFloor(f) {
     F("railbed", 1, 10, 30, 1);
     F("linelight", 1, 11, 30, 1);
     Z(1, 11, 26, 12, "\uC2A4\uD0C0\uD2B8\uB799", "\uD14C\uCF54\uD1A1\uACFC \uC120\uBC30 \uAE30\uC218\uC640\uC758 \uB9CC\uB0A8\uC774 \uC5F4\uB9AC\uB294 \uBC1C\uD45C \uACF5\uAC04. \uD070 \uD654\uBA74\uC744 \uBC18\uC6D0\uC73C\uB85C \uB458\uB7EC\uC549\uC544\uC694.", { tint: "#F2F4E2" });
-    F("screenwall", 13, 20, 1, 9, { face: "w", big: true, wide: 1.5, raw: true });
+    F("screenwall", 13, 19, 1, 11, { face: "w", big: true, wide: 1.65, ratio169: true, raw: true });
     F("arcbleacher", 11, 21, 3, 7, { cx: 13.88, cy: 24.5, stage: 2.8, tiers: 0, raw: true });
     F("arcbleacher", 4, 12, 10, 27, { cx: 12.38, cy: 24.5, sy: 1.5, stage: 0, r0: 4.2, tw: 1.33, tiers: 3, raw: true });
     F("plant", 3, 12, 2, 2);
@@ -493,6 +493,15 @@ var solid = (fl, x, y) => {
   return x < 0 || y < 0 || x >= W || y >= H || fl.grid[y * W + x] === 1;
 };
 var inRect = (r, x, y) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
+function roomKeyAt(f, x, y) {
+  const floor = FLOORS[f];
+  if (!floor || !Number.isFinite(x) || !Number.isFinite(y)) return "";
+  let best = null;
+  for (const z of floor.zones || []) {
+    if (/강의실|회의실|페어룸|상담실/.test(z.name) && inRect(z, x, y) && (!best || z.w * z.h < best.w * best.h)) best = z;
+  }
+  return best ? `${f}:${best.name}` : "";
+}
 var STEP = 0.13;
 var bleacherLevel = (o, i) => Math.floor((o.down ? (o.axis === "y" ? o.h : o.w) - 1 - i : i) / (o.axis === "y" ? 2 : 1));
 var ARC_STEP = 0.22;
@@ -702,6 +711,7 @@ export {
   navNext,
   nearestFree,
   rng,
+  roomKeyAt,
   solid,
   stadiumWall,
   sweep,

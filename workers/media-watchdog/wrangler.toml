@@ -1,0 +1,12 @@
+name = "harudle-campus-media-watchdog-test"
+main = "index.js"
+compatibility_date = "2026-11-01"
+workers_dev = true
+
+[[durable_objects.bindings]]
+name = "LEASES"
+class_name = "MediaLease"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["MediaLease"]

@@ -1,0 +1,5 @@
+[Service]
+# 이 예시는 운영 전 검증용이다. 실제 값과 DB를 확인하기 전에는 설치하지 않는다.
+EnvironmentFile=/etc/harudle-campus/media.env
+StateDirectory=harudle-campus
+StateDirectoryMode=0700
