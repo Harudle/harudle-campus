@@ -1,10 +1,12 @@
 import * as THREE from "three";
-import { getPosition } from "suncalc";
 import { W, H, S, floorY, clamp } from "./world";
+import { campusSun } from "./solar";
+import { createSky } from "./sky";
 
 type Weather = { code: number; clouds: number; forecastAt: number; fetchedAt: number };
 type EnvironmentOptions = {
   scene: THREE.Scene;
+  camera: THREE.Camera;
   ambient: THREE.HemisphereLight;
   sun: THREE.DirectionalLight;
   skyStars: THREE.Points[];
@@ -13,8 +15,6 @@ type EnvironmentOptions = {
   ground: number;
 };
 
-// 화면은 판교의 천체 위치를 사용한다. 사용자가 어디에 있든 같은 캠퍼스 시간을 본다.
-const LATITUDE = 37.4064, LONGITUDE = 127.0888;
 const WEATHER_MAX_AGE = 2 * 60 * 60 * 1000;
 const smooth = (a: number, b: number, x: number) => { const v = clamp((x - a) / (b - a), 0, 1); return v * v * (3 - 2 * v); };
 
@@ -79,19 +79,18 @@ function precipitation(scene: THREE.Scene, ground: number) {
   };
 }
 
-export function createEnvironment({ scene, ambient, sun, skyStars, moon, paintCity, ground }: EnvironmentOptions) {
-  const sky = scene.background as THREE.Color;
+export function createEnvironment({ scene, camera, ambient, sun, skyStars, moon, paintCity, ground }: EnvironmentOptions) {
+  const updateSky = createSky(scene, camera);
   const updatePrecipitation = precipitation(scene, ground);
   let weather: Weather | null = null, weatherStatus = "loading";
   let serverEpoch: number | null = null, clockAnchor = 0, requestFailed = false, pending = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
-  let day = 0, night = 0, targetDay = 0, targetNight = 0, targetTwilight = 0, targetClouds = 0;
-  let altitude = 0, azimuth = 0, initialized = false, nextSkyUpdate = 0, cityStep = -1;
+  let day = 0, night = 0, twilight = 0, clouds = 0, targetDay = 0, targetNight = 0, targetTwilight = 0, targetClouds = 0;
+  let initialized = false, nextSkyUpdate = 0, cityStep = -1;
   const currentTime = () => serverEpoch === null ? Date.now() : serverEpoch + (performance.now() - clockAnchor);
   const currentWeather = () => weather && currentTime() - weather.fetchedAt <= WEATHER_MAX_AGE && currentTime() - weather.forecastAt <= WEATHER_MAX_AGE ? weather : null;
-  const nightSky = new THREE.Color(0x0E1E46), daySky = new THREE.Color(0x8FC9EB), dawnSky = new THREE.Color(0xF5AE8D);
-  const overcastDay = new THREE.Color(0xA8B9C5), overcastNight = new THREE.Color(0x303B51);
-  const skyTarget = new THREE.Color(), skyCloud = new THREE.Color();
+  const sunDirection = new THREE.Vector3(0, -1, 0);
+  const white = new THREE.Color(0xFFFFFF), eveningLight = new THREE.Color(0xFFC69D);
 
   async function sync() {
     if (pending || document.hidden) return;
@@ -120,23 +119,22 @@ export function createEnvironment({ scene, ambient, sun, skyStars, moon, paintCi
     nextSkyUpdate -= dt;
     if (nextSkyUpdate <= 0) {
       nextSkyUpdate = 1;
-      const now = currentTime(), position = getPosition(new Date(now), LATITUDE, LONGITUDE);
-      altitude = position.altitude; azimuth = position.azimuth;
-      targetDay = smooth(-.10, .18, altitude);
-      targetTwilight = smooth(-.16, -.01, altitude) * (1 - smooth(.03, .24, altitude));
+      const position = campusSun(currentTime());
+      sunDirection.set(position.x, position.y, position.z);
+      targetDay = position.daylight;
+      targetTwilight = position.twilight;
       targetClouds = clamp((currentWeather()?.clouds ?? 0) / 100, 0, 1);
-      targetNight = (1 - smooth(-.17, -.035, altitude)) * (1 - smooth(.3, .95, targetClouds));
+      targetNight = (1 - smooth(-.17, -.035, position.altitude)) * (1 - smooth(.3, .95, targetClouds));
     }
     const blend = initialized ? 1 - Math.exp(-dt * .7) : 1; initialized = true;
     day += (targetDay - day) * blend; night += (targetNight - night) * blend;
-    skyTarget.copy(nightSky).lerp(daySky, day).lerp(dawnSky, targetTwilight * .46);
-    skyCloud.copy(overcastNight).lerp(overcastDay, day); skyTarget.lerp(skyCloud, targetClouds * .6);
-    sky.lerp(skyTarget, blend);
+    twilight += (targetTwilight - twilight) * blend; clouds += (targetClouds - clouds) * blend;
+    updateSky(day, twilight, clouds, sunDirection);
     for (const stars of skyStars) { (stars.material as THREE.PointsMaterial).opacity = night; stars.visible = night > .01; }
     (moon.material as THREE.SpriteMaterial).opacity = night; moon.visible = night > .01;
     // 실내 조명은 밤에도 유지해 글과 캐릭터가 잘 보이게 한다.
-    ambient.intensity = 1.2 + day * .4; ambient.color.set(0xDFE7FF).lerp(new THREE.Color(0xFFFFFF), day);
-    sun.intensity = .8 + day * .7; sun.color.set(0xFFDAB9).lerp(new THREE.Color(0xFFFFFF), day);
+    ambient.intensity = 1.2 + day * .4; ambient.color.set(0xDFE7FF).lerp(white, day).lerp(eveningLight, twilight * .12);
+    sun.intensity = .8 + day * .7; sun.color.set(0xDFE7FF).lerp(white, day).lerp(eveningLight, twilight * .65);
     const nextCityStep = Math.round(day * 40); if (nextCityStep !== cityStep) { cityStep = nextCityStep; paintCity(nextCityStep / 40); }
     updatePrecipitation(dt, currentWeather() ? precipitationKind(currentWeather()!.code) : "none", day);
   }
@@ -144,6 +142,6 @@ export function createEnvironment({ scene, ambient, sun, skyStars, moon, paintCi
   return {
     frame,
     nightVisibility: () => night,
-    lightOffset: () => ({ x: -Math.sin(azimuth) * 18, y: 14 + Math.max(0, Math.sin(altitude)) * 14, z: Math.cos(azimuth) * 18 }),
+    lightOffset: () => ({ x: sunDirection.x * 24, y: Math.max(.25, sunDirection.y) * 24, z: sunDirection.z * 24 }),
   };
 }

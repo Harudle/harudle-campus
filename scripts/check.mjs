@@ -18,8 +18,10 @@ const ok = (m) => console.log('✓', m)
 for (const f of ['server.js', 'app.js', 'weather.js']) {
   try { execFileSync(process.execPath, ['--check', f], { stdio: 'pipe' }); ok(`${f} 문법`) } catch (e) { fail(f, e.stderr?.toString()) }
 }
-try { execFileSync(process.execPath, ['--test', 'scripts/weather.test.mjs'], { stdio: 'pipe' }); ok('날씨 갱신과 실패 처리') }
-catch (e) { fail('날씨 검사', (e.stdout || e.stderr)?.toString()) }
+for (const [file, name] of [['scripts/weather.test.mjs', '날씨 갱신과 실패 처리'], ['scripts/solar.test.mjs', '판교의 해와 시간 변화']]) {
+  try { execFileSync(process.execPath, ['--test', file], { stdio: 'pipe' }); ok(name) }
+  catch (e) { fail(name, (e.stdout || e.stderr)?.toString()) }
+}
 
 if (!existsSync('dist/index.html') || !existsSync('dist-check/world.mjs')) fail('dist가 없어요 — npm run build 후 커밋하세요')
 else {
