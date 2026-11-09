@@ -38,6 +38,28 @@ body{background:var(--ground);color:var(--ink);font-family:var(--body);overflow:
 .mediaButton:disabled{opacity:.6;cursor:wait}
 #mediaDock [hidden],#sharedScreens[hidden]{display:none!important}
 #mediaStatus{display:inline-block;margin:0;padding:4px 8px;border-radius:8px;background:rgba(255,255,255,.92);color:var(--ink);font:12px/1.4 var(--body);pointer-events:auto}
+#startrackDock{position:fixed;z-index:19;top:calc(70px + env(safe-area-inset-top,0px));left:max(12px,env(safe-area-inset-left,0px));display:flex;align-items:flex-start;flex-wrap:wrap;gap:5px;max-width:min(360px,calc(100% - 24px))}
+#startrackNotice{flex-basis:100%}
+#startrackDock button,#startrackPanel button{font:700 13px var(--body);border:1.5px solid var(--ink);border-radius:9px;background:#fff;color:var(--ink);padding:7px 10px;cursor:pointer}
+#startrackOpen{background:var(--brand);box-shadow:2px 2px 0 var(--ink)}
+#startrackNotice{display:block;width:max-content;max-width:min(380px,100%);padding:5px 8px;background:#fff;border:1px solid var(--ink);border-radius:8px;font:12px/1.4 var(--body)}
+#startrackPanel{position:fixed;z-index:20;left:max(12px,env(safe-area-inset-left,0px));top:calc(150px + env(safe-area-inset-top,0px));width:min(400px,calc(100vw - 24px));max-height:calc(100dvh - 165px);overflow:auto;padding:12px;background:#fff;border:2px solid var(--ink);border-radius:15px;box-shadow:3px 4px 0 var(--ink);user-select:text;touch-action:auto}
+#startrackPanel header{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+#startrackPanel header strong{font-size:16px;display:block}#startrackPanel header span{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+#startrackPanel #startrackClose{font-size:20px;line-height:1;padding:5px 9px}
+#startrackVideo{position:fixed;z-index:4;left:0;top:0;transform-origin:0 0;background:#111;overflow:hidden;touch-action:auto}
+#startrackVideo iframe{display:block;width:100%;height:100%;border:0}
+/* Ordinary campus controls stay behind the player if the camera turns past them. */
+body.startrack-screen-visible :is(#floorHud,#topRight,#mediaDock,#startrackDock,#zoneToast,#dock,#camBtns,#act,#chat,#sideShow,#mPad){z-index:3}
+#startrackMessage,.startrackHint{font-size:12px;line-height:1.45;color:#625e6b;margin:7px 0}
+#startrackForm>label,#startrackSeek>label{font-size:12px;font-weight:700}
+#startrackForm>div,.startrackActions,#startrackSeek,.startrackVolume{display:flex;align-items:center;gap:6px;margin-top:6px}
+#startrackForm input{flex:1;min-width:0}#startrackPanel input[type=url],#startrackPanel input[type=number]{border:1px solid #bdb9c5;border-radius:7px;padding:7px;font:13px var(--body);user-select:text}
+.startrackType{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12px;font-weight:700}.startrackType select{border:1px solid #bdb9c5;border-radius:7px;padding:6px;font:13px var(--body);background:#fff}
+#startrackSeek input{width:72px}#startrackPanel button:disabled{opacity:.45;cursor:default}#startrackPanel #startrackPlay{background:var(--brand)}
+.startrackActions{flex-wrap:wrap}.startrackVolume{font-size:12px}.startrackVolume input{width:130px}.startrackVolume output{min-width:3em}
+#startrackChangeMode{margin-top:8px}
+@media(max-width:640px){#startrackDock{top:calc(70px + env(safe-area-inset-top,0px))}#startrackPanel button,#startrackDock button{font-size:12px;padding:6px 8px}}
 #meetingPanel{pointer-events:auto;margin-top:6px;padding:9px 10px;background:rgba(255,255,255,.97);border:1.5px solid var(--ink);border-radius:10px;max-height:36dvh;overflow:auto;font:13px/1.4 var(--body)}
 #meetingSelection,#meetingMessage,#meetingChatHint{margin:0 0 5px}#meetingChatHint{font-size:11px;color:#5b5b66}#meetingMessage{color:#8b2929;margin-top:6px}#meetingDetails summary{font-weight:700;cursor:pointer}
 #meetingList{display:grid;gap:5px;margin:7px 0}.meetingRow{display:flex;flex-wrap:wrap;align-items:center;gap:6px}.meetingRow strong{flex:1;min-width:100px;overflow-wrap:anywhere}

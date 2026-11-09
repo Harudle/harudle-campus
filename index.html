@@ -62,6 +62,29 @@
   <div id="sharedScreenList"></div>
 </section>
 <div id="mediaAudio" hidden></div>
+<section id="startrackDock" aria-label="스타트랙 영상" hidden>
+  <button type="button" id="startrackOpen">▶ 영상 설정</button>
+  <button type="button" id="startrackResume" hidden>내 영상 재생</button>
+  <span id="startrackNotice" role="status" aria-live="polite" hidden></span>
+</section>
+<div id="startrackVideo" aria-label="스타트랙 유튜브 영상" hidden><div id="startrackPlayer"></div></div>
+<section id="startrackPanel" aria-label="스타트랙 유튜브 함께 보기" hidden>
+  <header><div><strong>스타트랙 함께 보기</strong><span>설정을 닫으면 큰 화면에서 볼 수 있어요</span></div><button type="button" id="startrackClose" aria-label="영상 설정 닫기">×</button></header>
+  <p id="startrackMessage" role="status" aria-live="polite">스타트랙에서 유튜브 링크를 등록해 주세요.</p>
+  <form id="startrackForm">
+    <label for="startrackUrl">유튜브 링크</label>
+    <div><input id="startrackUrl" type="url" inputmode="url" autocomplete="off" maxlength="500" placeholder="https://youtu.be/..." required><button type="submit">영상 등록</button></div>
+    <label class="startrackType" for="startrackType">재생 종류 <select id="startrackType" required><option value="" selected disabled>선택해 주세요</option><option value="video">일반 영상</option><option value="live">라이브 방송</option></select></label>
+  </form>
+  <div id="startrackControls" hidden>
+    <div class="startrackActions"><button type="button" id="startrackPlay">함께 재생</button><button type="button" id="startrackPause">함께 일시정지</button><button type="button" id="startrackLeave">내 영상 끄기</button><button type="button" id="startrackClear">영상 내리기</button></div>
+    <button type="button" id="startrackChangeMode">현재 영상을 라이브로 보기</button>
+    <form id="startrackSeek"><label for="startrackSeconds">이동할 시간(초)</label><input id="startrackSeconds" type="number" min="0" max="86400" step="1" value="0"><button type="submit">함께 이동</button></form>
+    <label class="startrackVolume" for="startrackVolume">내 소리 <input id="startrackVolume" type="range" min="0" max="100" value="80"><output id="startrackVolumeValue">80%</output></label>
+    <p class="startrackHint">영상과 재생 상태는 모두에게 적용돼요. 일반 영상의 재생 위치도 함께 바뀌어요. 라이브의 재생바 이동은 내 화면에만 적용돼요.</p>
+    <p class="startrackHint">소리는 화면과 멀어지면 작아져요. 화면이 완전히 보이지 않으면 내 영상은 멈춰요. 근처 채팅은 스타트랙 전체에 보여요.</p>
+  </div>
+</section>
 <input type="file" id="feedFile" accept=".json,application/json" hidden>
 <div id="zoneToast" class="chip" style="opacity:0"><h2></h2><p></p></div>
 <div id="tour" hidden><div class="tbox" role="dialog" aria-modal="true" aria-labelledby="tourTitle">
