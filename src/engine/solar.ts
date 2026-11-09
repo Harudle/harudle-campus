@@ -1,4 +1,4 @@
-import { getPosition } from "suncalc";
+import { getMoonIllumination, getMoonPosition, getPosition } from "suncalc";
 
 // 우아한테크코스 판교 캠퍼스 근처. x는 동쪽, z는 남쪽이다.
 const LATITUDE = 37.4064, LONGITUDE = 127.0888;
@@ -20,5 +20,17 @@ export function campusSun(time: number) {
     z: -Math.cos(azimuth) * horizontal,
     daylight: smooth(-.10, .18, altitude),
     twilight: smooth(-.16, -.01, altitude) * (1 - smooth(.03, .24, altitude)),
+  };
+}
+
+export function campusMoon(time: number) {
+  const date = new Date(time), position = getMoonPosition(date, LATITUDE, LONGITUDE), light = getMoonIllumination(date);
+  const altitude = position.altitude * RAD, azimuth = position.azimuth * RAD, horizontal = Math.cos(altitude);
+  return {
+    x: Math.sin(azimuth) * horizontal,
+    y: Math.sin(altitude),
+    z: -Math.cos(azimuth) * horizontal,
+    fraction: light.fraction,
+    tilt: (light.angle - position.parallacticAngle) * RAD,
   };
 }

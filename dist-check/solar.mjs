@@ -30,6 +30,7 @@ var rad = PI / 180;
 var dayMs = 1e3 * 60 * 60 * 24;
 var J1970 = 2440588;
 var J2000 = 2451545;
+var earthRadius = 6378.14;
 function toDays(date) {
   return date.valueOf() / dayMs - 0.5 + J1970 - J2000;
 }
@@ -110,6 +111,15 @@ function getPosition(date, lat, lng) {
     // apparent (refraction-corrected) altitude in degrees
     altitude: (h + astroRefraction(h)) / rad
   };
+}
+function nutationObliquity(t) {
+  const om = rad * (125.04452 - 1934.136261 * t);
+  const ls = rad * (280.4665 + 36000.7698 * t);
+  const lm = rad * (218.3165 + 481267.8813 * t);
+  const dpsi = (-17.2 * sin(om) - 1.32 * sin(2 * ls) - 0.23 * sin(2 * lm) + 0.21 * sin(2 * om)) / 3600;
+  const deps = (9.2 * cos(om) + 0.57 * cos(2 * ls) + 0.1 * cos(2 * lm) - 0.09 * cos(2 * om)) / 3600;
+  const eps0 = 23.439291 - t * (0.0130042 + t * (16e-8 - t * 504e-9));
+  return { dpsi, eps: rad * (eps0 + deps) };
 }
 var moonLon = new Int32Array([
   0,
@@ -775,6 +785,88 @@ var moonLat = new Int32Array([
   1,
   107
 ]);
+function moonCoords(d) {
+  const t = d / 36525;
+  const Lp = 218.3164477 + t * (481267.88123421 + t * (-15786e-7 + t * (1 / 538841 - t / 65194e3)));
+  const D = 297.8501921 + t * (445267.1114034 + t * (-18819e-7 + t * (1 / 545868 - t / 113065e3)));
+  const M = 357.5291092 + t * (35999.0502909 + t * (-1536e-7 + t / 2449e4));
+  const Mp = 134.9633964 + t * (477198.8675055 + t * (87414e-7 + t * (1 / 69699 - t / 14712e3)));
+  const F = 93.272095 + t * (483202.0175233 + t * (-36539e-7 + t * (-1 / 3526e3 + t / 86331e4)));
+  const A1 = 119.75 + 131.849 * t;
+  const A2 = 53.09 + 479264.29 * t;
+  const A3 = 313.45 + 481266.484 * t;
+  const E = 1 - t * (2516e-6 + t * 74e-7);
+  const Dr = rad * D, Mr = rad * M, Mpr = rad * Mp, Fr = rad * F;
+  let sl = 0, sr = 0, sb = 0;
+  for (let i = 0; i < moonLon.length; i += 6) {
+    const m = moonLon[i + 1];
+    const arg = moonLon[i] * Dr + m * Mr + moonLon[i + 2] * Mpr + moonLon[i + 3] * Fr;
+    const f = m === 1 || m === -1 ? E : m === 2 || m === -2 ? E * E : 1;
+    sl += moonLon[i + 4] * f * sin(arg);
+    sr += moonLon[i + 5] * f * cos(arg);
+  }
+  for (let i = 0; i < moonLat.length; i += 5) {
+    const m = moonLat[i + 1];
+    const arg = moonLat[i] * Dr + m * Mr + moonLat[i + 2] * Mpr + moonLat[i + 3] * Fr;
+    const f = m === 1 || m === -1 ? E : m === 2 || m === -2 ? E * E : 1;
+    sb += moonLat[i + 4] * f * sin(arg);
+  }
+  const A1r = rad * A1, Lpr = rad * Lp;
+  sl += 3958 * sin(A1r) + 1962 * sin(Lpr - Fr) + 318 * sin(rad * A2);
+  sb += -2235 * sin(Lpr) + 382 * sin(rad * A3) + 175 * sin(A1r - Fr) + 175 * sin(A1r + Fr) + 127 * sin(Lpr - Mpr) - 115 * sin(Lpr + Mpr);
+  const { dpsi, eps } = nutationObliquity(t);
+  const l = rad * (Lp + sl / 1e6 + dpsi);
+  const b = rad * (sb / 1e6);
+  return {
+    ra: atan(sin(l) * cos(eps) - tan(b) * sin(eps), cos(l)),
+    // 13.3
+    dec: asin(sin(b) * cos(eps) + cos(b) * sin(eps) * sin(l)),
+    // 13.4
+    dist: 385000.56 + sr / 1e3,
+    // distance to the Moon in km
+    lon: l
+  };
+}
+function getMoonPosition(date, lat, lng) {
+  const lw = rad * -lng;
+  const phi = rad * lat;
+  const d = toDays(date);
+  const c = moonCoords(toDaysTT(d));
+  const H = siderealTime(d, lw) - c.ra;
+  const hGeo = altitude(H, phi, c.dec);
+  const h = hGeo - asin(earthRadius / c.dist * cos(hGeo));
+  const pa = atan(sin(H), tan(phi) * cos(c.dec) - sin(c.dec) * cos(H));
+  return {
+    azimuth: azimuth(H, phi, c.dec),
+    // apparent (refraction-corrected) altitude in degrees
+    altitude: (h + astroRefraction(h)) / rad,
+    distance: c.dist,
+    parallacticAngle: pa / rad
+  };
+}
+function getMoonIllumination(date = /* @__PURE__ */ new Date()) {
+  const d = toDaysTT(toDays(date));
+  const s = sunCoords(d);
+  const m = moonCoords(d);
+  const sdist = 149598e3;
+  const phi = acos(sin(s.dec) * sin(m.dec) + cos(s.dec) * cos(m.dec) * cos(s.ra - m.ra));
+  const inc = atan(sdist * sin(phi), m.dist - sdist * cos(phi));
+  const angle = atan(cos(s.dec) * sin(s.ra - m.ra), sin(s.dec) * cos(m.dec) - cos(s.dec) * sin(m.dec) * cos(s.ra - m.ra));
+  const phase = ((m.lon - s.lon) / (2 * PI) % 1 + 1) % 1;
+  const waxing = phase < 0.5;
+  return {
+    // illuminated fraction, 0 (new) → 1 (full); reaches the exact extrema only at perfect
+    // syzygy (eclipses), so a "full" moon typically peaks a hair under 1 — this is correct
+    fraction: (1 + cos(inc)) / 2,
+    // phase, 0 → 1: 0 new, 0.25 first quarter, 0.5 full, 0.75 last quarter (waxing for phase < 0.5)
+    phase,
+    // position angle of the bright limb, degrees (v2: all angles emitted in degrees) — subtract
+    // getMoonPosition().parallacticAngle, also degrees, to get the zenith-relative tilt
+    angle: angle / rad,
+    waxing
+    // true while the Moon is waxing (new → full), false while waning (full → new)
+  };
+}
 
 // src/engine/solar.ts
 var LATITUDE = 37.4064;
@@ -797,6 +889,18 @@ function campusSun(time) {
     twilight: smooth(-0.16, -0.01, altitude2) * (1 - smooth(0.03, 0.24, altitude2))
   };
 }
+function campusMoon(time) {
+  const date = new Date(time), position = getMoonPosition(date, LATITUDE, LONGITUDE), light = getMoonIllumination(date);
+  const altitude2 = position.altitude * RAD, azimuth2 = position.azimuth * RAD, horizontal = Math.cos(altitude2);
+  return {
+    x: Math.sin(azimuth2) * horizontal,
+    y: Math.sin(altitude2),
+    z: -Math.cos(azimuth2) * horizontal,
+    fraction: light.fraction,
+    tilt: (light.angle - position.parallacticAngle) * RAD
+  };
+}
 export {
+  campusMoon,
   campusSun
 };
