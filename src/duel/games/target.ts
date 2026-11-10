@@ -1,4 +1,5 @@
-// 과녁 사격(23층) 브라우저 쪽: 사격장 가구 · 움직이는 과녁 · 점수판 그리기, 종이 총 자동으로 들기, 내 총알이 과녁에 닿으면 서버로 알리기
+// 과녁 사격(23층) 브라우저 쪽: 사격장 가구 · 움직이는 과녁 · 점수판 그리기, 종이 AK 자동으로 들기, 내 총알이 과녁에 닿으면 서버로 알리기
+// 총은 사격 대결과 같은 종이 AK(ak.ts: 1인칭만 · 누르고 있으면 연사 · 반동 · 탄창 20발과 장전 · 오른쪽 클릭 조준)
 // 과녁 일정은 서버가 정해 spawn으로 알리고, 자리는 target-path.mjs로 두 화면이 똑같이 셈한다. 점수는 서버가 확인한 take로만 바뀐다
 import type { DuelGame } from "../client";
 import type * as THREE from "three";
@@ -6,6 +7,7 @@ import { registerFurn } from "../furniture";
 import { TARGET_BOOTHS, TARGET_RAIL } from "../arena/target.mjs";
 import { TARGET, targetAt } from "../target-path.mjs";
 import { clamp } from "../../engine/world";
+import { mountAK } from "./ak";
 
 const SEAT = ["#2F6FDB", "#D9534F"];   // 경기 틀(.dhP)과 같은 선수 색
 const WOOD = 0xC98E5A, CREAM = "#FFF6E2", RED = "#E5484D";
@@ -75,6 +77,7 @@ type Pop = { s: THREE.Sprite; t: number };
 /* ───── 경기 ───── */
 export const game: DuelGame = {
   id: "target",
+  keys: [{ label: "쏘기(누르고 있기)", keys: ["좌클릭", "F"] }, { label: "조준", keys: ["우클릭"] }, { label: "장전", keys: ["R"] }],
   start(ctx) {
     const { THREE: T, grid, kit } = ctx, G = new T.Group(); ctx.group.add(G);
     if (!tpl) tpl = makeTpl(kit);
@@ -129,7 +132,7 @@ export const game: DuelGame = {
     function say(text: string) { feed.textContent = text; feed.classList.remove("off"); feedT = 1.8; }
 
     /* 내 총알: 쏜 것(onFire)을 기억해 두었다가, 그 총알이 과녁에 닿으면 쏜 자리 · 방향 · 시각을 서버로 */
-    ctx.onFire((s) => { shots.push({ ...s }); if (shots.length > 8) shots.shift(); });
+    ctx.onFire((s) => { shots.push({ ...s }); if (shots.length > 24) shots.shift(); });   // 연사라 넉넉히
     ctx.onBullet((b) => {
       const h = b.pos.y - grid.y0; if (h < -.1 || h > 1.5) return false;
       const now = ctx.now(), bx = grid.tX(b.pos.x), by = grid.tY(b.pos.z);
@@ -148,8 +151,9 @@ export const game: DuelGame = {
 
     function phase(m) {
       if (!ctx.mine) return;
-      if (m.phase === "playing" && !said) { said = true; ctx.toast("과녁을 맞혀요!", `${ctx.touch ? "🎆 버튼" : "왼쪽 클릭이나 F"}로 쏴요 · 금색 과녁은 3점`, 2400); }
+      if (m.phase === "playing" && !said) { said = true; ctx.toast("과녁을 맞혀요!", `${ctx.touch ? "🎆 버튼으로 쏴요" : "누르고 있으면 연사(왼쪽 클릭 · F) · R 장전 · 오른쪽 클릭 조준"} · 금색 과녁은 3점`, 3000); }
     }
+    const ak = mountAK(ctx);
     if (ctx.mine) { ctx.act("gun"); ctx.canFire(false); }
     for (const t of ctx.match.state?.live || []) add(t);
 
@@ -177,7 +181,7 @@ export const game: DuelGame = {
         paint(); drawBoard();
         if (!ctx.mine) return;
         const play = m.phase === "playing" && now < m.endsAt;
-        ctx.canFire(play);
+        ak.tick(m.phase === "countdown" || m.phase === "playing", play, 1);   // 쏘기 허락 · 연사 · 장전 · 조준
         if (m.phase === "result") return;
         if (ctx.me.act !== "gun" && (armT -= dt) <= 0) { armT = 1; ctx.act("gun"); }   // 경기 동안은 늘 종이 총을 든다
         if (play && ctx.me.f === ctx.floor) { // 과녁 마당이나 상대 부스로 넘어가면 내 부스로 돌려놓는다
@@ -185,6 +189,8 @@ export const game: DuelGame = {
           if (y < TARGET_RAIL - .05 || x < b.x || x > b.x + b.w) { ctx.place(clamp(x, b.x + .7, b.x + b.w - .7), TARGET_RAIL + 2); ctx.toast("사대 안에서 쏴요", "과녁 마당과 옆 부스에는 못 가요", 1400); }
         }
       },
+      key(e) { return ak.key(e, ctx.match.phase === "countdown" || ctx.match.phase === "playing"); },
+      pointer(e) { return ak.pointer(e, ctx.match.phase === "countdown" || ctx.match.phase === "playing"); },
       message(p) {
         if (p.k === "spawn") add(p.tgt);
         else if (p.k === "take") {
@@ -206,7 +212,7 @@ export const game: DuelGame = {
       stop() {
         for (const p of pops) { p.s.material.map?.dispose(); p.s.material.dispose(); }
         G.removeFromParent(); sb.geometry.dispose(); (sb.material as THREE.Material).dispose(); sbTex.dispose();
-        wrap.remove();
+        wrap.remove(); ak.stop();
         if (ctx.mine && ctx.me.act === "gun") ctx.act(null);
       },
     };

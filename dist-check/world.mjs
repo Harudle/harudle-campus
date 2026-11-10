@@ -271,6 +271,7 @@ function makeFloor(f) {
     F("elev", 29, y, 1, 2, { turn: Math.PI / 2, raw: true });
     calls.push({ x: 30, y, w: 1, h: 2 });
   }
+  if (f <= 13) F("duelbanner", 35, 10, 1, 1, { face: "s", raw: true });
   for (const y of [17, 20]) F("poster", 29, y, 1, 1, { face: "e", at: 30 - 0.07 / S, raw: true });
   F("poster", 36, 18.5, 1, 1, { face: "w", at: 36 + 0.07 / S, raw: true });
   [16, 20].forEach((y, i) => {
@@ -300,6 +301,8 @@ function makeFloor(f) {
     });
   };
   if (f === 11) {
+    F("duelbanner", 16, 10, 1, 1, { face: "s", raw: true });
+    F("duelbanner", 28, 31, 1, 1, { face: "w", raw: true });
     F("wallpiece", 14, 16, 1, 5, { mural: ["\uD070\uAC15\uC758\uC2E4", "Large Classroom"] });
     F("pillar", 7, 10, 1, 1);
     F("pillar", 7, 17, 1, 1);
@@ -349,6 +352,8 @@ function makeFloor(f) {
     F("crates", 51, 30, 3, 2);
   }
   if (f === 12) {
+    F("duelbanner", 19, 12, 1, 1, { face: "s", raw: true });
+    F("duelbanner", 32, 31, 1, 1, { face: "w", raw: true });
     Z(1, 3, 5, 21, "\uD398\uC5B4\uC874", "\uCC45\uC0C1 \uB2E4\uC12F \uAC1C\uAC00 \uD55C \uC904\uB85C \uB298\uC5B4\uC120 \uC790\uB9AC. \uB450 \uC0AC\uB78C\uC774 \uBAA8\uB2C8\uD130 \uD558\uB098\uB97C \uAC19\uC774 \uBCF4\uBA70 \uD398\uC5B4 \uD504\uB85C\uADF8\uB798\uBC0D\uC744 \uD574\uC694.", { tint: "#F4F2FA" });
     for (const y of [5, 9, 13, 17, 21]) F("pairrow", 2, y, 2, 2, { raw: true });
     Z(7, 1, 21, 11, "\uB77C\uC774\uBE0C\uB7EC\uB9AC", "12\xB713\uCE35\uC744 \uC787\uB294 \uBCF5\uCE35 \uC11C\uC7AC. \uCC3D\uAC00\uC5D4 \uC870\uC57D\uB3CC\uACFC \uD480 \uC704\uC5D0 1\uC778 \uCC45\uC0C1, \uC6D0\uD615 \uC11C\uAC00\uC5D0 \uAE30\uC220\uC11C\uC640 \uAC1C\uBC1C \uBB38\uD654 \uCC45\uC774 \uBE7C\uACE1\uD574\uC694.", { tint: "#FBF4E6" });
@@ -429,6 +434,7 @@ function makeFloor(f) {
     for (const x of [49, 51, 53]) F("rack", x, 24, 1, 7);
   }
   if (f === 13) {
+    F("duelbanner", 32, 33, 1, 1, { face: "w", raw: true });
     F("void", 1, 1, 30, 9);
     F("railbed", 1, 10, 30, 1);
     F("linelight", 1, 11, 30, 1);

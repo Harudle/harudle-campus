@@ -57,12 +57,13 @@ export type DuelCtx = {
   fire(aim?: number | null): void                  // 종이 총 한 발(엔진 연사 간격 0.25초). aim: 방향(없으면 보는 쪽)
   shootPaper(x: number, y: number, dir: number, lift: number, who?: DuelWho): void   // 종이 총알 모양만(다른 사람이 쏜 것 보여 주기)
   hitReact(who: DuelWho, dir: number): void        // 맞은 흔들림
-  onFire(fn: (s: { x: number; y: number; dir: number; lift: number; at: number }) => void): void   // 내가 쐈을 때
+  onFire(fn: (s: { x: number; y: number; dir: number; lift: number; pitch: number | null; at: number }) => void): void   // 내가 쐈을 때(pitch: 조준해 쏜 위아래, 위에서 볼 땐 null)
   onBullet(fn: (b: DuelBullet) => boolean | void): void      // 날아가는 총알 한 걸음마다(true면 거기서 맞은 것으로 멈춘다: 과녁 등)
   onBulletHit(fn: (b: DuelBullet) => boolean | void): void   // 총알이 사람에게 맞았을 때(true면 엔진 기본 처리를 안 한다)
   send(payload: Record<string, unknown>): void     // 서버로 duel:game(선수만 받는다)
   sync(): void                                     // 내 위치를 바로 서버로(판정 메시지 직전에)
   hud: HTMLElement                                 // 종목 HUD 자리(경기 틀 안). stop에서 비운다
+  myHp(hp: number | null, max?: number): void      // 아래 독에 내 체력(선수만). null이면 감춘다
   toast(title: string, text?: string, ms?: number): void; note(text: string): void
   now(): number                                    // 서버 시각 추정(ms)
   touch: boolean
@@ -76,7 +77,8 @@ export type DuelRun = {
   result?(end: DuelEnd): string                    // 결과 카드에 쓸 한 줄
   stop(): void                                     // 경기 화면을 나갈 때. 만든 것을 모두 치운다
 };
-export type DuelGame = { id: string; start(ctx: DuelCtx): DuelRun };
+// keys: 선수일 때 아래 독(표현 버튼 자리)에 보여 줄 조작 키. keys는 누르는 것들(예: ["J", "좌클릭"])
+export type DuelGame = { id: string; keys?: { label: string; keys: string[] }[]; start(ctx: DuelCtx): DuelRun };
 
 /* ═════ 엔진이 빌려주는 것(engine.ts duelHost) ═════ */
 export type DuelHost = {
@@ -185,7 +187,7 @@ export function mountDuel(host: DuelHost) {
   }
   function leave(why: string) {
     stopRun(); clearTimeout(runTimer); clearTimeout(offTimer);
-    const was = match; lastAr = was?.ar ?? lastAr; match = null; hud.hidden = true; count.hidden = true;
+    const was = match; lastAr = was?.ar ?? lastAr; match = null; hud.hidden = true; count.hidden = true; renderDock();
     if (card.hidden === false) window.setTimeout(() => { if (!match) card.hidden = true; }, 1200);
     if (isArena(me.f)) { const o = origin || lastBack || { f: 12, x: host.elev[0], y: host.elev[1], h: me.h }; lastBack = o; host.goFloor(o.f, [o.x, o.y]); }
     origin = null; LS.set("ww.duelBack", null);
@@ -212,7 +214,7 @@ export function mountDuel(host: DuelHost) {
   }
   function stopRun() {
     if (run) try { run.stop(); } catch (e) { console.error("[duel] stop", e); }
-    run = null; gameHud.replaceChildren(); hooks.fire.length = hooks.bullet.length = hooks.hit.length = 0;
+    run = null; gameHud.replaceChildren(); myHp = null; renderDock(); hooks.fire.length = hooks.bullet.length = hooks.hit.length = 0;
     host.move.lock = false; host.move.speed = 1; host.move.noFire = false; host.move.jumps = 2; host.move.ghost = null;
     host.move.view = null; host.move.noTags = false; host.move.gun = ""; host.move.fireGap = 250; host.move.bulletSpeed = 0; host.move.ads = false; host.move.reload = -1;
     const a = host.actor("me"); if (a?.doll) a.doll.anim.arms = null;
@@ -242,13 +244,30 @@ export function mountDuel(host: DuelHost) {
       onFire: (fn) => { hooks.fire.push(fn); }, onBullet: (fn) => { hooks.bullet.push(fn); }, onBulletHit: (fn) => { hooks.hit.push(fn); },
       send: (payload) => { if (match?.id === m.id && m.seat !== null) host.send({ ...payload, t: "duel:game", id: m.id }); },
       sync: () => host.presence(),
-      hud: gameHud, toast: (h, p = "", ms) => host.toast(h, p, ms), note: (t) => host.note(t), now, touch: host.touch,
+      hud: gameHud, myHp: (hp, max = 100) => { myHp = m.seat === null || hp === null ? null : { hp, max }; renderDock(); }, toast: (h, p = "", ms) => host.toast(h, p, ms), note: (t) => host.note(t), now, touch: host.touch,
     };
   }
   const bulletOf = (w, pos, target?) => ({ pos, vel: w.v, mine: w.shooter === me, by: seatOf(w.shooter), ...(target !== undefined ? { target: seatOf(target) } : {}) });
 
+  /* ───── 아래 독: 선수가 대결장에 있는 동안 표현 버튼(1~4 · Z · 폭죽) 대신 종목 조작 키와 내 체력 ───── */
+  const skills = document.getElementById("skills"), duelDock = document.getElementById("duelDock");
+  const ddKeys = duelDock?.querySelector<HTMLElement>(".ddKeys"), ddHp = duelDock?.querySelector<HTMLElement>(".ddHp");
+  let myHp: { hp: number; max: number } | null = null, dockKey = "", hpKey = "";
+  function renderDock() {
+    if (!skills || !duelDock) return;
+    const m = match, keys = m && m.seat !== null ? GAMES[m.game]?.keys : null, on = !!keys && isArena(me.f);
+    skills.hidden = on; duelDock.hidden = !on;
+    const k = on ? m.game : ""; if (k !== dockKey) { dockKey = k; ddKeys.innerHTML = on ? keys.map((x) => `<span class="dk"><span class="caps">${x.keys.map((c) => `<kbd>${esc(c)}</kbd>`).join("")}</span><b>${esc(x.label)}</b></span>`).join("") : ""; }
+    const h = on && myHp ? `${Math.max(0, Math.ceil(myHp.hp))}/${myHp.max}` : ""; if (h === hpKey) return; hpKey = h;
+    ddHp.hidden = !h; if (!h) return;
+    const r = Math.max(0, Math.min(1, myHp.hp / myHp.max));
+    ddHp.className = `ddHp${r <= .3 ? " low" : ""}`; ddHp.setAttribute("aria-label", `내 체력 ${Math.ceil(myHp.hp)}`);
+    ddHp.innerHTML = `<i aria-hidden="true">♥</i><span class="bar"><b style="width:${r * 100}%;--hp:${r * 100}%"></b></span><em>${Math.max(0, Math.ceil(myHp.hp))}</em>`;
+  }
+
   /* ───── 경기 틀(HUD) · 3·2·1 · 결과 ───── */
   function renderHud() {
+    renderDock();
     const m = match; hud.hidden = !m; if (!m) return;
     const g = duelGame(m.game);
     hud.querySelector(".dhName").textContent = `${g.icon} ${g.name}`;
@@ -366,7 +385,7 @@ export function mountDuel(host: DuelHost) {
     role: () => (match ? (match.seat === null ? 2 : 1) : 0),
     // 대결장에서는 같은 경기 방(ar) 사람만 보인다
     hides: (s: any) => s.f === me.f && isArena(me.f) && (s.ar !== (match?.ar ?? lastAr) || (match?.seat != null && s.dr === 2)),   // 다른 경기 방 · 선수 화면의 관전자
-    fired(dir: number, lift: number) { if (hooks.fire.length) { const s = { x: me.x, y: me.y, dir, lift, at: now() }; for (const fn of hooks.fire) safe(() => fn(s)); } },
+    fired(dir: number, lift: number, pitch: number | null = null) { if (hooks.fire.length) { const s = { x: me.x, y: me.y, dir, lift, pitch, at: now() }; for (const fn of hooks.fire) safe(() => fn(s)); } },
     bullet(w: any, pos: THREE.Vector3) { if (!hooks.bullet.length) return false; const b = bulletOf(w, pos); let hit = false; for (const fn of hooks.bullet) safe(() => { if (fn(b)) hit = true; }); return hit; },
     bulletHit(w: any, target: any, pos: THREE.Vector3) { if (!hooks.hit.length) return false; const b = bulletOf(w, pos, target); let eat = false; for (const fn of hooks.hit) safe(() => { if (fn(b)) eat = true; }); return eat; },
     // 채팅 명령어(/대결 · /수락 · /거절 · /관전 · /종료 · /기권 · /전적)
