@@ -43,7 +43,7 @@ function readOrigin(value) {
   return value;
 }
 
-// 하루들 연결 토큰(HS256 JWT) 확인. 맞으면 { id, nickname, profileImageUrl, jti, exp }, 아니면 이유를 담은 예외
+// 하루들 연결 토큰(HS256 JWT) 확인. exp는 원래 만료 시각, validUntilMs는 시간 차이 허용까지 포함한 검증 종료 시각이다.
 export function verifyLinkToken(token, key, { state, nowMs }) {
   if (typeof token !== "string" || token.length > 4096 || !JWT.test(token)) throw new Error("token_format");
   const [h, p, sig] = token.split(".");
@@ -55,14 +55,15 @@ export function verifyLinkToken(token, key, { state, nowMs }) {
   const c = JSON.parse(Buffer.from(p, "base64url").toString("utf8"));
   const now = Math.floor(nowMs / 1000), aud = Array.isArray(c.aud) ? c.aud : [c.aud];
   if (c.iss !== ISSUER || !aud.includes(AUDIENCE)) throw new Error("token_audience");
-  if (typeof c.exp !== "number" || c.exp + CLOCK_SKEW_S < now || (typeof c.iat === "number" && c.iat - CLOCK_SKEW_S > now)) throw new Error("token_expired");
+  const validUntilMs = (c.exp + CLOCK_SKEW_S) * 1000;
+  if (typeof c.exp !== "number" || nowMs >= validUntilMs || (typeof c.iat === "number" && c.iat - CLOCK_SKEW_S > now)) throw new Error("token_expired");
   if (typeof c.state !== "string" || !same(c.state, state)) throw new Error("token_state");
   if (typeof c.jti !== "string" || !c.jti || c.jti.length > 100) throw new Error("token_jti");
   if (typeof c.sub !== "string" || !UUID.test(c.sub)) throw new Error("token_subject");
   const nickname = typeof c.nickname === "string" ? c.nickname.replace(/[\u0000-\u001f]/g, "").trim().slice(0, 30) : "";
   if (!nickname) throw new Error("token_nickname");
   const img = typeof c.picture === "string" && /^https:\/\//.test(c.picture) ? c.picture.slice(0, 500) : null;
-  return { id: c.sub.toLowerCase(), nickname, profileImageUrl: img, jti: c.jti, exp: c.exp * 1000 };
+  return { id: c.sub.toLowerCase(), nickname, profileImageUrl: img, jti: c.jti, exp: c.exp * 1000, validUntilMs };
 }
 
 export function createAuth(env = process.env, opts = {}) {
@@ -93,7 +94,7 @@ export function createAuth(env = process.env, opts = {}) {
     try {
       const s = await store.getSession(key);
       if (s && !s.revokedAt && s.expiresAt > t) user = s.user;
-    } catch (e) { log.error?.("[auth] session lookup failed:", e.message); return hit?.user || null; }
+    } catch (e) { log.error?.("[auth] session lookup failed:", e.message); cache.delete(key); return null; }
     cache.set(key, { user, until: t + CACHE_MS }); if (cache.size > 5000) cache.clear();
     return user;
   }
@@ -115,7 +116,7 @@ export function createAuth(env = process.env, opts = {}) {
     try { profile = verifyLinkToken(linkToken, key, { state, nowMs: now() }); } catch (e) { return fail("token", e); }
     const sid = token(), t = now();
     try {
-      if (!(await store.useLinkToken(profile.jti, profile.exp))) return fail("token_reused");   // 같은 토큰은 한 번만
+      if (!(await store.useLinkToken(profile.jti, profile.validUntilMs))) return fail("token_reused");   // 같은 토큰은 한 번만
       await store.upsertUser({ id: profile.id, nickname: profile.nickname, profileImageUrl: profile.profileImageUrl, at: t });
       await store.createSession({ sidHash: sha256(sid), userId: profile.id, createdAt: t, expiresAt: t + SESSION_TTL_MS });
     } catch (e) { return fail("store", e); }
