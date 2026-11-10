@@ -12,7 +12,8 @@ const FEED_CACHE_MS = 10 * 60_000
 const FEED_MISSING_CACHE_MS = 60_000
 const FEED_TIMEOUT_MS = 5000
 
-export type FeedInfo = { imageUrl: string; shareUrl: string; author: string; category: string }
+/** authorId: 하루들 작가 계정 ID(캠퍼스 하루들 로그인의 사용자 ID와 같다). 없으면 빈 문자열 */
+export type FeedInfo = { imageUrl: string; shareUrl: string; author: string; authorId: string; category: string }
 export type FeedResult = { status: 'ok'; feed: FeedInfo } | { status: 'missing' } | { status: 'unavailable' }
 
 /**
@@ -58,6 +59,7 @@ export function createFeedFetcher(harudleBaseUrl = 'https://www.harudle.com') {
           imageUrl: data.imageUrl,
           shareUrl: `${harudleBaseUrl}/feeds/${feedId}`,
           author: typeof data.author?.nickname === 'string' ? data.author.nickname : '우리끼리 작가',
+          authorId: typeof data.author?.id === 'string' ? data.author.id.toLowerCase() : '',
           category: typeof data.category?.name === 'string' ? data.category.name : '우리끼리',
         },
       }

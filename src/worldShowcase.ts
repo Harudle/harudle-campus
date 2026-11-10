@@ -1,4 +1,4 @@
-// 14층 방에 거는 하루들 월드 내용: 전시관의 인기 네컷만화, 릴레이 소설관의 최신 화, 오락실의 사용자 퀴즈.
+// 14층 방에 거는 하루들 월드 내용: 전시관의 인기 네컷만화, 릴레이 상영관의 최신 화, 오락실의 사용자 퀴즈.
 // 월드 서버(world/server/campus.ts)와 하루들 피드 중계(/api/v1/feeds)에서 받는다. three.js 없이 데이터만 다룬다.
 
 export type ShowItem = {
@@ -12,11 +12,13 @@ export type ShowItem = {
   action: string
   /** 앞에서 점프하면 그림 속 게임(#crab)으로 뛰어든다: 메인 전시실에 걸린 꽃게 게임 만화 */
   dive?: boolean
+  /** 작가 방명록 판에 쪽지로 붙이는 최근 응원과 전체 수 */
+  cheers?: { notes: { nickname: string; message: string }[]; total: number }
   /** 휴대폰 화면(하루들 모바일 피드)에 쓰는 글쓴이 · 분류 · 좋아요 · 댓글 */
   post?: { nickname: string; category: string; likes: number; comments: number }
 }
 
-/** work: 메인 전시실 인기순 · a0~a7: 작가 전시실(좋아요 합 순) 작품 · cheer: 작가 방명록 · album: 작가의 방 앨범북(그 작가 만화 전부) · relay · song · drama */
+/** work: 메인 전시실 인기순 · a0~a7: 작가 전시실(좋아요 합 순) 작품 · cheer: 작가 방명록 · album: 작가 작품 앨범북(그 작가 만화 전부) · relay · song · drama */
 export type ShowSource = string
 
 /** 월드 메인 전시실과 같다: 작가 전시실 8곳, 한 방에 거는 작품 수 상한 */
@@ -28,6 +30,8 @@ const PAGE_SIZE = 50
 const MAX_PAGES = 6
 
 const TIMEOUT_MS = 8000
+/** 방명록 판에 붙이는 최근 응원 쪽지 수 */
+const CHEER_NOTES = 3
 const ROOM_TITLES = { song: '노래 맞추기', drama: '드라마·영화 맞추기' }
 
 type Work = { id: string; imageUrl: string; authorId: string; nickname: string; likeCount: number; commentCount: number; category: string }
@@ -90,14 +94,25 @@ async function loadGallery(): Promise<Record<string, ShowItem[]>> {
   artists.forEach((artist, index) => {
     out[`a${index}`] = artist.list.map((work) => workItem(work, `${artist.nickname} · ♥${work.likeCount}`))
     const query = `cheers=${encodeURIComponent(artist.authorId)}&name=${encodeURIComponent(artist.nickname)}`
-    out.cheer.push({ view: query, image: null, caption: `${artist.nickname} 작가 방명록`, action: '응원 방명록 쓰기' })
+    out.cheer.push({ view: query, image: null, caption: `${artist.nickname} 작가 방명록`, action: '응원 방명록 쓰기', cheers: { notes: [], total: 0 } })
     out.album.push({ view: `album=${encodeURIComponent(artist.authorId)}&name=${encodeURIComponent(artist.nickname)}`, image: null, caption: `${artist.list.length}편 모두 보기`, action: '앨범북 펼쳐 보기' })
-    out.plate.push({ view: query, image: null, caption: `${artist.nickname} 작가의 방`, action: '응원 방명록 쓰기' })
+    out.plate.push({ view: query, image: null, caption: `${artist.nickname} 작가 작품`, action: '응원 방명록 쓰기' })
   })
+  // 방명록마다 최근 응원을 받아 판에 쪽지로 붙인다. 못 받은 방은 빈 판(첫 응원을 기다리는 판)으로 둔다
+  await Promise.all(artists.map(async (artist, index) => {
+    try {
+      const data = await getJson(`/cheers?author=${encodeURIComponent(artist.authorId)}`)
+      const notes = (data.items ?? []).slice(0, CHEER_NOTES).map((cheer) => ({ nickname: String(cheer.nickname ?? ''), message: String(cheer.message ?? '') }))
+      const total = Number(data.total) || notes.length
+      out.cheer[index] = { ...out.cheer[index], caption: total ? `${artist.nickname} 작가 방명록 · 응원 ${total}` : `${artist.nickname} 작가 방명록`, cheers: { notes, total } }
+    } catch {
+      // 방명록을 못 받아도 판은 그대로 눌러서 쓸 수 있다
+    }
+  }))
   return out
 }
 
-/** 릴레이 소설관: 최신 화부터 거꾸로. 한 화도 없으면 1화 그리기 자리만 둔다 */
+/** 릴레이 상영관: 최신 화부터 거꾸로. 한 화도 없으면 1화 그리기 자리만 둔다 */
 async function loadRelay(count: number): Promise<ShowItem[]> {
   const data = await getJson('/relay')
   const episodes = (data.items ?? []).slice(-count).reverse()
@@ -108,6 +123,13 @@ async function loadRelay(count: number): Promise<ShowItem[]> {
     caption: `${episode.number}화 · ${episode.author}`,
     action: `${episode.number}화 보기`,
   }))
+}
+
+/** 상영관 좌석에서 보는 영화: 지금까지 올라온 모든 화를 1화부터 차례로 */
+export type ReelEpisode = { number: number; author: string; image: string | null }
+export async function loadRelayReel(): Promise<ReelEpisode[]> {
+  const data = await getJson('/relay')
+  return (data.items ?? []).map((episode) => ({ number: episode.number, author: episode.author ?? '', image: textureUrl(episode.imageUrl) }))
 }
 
 /** 오락실: 방마다 걸린 사용자 퀴즈. 빈 자리에는 내 문제 걸기 */

@@ -1,11 +1,14 @@
 import { useEffect, useId, useState, type FormEvent } from 'react'
+import { useCampusLogin } from '../data/campusLogin'
 import { registerEpisode, type RegisterEpisodeResult, type RelayEpisode } from '../data/relayEpisodes'
 import { HARUDLE_SHORT_URL } from '../lib/brand'
+import { LoginGate } from './LoginGate'
 import { useModalDialog } from './useModalDialog'
 
 const ERROR_COPY: Record<Exclude<RegisterEpisodeResult, 'ok'>, string> = {
   bad_link: '하루들 피드 글의 공유 링크를 넣어 주세요. https://www.harudle.com/feeds/… 형태예요.',
-  bad_password: '비밀번호는 4자 이상 64자 이하로 정해 주세요.',
+  login_required: '하루들에 로그인해야 올릴 수 있어요.',
+  not_author: '내가 그린 만화만 올릴 수 있어요. 로그인한 하루들 계정으로 게시한 글의 링크를 넣어 주세요.',
   duplicate: '이미 올라온 만화예요.',
   not_found: '피드에서 이 글을 찾지 못했어요. 피드에 게시했는지 확인해 주세요.',
   rate_limited: '올리기가 너무 잦아요. 잠시 후 다시 시도해 주세요.',
@@ -28,9 +31,10 @@ export function RegisterEpisodeModal({ open, latest, onRegistered, onClose }: {
   const { dialogRef, contentRef } = useModalDialog(open)
   const titleId = useId()
   const [shareUrl, setShareUrl] = useState('')
-  const [password, setPassword] = useState('')
   const [sending, setSending] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // 올리기는 하루들에 로그인한 작가 본인만: 내 글인지 서버가 계정으로 확인하므로 비밀번호를 받지 않는다
+  const login = useCampusLogin(open)
 
   useEffect(() => {
     if (open) setError(null)
@@ -39,20 +43,19 @@ export function RegisterEpisodeModal({ open, latest, onRegistered, onClose }: {
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     if (sending) return
-    if (!shareUrl.trim() || !password) {
-      setError('공유 링크와 비밀번호를 모두 적어 주세요.')
+    if (!shareUrl.trim()) {
+      setError('공유 링크를 넣어 주세요.')
       return
     }
     setSending(true)
     setError(null)
-    const result = await registerEpisode({ shareUrl, password })
+    const result = await registerEpisode({ shareUrl })
     setSending(false)
     if (result !== 'ok') {
       setError(ERROR_COPY[result])
       return
     }
     setShareUrl('')
-    setPassword('')
     onRegistered()
   }
 
@@ -99,51 +102,39 @@ export function RegisterEpisodeModal({ open, latest, onRegistered, onClose }: {
           <li>
             완성한 만화를 피드에 게시할 때 <strong>이벤트</strong> 카테고리를 골라 주시고, 공유 링크를 복사해요.
           </li>
-          <li>아래에 공유 링크를 내면 소설관에 이어 붙어요.</li>
+          <li>아래에 공유 링크를 내면 상영관에 이어 붙어요.</li>
         </ol>
 
-        <form className="mt-3 flex flex-col gap-2" onSubmit={submit}>
-          <label className={LABEL} htmlFor={`${titleId}-link`}>
-            공유 링크
-          </label>
-          <input
-            id={`${titleId}-link`}
-            inputMode="url"
-            value={shareUrl}
-            placeholder="https://www.harudle.com/feeds/…"
-            autoComplete="off"
-            onChange={(event) => setShareUrl(event.target.value)}
-            className={INPUT}
-          />
-          <label className={LABEL} htmlFor={`${titleId}-password`}>
-            비밀번호
-          </label>
-          <input
-            id={`${titleId}-password`}
-            type="password"
-            value={password}
-            maxLength={64}
-            autoComplete="new-password"
-            placeholder="4자 이상"
-            aria-describedby={`${titleId}-password-hint`}
-            onChange={(event) => setPassword(event.target.value)}
-            className={INPUT}
-          />
-          <p id={`${titleId}-password-hint`} className="text-xs text-haru-800">
-            내릴 때 필요해요. 찾을 수 없으니 잘 기억해 주세요. 다른 곳에서 쓰는 비밀번호는 넣지 마세요.
-          </p>
-          <p aria-live="polite" className="min-h-5 text-sm text-red-700">
-            {error}
-          </p>
-          <button
-            type="submit"
-            disabled={sending}
-            className="block w-full cursor-pointer rounded-xl border-2 border-ink bg-haru-600 px-5 py-3 text-center font-display text-xl text-white shadow-[3px_3px_0_var(--color-ink)] transition hover:bg-haru-800 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-haru-600 disabled:cursor-wait disabled:opacity-70"
-          >
-            {sending ? '확인하는 중…' : '올리기'}
-          </button>
-          <p className="text-xs leading-relaxed text-haru-800">내가 게시한 만화만 올려 주세요. 신고가 쌓인 화는 가려져요.</p>
-        </form>
+        {login.status === 'in' ? (
+          <form className="mt-3 flex flex-col gap-2" onSubmit={submit}>
+            <label className={LABEL} htmlFor={`${titleId}-link`}>
+              공유 링크
+            </label>
+            <input
+              id={`${titleId}-link`}
+              inputMode="url"
+              value={shareUrl}
+              placeholder="https://www.harudle.com/feeds/…"
+              autoComplete="off"
+              onChange={(event) => setShareUrl(event.target.value)}
+              className={INPUT}
+            />
+            <p className="text-xs text-haru-800">하루들 {login.nickname}(으)로 올려요. 내가 올린 화는 나중에 이 계정으로 내릴 수 있어요.</p>
+            <p aria-live="polite" className="min-h-5 text-sm text-red-700">
+              {error}
+            </p>
+            <button
+              type="submit"
+              disabled={sending}
+              className="block w-full cursor-pointer rounded-xl border-2 border-ink bg-haru-600 px-5 py-3 text-center font-display text-xl text-white shadow-[3px_3px_0_var(--color-ink)] transition hover:bg-haru-800 focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-haru-600 disabled:cursor-wait disabled:opacity-70"
+            >
+              {sending ? '확인하는 중…' : '올리기'}
+            </button>
+            <p className="text-xs leading-relaxed text-haru-800">내가 그린 만화만 올릴 수 있어요. 신고가 쌓인 화는 가려져요.</p>
+          </form>
+        ) : (
+          <LoginGate login={login} reason="릴레이 만화는 하루들에 로그인한 작가 본인만 올릴 수 있어요." />
+        )}
       </article>
     </dialog>
   )

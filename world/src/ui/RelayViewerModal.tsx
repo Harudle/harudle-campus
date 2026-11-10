@@ -14,7 +14,8 @@ type RelayViewerModalProps = {
   /** 열어 줄 화 번호. null이면 닫힌다. */
   startEpisode: number | null
   onDrawNext: () => void
-  onRemove: (id: number, password: string) => Promise<RemoveResult>
+  /** 로그인한 사람이 올린 화만 내린다 */
+  onRemove: (id: number) => Promise<RemoveResult>
   onReport: (id: number) => Promise<boolean>
   onClose: () => void
 }
@@ -123,7 +124,10 @@ export function RelayViewerModal({ episodes, startEpisode, onDrawNext, onRemove,
               <RemoveControls
                 key={episode.id}
                 removeLabel="이 화 내리기"
-                onRemove={(password) => onRemove(episode.id, password)}
+                needsPassword={false}
+                canRemove={Boolean(episode.mine)}
+                confirmText={`${episode.number}화를 내릴까요? 내리면 되돌릴 수 없어요.`}
+                onRemove={() => onRemove(episode.id)}
                 onReport={() => onReport(episode.id)}
                 onRemoved={() => {
                   if (episodes.length <= 1) onClose()

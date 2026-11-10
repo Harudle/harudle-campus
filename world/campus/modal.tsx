@@ -1,6 +1,6 @@
 // 캠퍼스 전용: 14층 방에 걸린 월드 내용을 눌렀을 때 그 창만 띄운다(월드 3D 공간 없이).
 // 주소의 #으로 무엇을 열지 정한다: #scoop · #author · #artwork=<피드 id> · #relay=<화 번호> · #relay-new · #quiz=<id>&room=<방> · #register=<방>
-// 전시관: #phone · #sketchbook · #easel(함께 그리는 이젤) · #crab(그림 속 게임) · #cheers=<작가 id>&name=<닉네임> · #album=<작가 id>&name=<닉네임>(작가의 방 앨범북)
+// 전시관: #phone · #sketchbook · #easel(함께 그리는 이젤) · #crab(그림 속 게임) · #cheers=<작가 id>&name=<닉네임> · #album=<작가 id>&name=<닉네임>(작가 작품 앨범북)
 // 창을 닫으면 CLOSED, 새로 올리거나 걸면 CHANGED를 캠퍼스에 알린다.
 import { StrictMode, useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
@@ -72,7 +72,7 @@ function Artwork({ id }: { id: string }) {
   return <ArtworkModal work={work} onClose={close} />
 }
 
-/** 작가의 방 앨범북: 그 작가의 받은 만화를 모두 넘겨 본다 */
+/** 작가 작품 앨범북: 그 작가의 받은 만화를 모두 넘겨 본다 */
 function Album({ id, name }: { id: string; name: string }) {
   const { exhibition, status } = useExhibition(0, ARTWORK_COUNT, ARTWORK_COUNT)
   const zone = exhibition.zones.find((item) => item.authorId === id) ?? null
@@ -80,7 +80,21 @@ function Album({ id, name }: { id: string; name: string }) {
 }
 
 function Cheers({ id, name }: { id: string; name: string }) {
-  const board = useCheers(id)
+  const cheers = useCheers(id)
+  // 글을 남기거나 지우면 캠퍼스에 알려, 작가 작품 자리의 방명록 판에 붙은 쪽지를 새로 그리게 한다
+  const board = {
+    ...cheers,
+    post: async (nickname: string, message: string) => {
+      const result = await cheers.post(nickname, message)
+      if (result === 'ok') tell(CHANGED)
+      return result
+    },
+    remove: async (cheerId: number) => {
+      const removed = await cheers.remove(cheerId)
+      if (removed) tell(CHANGED)
+      return removed
+    },
+  }
   return <CheerBoardModal open artist={name} board={board} onClose={close} />
 }
 
@@ -192,13 +206,14 @@ function Relay({ start, drawing }: { start: number | null; drawing: boolean }) {
         episodes={episodes}
         startEpisode={registering ? null : start}
         onDrawNext={() => setRegistering(true)}
-        onRemove={async (id, password) => {
-          const result = await remove(id, password)
+        onRemove={async (id) => {
+          const result = await remove(id)
           if (result === 'ok') tell(CHANGED)
           return result
         }}
         onReport={report}
-        onClose={close}
+        // 이어 그리기로 넘어가면 보기 창이 닫히면서 close 이벤트가 온다. 그때 캠퍼스 창까지 닫지 않고 올리기 화면을 띄운다
+        onClose={registering ? () => {} : close}
       />
       <RegisterEpisodeModal
         open={registering}

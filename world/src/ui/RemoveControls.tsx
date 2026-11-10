@@ -6,6 +6,8 @@ const SMALL_BUTTON =
 
 const REMOVE_ERRORS: Record<Exclude<RemoveResult, 'ok'>, string> = {
   wrong_password: '비밀번호가 맞지 않아요.',
+  login_required: '하루들에 로그인해야 내릴 수 있어요.',
+  not_owner: '내가 올린 것만 내릴 수 있어요.',
   rate_limited: '시도가 너무 많아요. 10분 뒤에 다시 해 보세요.',
   failed: '내리지 못했어요. 잠시 후 다시 시도해 주세요.',
 }
@@ -14,6 +16,8 @@ type RemoveControlsProps = {
   /** false면 비밀번호를 묻지 않고 바로 내린다. 비밀번호 도입 전 문제만 해당한다. */
   needsPassword?: boolean
   canRemove?: boolean
+  /** 있으면 내리기 전에 한 번 묻는다(비밀번호를 묻지 않을 때) */
+  confirmText?: string
   removeLabel: string
   onRemove: (password: string) => Promise<RemoveResult>
   onReport: () => Promise<boolean>
@@ -21,7 +25,7 @@ type RemoveControlsProps = {
 }
 
 /** 비밀번호를 아는 사람만 내릴 수 있다. 다른 사람은 신고할 수 있다. */
-export function RemoveControls({ needsPassword = true, canRemove = true, removeLabel, onRemove, onReport, onRemoved }: RemoveControlsProps) {
+export function RemoveControls({ needsPassword = true, canRemove = true, confirmText, removeLabel, onRemove, onReport, onRemoved }: RemoveControlsProps) {
   const [asking, setAsking] = useState(false)
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -31,6 +35,7 @@ export function RemoveControls({ needsPassword = true, canRemove = true, removeL
 
   const remove = async (value: string) => {
     if (sending) return
+    if (confirmText && !needsPassword && !window.confirm(confirmText)) return
     setSending(true)
     setError(null)
     const result = await onRemove(value)

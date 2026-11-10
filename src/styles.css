@@ -427,3 +427,26 @@ body.sideTucked:not(.touch) #sideShow{display:flex}
 /* 14층 하루들 월드 창(src/worldFloor.ts): 바탕이 비어 있어 14층이 뒤에 비쳐 보인다 */
 #worldWindow{position:fixed;inset:0;z-index:100}
 #worldWindow iframe{position:absolute;inset:0;width:100%;height:100%;border:0;display:block;color-scheme:normal;background:transparent}
+
+/* 릴레이 상영관 영화: 좌석에 앉으면 어두운 화면에 1화부터 차례로 */
+#movie{position:fixed;inset:0;z-index:40;background:radial-gradient(ellipse at 50% 40%,rgba(30,24,44,.92),rgba(6,5,10,.97));display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px 16px;color:#FFFFFF;font-family:var(--hand)}
+#movie[hidden]{display:none}
+#movie .movie-stage{position:relative;width:min(92vw,calc((100vh - 170px) * 1));aspect-ratio:1;max-width:760px;display:grid;place-items:center;border:6px solid #15121F;border-radius:6px;background:#0C0A12;box-shadow:0 0 80px rgba(255,242,196,.18)}
+#movie .movie-shot{width:100%;height:100%;object-fit:contain;opacity:0;transition:opacity .6s}
+#movie .movie-shot.in{opacity:1}
+#movie .movie-card{display:none;text-align:center;padding:20px}
+#movie.card .movie-card{display:block}
+#movie.card .movie-shot{display:none}
+#movie .movie-card b{display:block;font-size:clamp(30px,6vw,54px);color:#FFD97A}
+#movie .movie-card p{margin-top:10px;font-size:clamp(17px,3vw,24px);color:#D9CCF5}
+#movie .movie-end{margin-top:22px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+#movie button{font-family:var(--hand);font-weight:700;font-size:18px;color:#FFFFFF;background:rgba(255,255,255,.08);border:2px solid rgba(255,255,255,.5);border-radius:12px;padding:6px 16px;cursor:pointer}
+#movie button:hover{background:rgba(255,255,255,.18)}
+#movie .movie-end button[data-k="draw"]{background:#FFD97A;color:#2B2140;border-color:#FFD97A}
+#movie .movie-bar{display:flex;justify-content:space-between;gap:12px;width:min(92vw,760px);font-size:20px}
+#movie .movie-count{color:#FFD97A}
+#movie .movie-progress{width:min(92vw,760px);height:4px;border-radius:2px;background:rgba(255,255,255,.15);overflow:hidden}
+#movie .movie-progress i{display:block;height:100%;width:0;background:#FFD97A}
+#movie .movie-ctrl{display:flex;gap:14px;align-items:center}
+#movie .movie-auto{font-size:16px;color:#B9A6EC}
+#movie .movie-card p.movie-again{font-size:clamp(15px,2.4vw,19px);color:#8F8BA0}

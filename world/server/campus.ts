@@ -19,12 +19,14 @@ export type WorldOptions = {
   allowedOrigins: string[]
   trustProxy?: boolean
   maxPlayers?: number
+  /** 요청의 하루들 로그인 사용자(캠퍼스 로그인). 없으면 릴레이 만화를 올리거나, 퀴즈를 풀거나 걸 수 없다 */
+  userOf?: (request: IncomingMessage) => Promise<{ id: string; nickname?: string } | null>
 }
 
 export const WORLD_WS_PATH = '/world/ws'
 
 /** 월드 실시간 접속(/world/ws)과 월드 API를 server에 붙인다. handle이 true를 돌려주면 월드가 응답한 요청이다. */
-export function startWorld(server: Server, { dataDir, allowedOrigins, trustProxy = false, maxPlayers = 150 }: WorldOptions) {
+export function startWorld(server: Server, { dataDir, allowedOrigins, trustProxy = false, maxPlayers = 150, userOf }: WorldOptions) {
   const allowed = new Set(allowedOrigins)
   const isOriginAllowed = (origin: string | undefined) => origin !== undefined && allowed.has(origin)
   const db = (name: string) => join(dataDir, `${name}.db`)
@@ -33,8 +35,8 @@ export function startWorld(server: Server, { dataDir, allowedOrigins, trustProxy
   const easelStore = createEaselStore(db('easel'))
   const handlers = [
     createCheersHandler({ databasePath: db('cheers'), isOriginAllowed, trustProxy }),
-    createQuizzesHandler({ databasePath: db('quizzes'), isOriginAllowed, trustProxy }),
-    createRelayHandler({ databasePath: db('relay'), isOriginAllowed, trustProxy }),
+    createQuizzesHandler({ databasePath: db('quizzes'), isOriginAllowed, trustProxy, userOf }),
+    createRelayHandler({ databasePath: db('relay'), isOriginAllowed, trustProxy, userOf }),
     createCrabRankingHandler({ databasePath: db('crabgame'), isOriginAllowed, trustProxy }),
   ]
   const proxyHarudle = createHarudleProxy({ trustProxy })

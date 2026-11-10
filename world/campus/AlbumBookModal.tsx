@@ -1,4 +1,4 @@
-// 14층 작가의 방 앨범북: 방 벽에는 두 편만 걸리므로, 그 작가가 받은 피드의 만화를 모두 책처럼 펼쳐 넘겨 본다.
+// 14층 작가 작품 앨범북: 작가 벽에는 두 편만 걸리므로, 그 작가가 받은 피드의 만화를 모두 책처럼 펼쳐 넘겨 본다.
 // 한 번에 두 쪽(좁은 화면은 한 쪽)씩 넘기고, 모아 보기로 전체를 작게 본다. 만화를 누르면 크게 보기(ArtworkModal)로 연다.
 import { useEffect, useId, useState, type KeyboardEvent, type PointerEvent } from 'react'
 import type { ArtistZone, GalleryStatus, GalleryWork } from '../src/data/galleryWorks'
@@ -111,7 +111,7 @@ export function AlbumBookModal({ zone, name, status, onClose }: AlbumBookModalPr
 
         <header className="flex flex-wrap items-end justify-between gap-2 pr-12">
           <div>
-            <p className="text-sm text-haru-800">작가의 방 앨범북</p>
+            <p className="text-sm text-haru-800">작가 작품 앨범북</p>
             <h2 id={titleId} className="font-display text-2xl leading-tight text-haru-600 sm:text-3xl">
               {zone?.nickname ?? name} 작가의 만화
             </h2>

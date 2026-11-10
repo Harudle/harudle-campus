@@ -895,7 +895,7 @@ function createHarudleProxy({ trustProxy = false }) {
 }
 
 // world/server/quizzes.ts
-import { createHash as createHash3, randomBytes as randomBytes4, timingSafeEqual as timingSafeEqual3 } from "node:crypto";
+import { createHash as createHash3, randomBytes as randomBytes4 } from "node:crypto";
 import { mkdirSync as mkdirSync5 } from "node:fs";
 import { dirname as dirname5 } from "node:path";
 import { DatabaseSync as DatabaseSync5 } from "node:sqlite";
@@ -910,9 +910,6 @@ import { randomBytes as randomBytes3, scrypt, timingSafeEqual as timingSafeEqual
 import { promisify } from "node:util";
 var SHARE_HOSTS = /* @__PURE__ */ new Set(["harudle.com", "www.harudle.com"]);
 var SHARE_PATH_PATTERN = /^\/feeds\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/?$/i;
-var MIN_PASSWORD_LENGTH = 4;
-var MAX_PASSWORD_LENGTH = 64;
-var PASSWORD_KEY_BYTES = 32;
 var FEED_CACHE_MS2 = 10 * 6e4;
 var FEED_MISSING_CACHE_MS = 6e4;
 var FEED_TIMEOUT_MS = 5e3;
@@ -952,6 +949,7 @@ function createFeedFetcher(harudleBaseUrl = "https://www.harudle.com") {
           imageUrl: data.imageUrl,
           shareUrl: `${harudleBaseUrl}/feeds/${feedId}`,
           author: typeof data.author?.nickname === "string" ? data.author.nickname : "\uC6B0\uB9AC\uB07C\uB9AC \uC791\uAC00",
+          authorId: typeof data.author?.id === "string" ? data.author.id.toLowerCase() : "",
           category: typeof data.category?.name === "string" ? data.category.name : "\uC6B0\uB9AC\uB07C\uB9AC"
         }
       };
@@ -963,24 +961,12 @@ function createFeedFetcher(harudleBaseUrl = "https://www.harudle.com") {
   };
 }
 var deriveKey = promisify(scrypt);
-function isValidPassword(value) {
-  return typeof value === "string" && charLength(value) >= MIN_PASSWORD_LENGTH && charLength(value) <= MAX_PASSWORD_LENGTH;
-}
-async function hashPassword(password) {
-  const salt = randomBytes3(16);
-  return { salt, hash: await deriveKey(password, salt, PASSWORD_KEY_BYTES) };
-}
-async function verifyPassword(value, salt, hash) {
-  if (typeof value !== "string" || charLength(value) > MAX_PASSWORD_LENGTH) return false;
-  return timingSafeEqual2(await deriveKey(value, salt, PASSWORD_KEY_BYTES), hash);
-}
 
 // world/server/quizzes.ts
 var ROOM_PATTERN = /^(song|drama)$/;
 var MAX_ANSWER_LENGTH = 100;
 var MAX_ACCEPTED_ANSWERS = 5;
 var MAX_HINT_LENGTH = 80;
-var MAX_NICKNAME_LENGTH3 = 12;
 var DEFAULT_NICKNAME3 = "\uC775\uBA85\uC758 \uB3C4\uC804\uC790";
 var LIST_SIZE = 30;
 var SOLVERS_SHOWN = 20;
@@ -1007,7 +993,8 @@ function createQuizzesHandler({
   databasePath,
   isOriginAllowed,
   trustProxy = false,
-  harudleBaseUrl
+  harudleBaseUrl,
+  userOf = async () => null
 }) {
   mkdirSync5(dirname5(databasePath), { recursive: true });
   const database = new DatabaseSync5(databasePath);
@@ -1036,14 +1023,15 @@ function createQuizzesHandler({
   if (!columns.some((column) => column.name === "password_hash")) {
     database.exec("ALTER TABLE user_quizzes ADD COLUMN password_hash BLOB; ALTER TABLE user_quizzes ADD COLUMN password_salt BLOB;");
   }
+  if (!columns.some((column) => column.name === "owner_id")) database.exec("ALTER TABLE user_quizzes ADD COLUMN owner_id TEXT");
   const listByRoom = database.prepare(
-    "SELECT id, room, feed_id, hint, created_at, password_hash IS NOT NULL AS has_password FROM user_quizzes WHERE room = ? AND hidden = 0 ORDER BY id DESC LIMIT ?"
+    "SELECT id, room, feed_id, hint, created_at, owner_id FROM user_quizzes WHERE room = ? AND hidden = 0 ORDER BY id DESC LIMIT ?"
   );
   const findVisible = database.prepare("SELECT answers FROM user_quizzes WHERE id = ? AND hidden = 0");
-  const findCredentials = database.prepare("SELECT token_hash, password_hash, password_salt FROM user_quizzes WHERE id = ?");
+  const findOwner = database.prepare("SELECT feed_id, owner_id FROM user_quizzes WHERE id = ?");
   const findFeed = database.prepare("SELECT id FROM user_quizzes WHERE feed_id = ?");
   const insertQuiz = database.prepare(
-    "INSERT INTO user_quizzes (room, feed_id, answers, hint, created_at, token_hash, password_hash, password_salt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+    "INSERT INTO user_quizzes (room, feed_id, answers, hint, created_at, token_hash, owner_id) VALUES (?, ?, ?, ?, ?, ?, ?)"
   );
   const removeSolvers = database.prepare("DELETE FROM quiz_solvers WHERE quiz_id = ?");
   const removeQuiz = database.prepare("DELETE FROM user_quizzes WHERE id = ?");
@@ -1066,13 +1054,18 @@ function createQuizzesHandler({
     const rows = listSolvers.all(quizId, SOLVERS_SHOWN);
     return { solverCount: total, solvers: rows.map((row) => row.nickname) };
   };
-  const toQuiz = (row, feed) => ({
+  const ownedBy = (row, feed, userId) => Boolean(userId) && (row.owner_id ? row.owner_id === userId : feed?.authorId === userId);
+  const toQuiz = (row, feed, userId) => ({
     id: row.id,
     room: row.room,
     hint: row.hint,
     createdAt: row.created_at,
-    hasPassword: row.has_password === 1,
-    ...feed,
+    /** 지금 로그인한 사람이 건 문제면 true(내리기 버튼을 보인다) */
+    mine: ownedBy(row, feed, userId),
+    imageUrl: feed.imageUrl,
+    shareUrl: feed.shareUrl,
+    author: feed.author,
+    category: feed.category,
     ...solverSummary(row.id)
   });
   const handle = (request, response) => {
@@ -1126,8 +1119,8 @@ function createQuizzesHandler({
         return true;
       }
       const rows = listByRoom.all(room, LIST_SIZE);
-      Promise.all(rows.map(async (row) => ({ row, result: await fetchFeed(row.feed_id) }))).then((results) => {
-        const items = results.flatMap(({ row, result }) => result.status === "ok" ? [toQuiz(row, result.feed)] : []);
+      Promise.all([userOf(request).catch(() => null), Promise.all(rows.map(async (row) => ({ row, result: await fetchFeed(row.feed_id) })))]).then(([user, results]) => {
+        const items = results.flatMap(({ row, result }) => result.status === "ok" ? [toQuiz(row, result.feed, user?.id)] : []);
         respond(200, { items });
       }).catch(fail);
       return true;
@@ -1139,7 +1132,9 @@ function createQuizzesHandler({
     const register = async () => {
       const body = await readJson();
       if (!body) return respond(400, { code: "invalid" });
-      const { room, shareUrl, answer, hint, password } = body;
+      const user = await userOf(request);
+      if (!user) return respond(401, { code: "login_required" });
+      const { room, shareUrl, answer, hint } = body;
       if (typeof room !== "string" || !ROOM_PATTERN.test(room)) return respond(400, { code: "invalid" });
       const feedId = parseFeedId(shareUrl);
       if (!feedId) return respond(400, { code: "bad_link" });
@@ -1147,16 +1142,14 @@ function createQuizzesHandler({
       if (!accepted) return respond(400, { code: "bad_answer" });
       const cleanHint = typeof hint === "string" ? cleanText(hint).replace(/\n/g, " ") : "";
       if (charLength(cleanHint) > MAX_HINT_LENGTH || LINK_PATTERN.test(cleanHint)) return respond(400, { code: "bad_hint" });
-      if (!isValidPassword(password)) return respond(400, { code: "bad_password" });
       if (findFeed.get(feedId)) return respond(409, { code: "duplicate" });
-      if (!limit(`register:${clientKey(request)}`, REGISTERS_PER_WINDOW, REGISTER_WINDOW_MS) || !limit("register:all", REGISTERS_PER_HOUR_TOTAL, HOUR_MS3)) {
+      if (!limit(`register:${user.id}`, REGISTERS_PER_WINDOW, REGISTER_WINDOW_MS) || !limit("register:all", REGISTERS_PER_HOUR_TOTAL, HOUR_MS3)) {
         return respond(429, { code: "rate_limited" });
       }
       const result = await fetchFeed(feedId);
       if (result.status === "missing") return respond(404, { code: "not_found" });
       if (result.status === "unavailable") return respond(503, { code: "unavailable" });
-      if (findFeed.get(feedId)) return respond(409, { code: "duplicate" });
-      const { hash: passwordHash, salt } = await hashPassword(password);
+      if (result.feed.authorId !== user.id) return respond(403, { code: "not_author" });
       if (findFeed.get(feedId)) return respond(409, { code: "duplicate" });
       const createdAt = (/* @__PURE__ */ new Date()).toISOString();
       const { lastInsertRowid } = insertQuiz.run(
@@ -1166,14 +1159,15 @@ function createQuizzesHandler({
         cleanHint,
         createdAt,
         hashToken2(randomBytes4(24).toString("base64url")),
-        passwordHash,
-        salt
+        user.id
       );
-      const row = { id: Number(lastInsertRowid), room, feed_id: feedId, hint: cleanHint, created_at: createdAt, has_password: 1 };
-      respond(201, { quiz: toQuiz(row, result.feed) });
+      const row = { id: Number(lastInsertRowid), room, feed_id: feedId, hint: cleanHint, created_at: createdAt, owner_id: user.id };
+      respond(201, { quiz: toQuiz(row, result.feed, user.id) });
     };
     const answerQuiz = async (quizId) => {
-      const key = clientKey(request);
+      const user = await userOf(request);
+      if (!user) return respond(401, { code: "login_required" });
+      const key = user.id;
       if (!limit(`answer:${key}`, ANSWERS_PER_MINUTE, MINUTE_MS4) || !limit(`answer:${key}:${quizId}`, ANSWERS_PER_MINUTE_PER_QUIZ, MINUTE_MS4)) {
         return respond(429, { code: "rate_limited" });
       }
@@ -1182,28 +1176,22 @@ function createQuizzesHandler({
       const row = findVisible.get(quizId);
       if (!row) return respond(404, { code: "not_found" });
       if (typeof body.answer !== "string" || charLength(body.answer) > MAX_ANSWER_LENGTH) return respond(400, { code: "invalid" });
-      const nickname = typeof body.nickname === "string" ? cleanText(body.nickname).replace(/\n/g, " ") : "";
-      if (charLength(nickname) > MAX_NICKNAME_LENGTH3 || LINK_PATTERN.test(nickname)) return respond(400, { code: "bad_nickname" });
+      const nickname = cleanText(user.nickname ?? "").replace(/\n/g, " ");
       const accepted = JSON.parse(row.answers);
       if (!accepted.includes(normalizeAnswer(body.answer))) return respond(200, { correct: false });
       insertSolver.run(quizId, nickname || DEFAULT_NICKNAME3, (/* @__PURE__ */ new Date()).toISOString());
       respond(200, { correct: true, ...solverSummary(quizId) });
     };
-    const removeWithPassword = async (quizId) => {
-      const body = await readJson();
-      if (!body) return respond(400, { code: "invalid" });
-      if (!limit(`remove:${clientKey(request)}:${quizId}`, REMOVE_TRIES_PER_WINDOW, REMOVE_WINDOW_MS)) {
+    const removeMine = async (quizId) => {
+      const user = await userOf(request);
+      if (!user) return respond(401, { code: "login_required" });
+      if (!limit(`remove:${user.id}:${quizId}`, REMOVE_TRIES_PER_WINDOW, REMOVE_WINDOW_MS)) {
         return respond(429, { code: "rate_limited" });
       }
-      const row = findCredentials.get(quizId);
+      const row = findOwner.get(quizId);
       if (!row) return respond(404, { code: "not_found" });
-      let allowed = false;
-      if (row.password_hash && row.password_salt) {
-        allowed = await verifyPassword(body.password, row.password_salt, row.password_hash);
-      } else if (typeof body.token === "string") {
-        allowed = timingSafeEqual3(hashToken2(body.token), row.token_hash);
-      }
-      if (!allowed) return respond(403, { code: "wrong_password" });
+      const feed = row.owner_id ? null : await fetchFeed(row.feed_id);
+      if (!ownedBy(row, feed?.status === "ok" ? feed.feed : null, user.id)) return respond(403, { code: "not_owner" });
       removeSolvers.run(quizId);
       removeQuiz.run(quizId);
       respond(204);
@@ -1222,7 +1210,7 @@ function createQuizzesHandler({
       if (request.method === "POST" && id === null) register().catch(fail);
       else if (request.method === "POST" && id !== null && action === "/answer") answerQuiz(id).catch(fail);
       else if (request.method === "POST" && id !== null && action === "/report") report(id);
-      else if (request.method === "POST" && id !== null && action === "/remove") removeWithPassword(id).catch(fail);
+      else if (request.method === "POST" && id !== null && action === "/remove") removeMine(id).catch(fail);
       else respond(405, { code: "invalid" });
     } catch {
       fail();
@@ -1668,7 +1656,7 @@ var MAX_MESSAGES_PER_SECOND = 40;
 var MAX_BUFFERED_BYTES = 64 * 1024;
 var ROOM_PATTERN2 = /^[A-Za-z0-9-]{1,64}$/;
 var DEFAULT_ROOM = "main";
-var MAX_NICKNAME_LENGTH4 = 12;
+var MAX_NICKNAME_LENGTH3 = 12;
 var MAX_CHAT_LENGTH = 100;
 var CHAT_WINDOW_MS = 1e4;
 var MAX_CHATS_PER_WINDOW = 5;
@@ -1701,7 +1689,7 @@ function sanitizeRoom(value) {
 function sanitizeNickname(value) {
   if (typeof value !== "string") return "";
   const nickname = cleanText(value).replace(/\n/g, " ");
-  return charLength(nickname) > MAX_NICKNAME_LENGTH4 || LINK_PATTERN.test(nickname) ? "" : nickname;
+  return charLength(nickname) > MAX_NICKNAME_LENGTH3 || LINK_PATTERN.test(nickname) ? "" : nickname;
 }
 function round(value) {
   return Math.round(value * 100) / 100;
@@ -2059,13 +2047,13 @@ var LIST_SIZE2 = 100;
 var HIDE_AT_REPORTS3 = 3;
 var MINUTE_MS5 = 6e4;
 var HOUR_MS4 = 60 * MINUTE_MS5;
-var REGISTERS_PER_WINDOW2 = 5;
+var REGISTERS_PER_WINDOW2 = 10;
 var REGISTER_WINDOW_MS2 = 10 * MINUTE_MS5;
 var REGISTERS_PER_HOUR_TOTAL2 = 200;
 var REPORTS_PER_HOUR3 = 20;
 var REMOVE_TRIES_PER_WINDOW2 = 5;
 var REMOVE_WINDOW_MS2 = 10 * MINUTE_MS5;
-function createRelayHandler({ databasePath, isOriginAllowed, trustProxy = false, harudleBaseUrl }) {
+function createRelayHandler({ databasePath, isOriginAllowed, trustProxy = false, harudleBaseUrl, userOf = async () => null }) {
   mkdirSync6(dirname6(databasePath), { recursive: true });
   const database = new DatabaseSync6(databasePath);
   database.exec(`
@@ -2084,11 +2072,12 @@ function createRelayHandler({ databasePath, isOriginAllowed, trustProxy = false,
   for (const name of ["title", "ending"]) {
     if (columns.some((column) => column.name === name)) database.exec(`ALTER TABLE relay_episodes DROP COLUMN ${name}`);
   }
-  const list = database.prepare("SELECT id, feed_id, created_at FROM relay_episodes WHERE hidden = 0 ORDER BY id LIMIT ?");
+  if (!columns.some((column) => column.name === "owner_id")) database.exec("ALTER TABLE relay_episodes ADD COLUMN owner_id TEXT");
+  const list = database.prepare("SELECT id, feed_id, created_at, owner_id FROM relay_episodes WHERE hidden = 0 ORDER BY id LIMIT ?");
   const findFeed = database.prepare("SELECT id FROM relay_episodes WHERE feed_id = ?");
-  const findCredentials = database.prepare("SELECT password_hash, password_salt FROM relay_episodes WHERE id = ?");
+  const findOwner = database.prepare("SELECT feed_id, owner_id FROM relay_episodes WHERE id = ?");
   const insert = database.prepare(
-    "INSERT INTO relay_episodes (feed_id, created_at, password_hash, password_salt) VALUES (?, ?, ?, ?)"
+    "INSERT INTO relay_episodes (feed_id, created_at, password_hash, password_salt, owner_id) VALUES (?, ?, x'', x'', ?)"
   );
   const remove = database.prepare("DELETE FROM relay_episodes WHERE id = ?");
   const addReport = database.prepare(
@@ -2096,19 +2085,31 @@ function createRelayHandler({ databasePath, isOriginAllowed, trustProxy = false,
   );
   const limit = createLimiter();
   const reportedBy = /* @__PURE__ */ new Set();
+  const registered = /* @__PURE__ */ new Map();
+  const recentRegisters = (key, windowMs) => {
+    const now = Date.now();
+    const times = (registered.get(key) ?? []).filter((at) => now - at < windowMs);
+    if (times.length) registered.set(key, times);
+    else registered.delete(key);
+    return times.length;
+  };
+  const noteRegister = (key) => registered.set(key, [...registered.get(key) ?? [], Date.now()]);
   const fetchFeed = createFeedFetcher(harudleBaseUrl);
   const clientKey = (request) => {
     const forwarded = trustProxy ? request.headers["x-forwarded-for"] : void 0;
     const value = Array.isArray(forwarded) ? forwarded.join(",") : forwarded;
     return value?.split(",").pop()?.trim() || request.socket.remoteAddress || "unknown";
   };
-  const toEpisode = (row, feed, number) => ({
+  const ownedBy = (row, feed, userId) => Boolean(userId) && (row.owner_id ? row.owner_id === userId : feed?.authorId === userId);
+  const toEpisode = (row, feed, number, userId) => ({
     id: row.id,
     number,
     createdAt: row.created_at,
     imageUrl: feed.imageUrl,
     shareUrl: feed.shareUrl,
-    author: feed.author
+    author: feed.author,
+    /** 지금 로그인한 사람이 올린 화면 true(내리기 버튼을 보인다) */
+    mine: ownedBy(row, feed, userId)
   });
   const handle = (request, response) => {
     const url = new URL(request.url ?? "/", "http://localhost");
@@ -2156,9 +2157,9 @@ function createRelayHandler({ databasePath, isOriginAllowed, trustProxy = false,
     }
     if (request.method === "GET" && id === null) {
       const rows = list.all(LIST_SIZE2);
-      Promise.all(rows.map(async (row) => ({ row, result: await fetchFeed(row.feed_id) }))).then((results) => {
+      Promise.all([userOf(request).catch(() => null), Promise.all(rows.map(async (row) => ({ row, result: await fetchFeed(row.feed_id) })))]).then(([user, results]) => {
         const visible = results.flatMap(({ row, result }) => result.status === "ok" ? [{ row, feed: result.feed }] : []);
-        respond(200, { items: visible.map(({ row, feed }, index) => toEpisode(row, feed, index + 1)) });
+        respond(200, { items: visible.map(({ row, feed }, index) => toEpisode(row, feed, index + 1, user?.id)) });
       }).catch(fail);
       return true;
     }
@@ -2169,30 +2170,35 @@ function createRelayHandler({ databasePath, isOriginAllowed, trustProxy = false,
     const register = async () => {
       const body = await readJson();
       if (!body) return respond(400, { code: "invalid" });
+      const user = await userOf(request);
+      if (!user) return respond(401, { code: "login_required" });
       const feedId = parseFeedId(body.shareUrl);
       if (!feedId) return respond(400, { code: "bad_link" });
-      if (!isValidPassword(body.password)) return respond(400, { code: "bad_password" });
       if (findFeed.get(feedId)) return respond(409, { code: "duplicate" });
-      if (!limit(`register:${clientKey(request)}`, REGISTERS_PER_WINDOW2, REGISTER_WINDOW_MS2) || !limit("register:all", REGISTERS_PER_HOUR_TOTAL2, HOUR_MS4)) {
+      const key = user.id;
+      if (recentRegisters(key, REGISTER_WINDOW_MS2) >= REGISTERS_PER_WINDOW2 || recentRegisters("all", HOUR_MS4) >= REGISTERS_PER_HOUR_TOTAL2) {
         return respond(429, { code: "rate_limited" });
       }
       const result = await fetchFeed(feedId);
       if (result.status === "missing") return respond(404, { code: "not_found" });
       if (result.status === "unavailable") return respond(503, { code: "unavailable" });
-      const { hash, salt } = await hashPassword(body.password);
+      if (result.feed.authorId !== user.id) return respond(403, { code: "not_author" });
       if (findFeed.get(feedId)) return respond(409, { code: "duplicate" });
-      insert.run(feedId, (/* @__PURE__ */ new Date()).toISOString(), hash, salt);
+      insert.run(feedId, (/* @__PURE__ */ new Date()).toISOString(), user.id);
+      noteRegister(key);
+      noteRegister("all");
       respond(201, { ok: true });
     };
-    const removeWithPassword = async (episodeId) => {
-      const body = await readJson();
-      if (!body) return respond(400, { code: "invalid" });
-      if (!limit(`remove:${clientKey(request)}:${episodeId}`, REMOVE_TRIES_PER_WINDOW2, REMOVE_WINDOW_MS2)) {
+    const removeMine = async (episodeId) => {
+      const user = await userOf(request);
+      if (!user) return respond(401, { code: "login_required" });
+      if (!limit(`remove:${user.id}:${episodeId}`, REMOVE_TRIES_PER_WINDOW2, REMOVE_WINDOW_MS2)) {
         return respond(429, { code: "rate_limited" });
       }
-      const row = findCredentials.get(episodeId);
+      const row = findOwner.get(episodeId);
       if (!row) return respond(404, { code: "not_found" });
-      if (!await verifyPassword(body.password, row.password_salt, row.password_hash)) return respond(403, { code: "wrong_password" });
+      const feed = row.owner_id ? null : await fetchFeed(row.feed_id);
+      if (!ownedBy(row, feed?.status === "ok" ? feed.feed : null, user.id)) return respond(403, { code: "not_owner" });
       remove.run(episodeId);
       respond(204);
     };
@@ -2208,7 +2214,7 @@ function createRelayHandler({ databasePath, isOriginAllowed, trustProxy = false,
     };
     try {
       if (request.method === "POST" && id === null) register().catch(fail);
-      else if (request.method === "POST" && id !== null && action === "remove") removeWithPassword(id).catch(fail);
+      else if (request.method === "POST" && id !== null && action === "remove") removeMine(id).catch(fail);
       else if (request.method === "POST" && id !== null && action === "report") report(id);
       else respond(405, { code: "invalid" });
     } catch {
@@ -2221,7 +2227,7 @@ function createRelayHandler({ databasePath, isOriginAllowed, trustProxy = false,
 
 // world/server/campus.ts
 var WORLD_WS_PATH = "/world/ws";
-function startWorld(server, { dataDir, allowedOrigins, trustProxy = false, maxPlayers = 150 }) {
+function startWorld(server, { dataDir, allowedOrigins, trustProxy = false, maxPlayers = 150, userOf }) {
   const allowed = new Set(allowedOrigins);
   const isOriginAllowed = (origin) => origin !== void 0 && allowed.has(origin);
   const db = (name) => join(dataDir, `${name}.db`);
@@ -2229,8 +2235,8 @@ function startWorld(server, { dataDir, allowedOrigins, trustProxy = false, maxPl
   const easelStore = createEaselStore(db("easel"));
   const handlers = [
     createCheersHandler({ databasePath: db("cheers"), isOriginAllowed, trustProxy }),
-    createQuizzesHandler({ databasePath: db("quizzes"), isOriginAllowed, trustProxy }),
-    createRelayHandler({ databasePath: db("relay"), isOriginAllowed, trustProxy }),
+    createQuizzesHandler({ databasePath: db("quizzes"), isOriginAllowed, trustProxy, userOf }),
+    createRelayHandler({ databasePath: db("relay"), isOriginAllowed, trustProxy, userOf }),
     createCrabRankingHandler({ databasePath: db("crabgame"), isOriginAllowed, trustProxy })
   ];
   const proxyHarudle = createHarudleProxy({ trustProxy });

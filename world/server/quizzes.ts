@@ -1,17 +1,16 @@
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { mkdirSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { dirname } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { normalizeAnswer } from '../src/data/arcadeQuizzes.ts'
 import { charLength, cleanText, createLimiter, LINK_PATTERN, readBody } from './cheers.ts'
-import { createFeedFetcher, hashPassword, isValidPassword, parseFeedId, verifyPassword, type FeedInfo } from './feedPosts.ts'
+import { createFeedFetcher, parseFeedId, type FeedInfo } from './feedPosts.ts'
 
 const ROOM_PATTERN = /^(song|drama)$/
 const MAX_ANSWER_LENGTH = 100
 const MAX_ACCEPTED_ANSWERS = 5
 const MAX_HINT_LENGTH = 80
-const MAX_NICKNAME_LENGTH = 12
 const DEFAULT_NICKNAME = '익명의 도전자'
 const LIST_SIZE = 30
 const SOLVERS_SHOWN = 20
@@ -25,7 +24,6 @@ const REGISTERS_PER_HOUR_TOTAL = 200
 const ANSWERS_PER_MINUTE_PER_QUIZ = 10
 const ANSWERS_PER_MINUTE = 40
 const REPORTS_PER_HOUR = 20
-// 비밀번호를 대입해 보지 못하도록 문제마다 시도 횟수를 제한한다.
 const REMOVE_TRIES_PER_WINDOW = 5
 const REMOVE_WINDOW_MS = 10 * MINUTE_MS
 
@@ -34,9 +32,11 @@ export type QuizzesOptions = {
   isOriginAllowed: (origin: string | undefined) => boolean
   trustProxy?: boolean
   harudleBaseUrl?: string
+  /** 요청의 하루들 로그인 사용자. 문제 풀기·걸기·내리기는 로그인해야 한다 */
+  userOf?: (request: IncomingMessage) => Promise<{ id: string; nickname?: string } | null>
 }
 
-type QuizRow = { id: number; room: string; feed_id: string; hint: string; created_at: string; has_password: number }
+type QuizRow = { id: number; room: string; feed_id: string; hint: string; created_at: string; owner_id: string | null }
 
 function hashToken(token: string) {
   return createHash('sha256').update(token).digest()
@@ -50,13 +50,14 @@ function parseAcceptedAnswers(value: unknown) {
 
 /**
  * 사용자가 하루들 피드 글로 낸 퀴즈. 정답은 서버에만 두고 채점도 여기서 해서 브라우저로 나가지 않는다.
- * 로그인이 없어서 등록할 때 정한 비밀번호로만 내릴 수 있고, 신고가 쌓이면 가린다.
+ * 하루들에 로그인해야 풀고 걸 수 있다. 내가 그린 글만 걸고, 건 사람(예전 문제는 그 글의 작가)만 내린다. 신고가 쌓이면 가린다.
  */
 export function createQuizzesHandler({
   databasePath,
   isOriginAllowed,
   trustProxy = false,
   harudleBaseUrl,
+  userOf = async () => null,
 }: QuizzesOptions) {
   mkdirSync(dirname(databasePath), { recursive: true })
   const database = new DatabaseSync(databasePath)
@@ -86,14 +87,16 @@ export function createQuizzesHandler({
   if (!columns.some((column) => column.name === 'password_hash')) {
     database.exec('ALTER TABLE user_quizzes ADD COLUMN password_hash BLOB; ALTER TABLE user_quizzes ADD COLUMN password_salt BLOB;')
   }
+  // 건 사람(하루들 계정 ID). 비밀번호·토큰으로 걸던 예전 문제는 비어 있고, 그 글의 작가가 주인이다
+  if (!columns.some((column) => column.name === 'owner_id')) database.exec('ALTER TABLE user_quizzes ADD COLUMN owner_id TEXT')
   const listByRoom = database.prepare(
-    'SELECT id, room, feed_id, hint, created_at, password_hash IS NOT NULL AS has_password FROM user_quizzes WHERE room = ? AND hidden = 0 ORDER BY id DESC LIMIT ?',
+    'SELECT id, room, feed_id, hint, created_at, owner_id FROM user_quizzes WHERE room = ? AND hidden = 0 ORDER BY id DESC LIMIT ?',
   )
   const findVisible = database.prepare('SELECT answers FROM user_quizzes WHERE id = ? AND hidden = 0')
-  const findCredentials = database.prepare('SELECT token_hash, password_hash, password_salt FROM user_quizzes WHERE id = ?')
+  const findOwner = database.prepare('SELECT feed_id, owner_id FROM user_quizzes WHERE id = ?')
   const findFeed = database.prepare('SELECT id FROM user_quizzes WHERE feed_id = ?')
   const insertQuiz = database.prepare(
-    'INSERT INTO user_quizzes (room, feed_id, answers, hint, created_at, token_hash, password_hash, password_salt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO user_quizzes (room, feed_id, answers, hint, created_at, token_hash, owner_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
   )
   const removeSolvers = database.prepare('DELETE FROM quiz_solvers WHERE quiz_id = ?')
   const removeQuiz = database.prepare('DELETE FROM user_quizzes WHERE id = ?')
@@ -120,13 +123,19 @@ export function createQuizzesHandler({
     return { solverCount: total, solvers: rows.map((row) => row.nickname) }
   }
 
-  const toQuiz = (row: QuizRow, feed: FeedInfo) => ({
+  const ownedBy = (row: { owner_id: string | null }, feed: FeedInfo | null, userId: string | undefined) =>
+    Boolean(userId) && (row.owner_id ? row.owner_id === userId : feed?.authorId === userId)
+  const toQuiz = (row: QuizRow, feed: FeedInfo, userId: string | undefined) => ({
     id: row.id,
     room: row.room,
     hint: row.hint,
     createdAt: row.created_at,
-    hasPassword: row.has_password === 1,
-    ...feed,
+    /** 지금 로그인한 사람이 건 문제면 true(내리기 버튼을 보인다) */
+    mine: ownedBy(row, feed, userId),
+    imageUrl: feed.imageUrl,
+    shareUrl: feed.shareUrl,
+    author: feed.author,
+    category: feed.category,
     ...solverSummary(row.id),
   })
 
@@ -185,10 +194,10 @@ export function createQuizzesHandler({
         return true
       }
       const rows = listByRoom.all(room, LIST_SIZE) as QuizRow[]
-      Promise.all(rows.map(async (row) => ({ row, result: await fetchFeed(row.feed_id) })))
-        .then((results) => {
+      Promise.all([userOf(request).catch(() => null), Promise.all(rows.map(async (row) => ({ row, result: await fetchFeed(row.feed_id) })))])
+        .then(([user, results]) => {
           // 하루들에서 지워졌거나 지금 이미지를 받을 수 없는 글은 걸지 않는다.
-          const items = results.flatMap(({ row, result }) => (result.status === 'ok' ? [toQuiz(row, result.feed)] : []))
+          const items = results.flatMap(({ row, result }) => (result.status === 'ok' ? [toQuiz(row, result.feed, user?.id)] : []))
           respond(200, { items })
         })
         .catch(fail)
@@ -204,7 +213,9 @@ export function createQuizzesHandler({
     const register = async () => {
       const body = await readJson()
       if (!body) return respond(400, { code: 'invalid' })
-      const { room, shareUrl, answer, hint, password } = body
+      const user = await userOf(request)
+      if (!user) return respond(401, { code: 'login_required' })
+      const { room, shareUrl, answer, hint } = body
       if (typeof room !== 'string' || !ROOM_PATTERN.test(room)) return respond(400, { code: 'invalid' })
       const feedId = parseFeedId(shareUrl)
       if (!feedId) return respond(400, { code: 'bad_link' })
@@ -212,10 +223,9 @@ export function createQuizzesHandler({
       if (!accepted) return respond(400, { code: 'bad_answer' })
       const cleanHint = typeof hint === 'string' ? cleanText(hint).replace(/\n/g, ' ') : ''
       if (charLength(cleanHint) > MAX_HINT_LENGTH || LINK_PATTERN.test(cleanHint)) return respond(400, { code: 'bad_hint' })
-      if (!isValidPassword(password)) return respond(400, { code: 'bad_password' })
       if (findFeed.get(feedId)) return respond(409, { code: 'duplicate' })
       if (
-        !limit(`register:${clientKey(request)}`, REGISTERS_PER_WINDOW, REGISTER_WINDOW_MS) ||
+        !limit(`register:${user.id}`, REGISTERS_PER_WINDOW, REGISTER_WINDOW_MS) ||
         !limit('register:all', REGISTERS_PER_HOUR_TOTAL, HOUR_MS)
       ) {
         return respond(429, { code: 'rate_limited' })
@@ -224,11 +234,9 @@ export function createQuizzesHandler({
       const result = await fetchFeed(feedId)
       if (result.status === 'missing') return respond(404, { code: 'not_found' })
       if (result.status === 'unavailable') return respond(503, { code: 'unavailable' })
+      // 내가 그린 만화로만 문제를 건다: 하루들 글의 작가와 로그인한 사람이 같아야 한다
+      if (result.feed.authorId !== user.id) return respond(403, { code: 'not_author' })
       // 하루들 응답을 기다리는 사이 같은 글이 먼저 등록됐을 수 있다.
-      if (findFeed.get(feedId)) return respond(409, { code: 'duplicate' })
-
-      const { hash: passwordHash, salt } = await hashPassword(password)
-      // 비밀번호를 만드는 사이에 같은 글이 먼저 등록됐을 수 있다.
       if (findFeed.get(feedId)) return respond(409, { code: 'duplicate' })
       const createdAt = new Date().toISOString()
       // 토큰 칸은 이전 문제와 표를 같이 쓰려고 남겨 두었고, 아무도 모르는 값을 넣는다.
@@ -239,15 +247,16 @@ export function createQuizzesHandler({
         cleanHint,
         createdAt,
         hashToken(randomBytes(24).toString('base64url')),
-        passwordHash,
-        salt,
+        user.id,
       )
-      const row: QuizRow = { id: Number(lastInsertRowid), room, feed_id: feedId, hint: cleanHint, created_at: createdAt, has_password: 1 }
-      respond(201, { quiz: toQuiz(row, result.feed) })
+      const row: QuizRow = { id: Number(lastInsertRowid), room, feed_id: feedId, hint: cleanHint, created_at: createdAt, owner_id: user.id }
+      respond(201, { quiz: toQuiz(row, result.feed, user.id) })
     }
 
     const answerQuiz = async (quizId: number) => {
-      const key = clientKey(request)
+      const user = await userOf(request)
+      if (!user) return respond(401, { code: 'login_required' })
+      const key = user.id
       if (!limit(`answer:${key}`, ANSWERS_PER_MINUTE, MINUTE_MS) || !limit(`answer:${key}:${quizId}`, ANSWERS_PER_MINUTE_PER_QUIZ, MINUTE_MS)) {
         return respond(429, { code: 'rate_limited' })
       }
@@ -256,8 +265,8 @@ export function createQuizzesHandler({
       const row = findVisible.get(quizId) as { answers: string } | undefined
       if (!row) return respond(404, { code: 'not_found' })
       if (typeof body.answer !== 'string' || charLength(body.answer) > MAX_ANSWER_LENGTH) return respond(400, { code: 'invalid' })
-      const nickname = typeof body.nickname === 'string' ? cleanText(body.nickname).replace(/\n/g, ' ') : ''
-      if (charLength(nickname) > MAX_NICKNAME_LENGTH || LINK_PATTERN.test(nickname)) return respond(400, { code: 'bad_nickname' })
+      // 맞힌 사람 목록에는 하루들 닉네임을 쓴다
+      const nickname = cleanText(user.nickname ?? '').replace(/\n/g, ' ')
 
       const accepted = JSON.parse(row.answers) as string[]
       if (!accepted.includes(normalizeAnswer(body.answer))) return respond(200, { correct: false })
@@ -265,24 +274,16 @@ export function createQuizzesHandler({
       respond(200, { correct: true, ...solverSummary(quizId) })
     }
 
-    const removeWithPassword = async (quizId: number) => {
-      const body = await readJson()
-      if (!body) return respond(400, { code: 'invalid' })
-      if (!limit(`remove:${clientKey(request)}:${quizId}`, REMOVE_TRIES_PER_WINDOW, REMOVE_WINDOW_MS)) {
+    const removeMine = async (quizId: number) => {
+      const user = await userOf(request)
+      if (!user) return respond(401, { code: 'login_required' })
+      if (!limit(`remove:${user.id}:${quizId}`, REMOVE_TRIES_PER_WINDOW, REMOVE_WINDOW_MS)) {
         return respond(429, { code: 'rate_limited' })
       }
-      const row = findCredentials.get(quizId) as
-        | { token_hash: Uint8Array; password_hash: Uint8Array | null; password_salt: Uint8Array | null }
-        | undefined
+      const row = findOwner.get(quizId) as { feed_id: string; owner_id: string | null } | undefined
       if (!row) return respond(404, { code: 'not_found' })
-
-      let allowed = false
-      if (row.password_hash && row.password_salt) {
-        allowed = await verifyPassword(body.password, row.password_salt, row.password_hash)
-      } else if (typeof body.token === 'string') {
-        allowed = timingSafeEqual(hashToken(body.token), row.token_hash)
-      }
-      if (!allowed) return respond(403, { code: 'wrong_password' })
+      const feed = row.owner_id ? null : await fetchFeed(row.feed_id)
+      if (!ownedBy(row, feed?.status === 'ok' ? feed.feed : null, user.id)) return respond(403, { code: 'not_owner' })
       removeSolvers.run(quizId)
       removeQuiz.run(quizId)
       respond(204)
@@ -304,7 +305,7 @@ export function createQuizzesHandler({
       if (request.method === 'POST' && id === null) register().catch(fail)
       else if (request.method === 'POST' && id !== null && action === '/answer') answerQuiz(id).catch(fail)
       else if (request.method === 'POST' && id !== null && action === '/report') report(id)
-      else if (request.method === 'POST' && id !== null && action === '/remove') removeWithPassword(id).catch(fail)
+      else if (request.method === 'POST' && id !== null && action === '/remove') removeMine(id).catch(fail)
       else respond(405, { code: 'invalid' })
     } catch {
       fail()
