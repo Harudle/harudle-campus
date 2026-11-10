@@ -2117,8 +2117,10 @@ function muzzle(f, x, y, dir, lift) {
 // 총알이 이 자리에서 무엇에 막히는지(날아가는 총알과 조준점 찾기가 같이 쓴다): 벽 · 가구, 사람(shooter 빼고)
 function bulletWall(fl, f, pos) {
   const gx = tX(pos.x), gy = tY(pos.z), y0 = pos.y - floorY(f), i = Math.floor(gy) * W + Math.floor(gx);
-  return solid(fl, gx, gy) && (fl.wgrid[i] || y0 < (fl.top[i] || 1.2) + .05);
+  return solid(fl, gx, gy) && (fl.wgrid[i] || y0 < (coverHt(fl)[i] || fl.top[i] || 1.2) + .05);
 }
+// 칸마다 총알을 막는 높이: 가구에 ht를 적으면 그 높이(대결 사격장의 높은 벽 · 컨테이너 · 모래주머니). 처음 쓸 때 한 번 셈한다
+const coverHt = (fl) => fl.coverHt || (fl.coverHt = (() => { const a = new Float32Array(W * H); for (const o of fl.furn) if (o.ht) for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) if (x >= 0 && y >= 0 && x < W && y < H) a[y * W + x] = Math.max(a[y * W + x], o.ht); return a; })());
 const bulletDoll = (f, pos, shooter) => { const y0 = pos.y - floorY(f); return [me, ...NPCS, ...peers.values()].find((a: any) => a !== shooter && a.doll?.root.visible && (a.f ?? f) === f && Math.hypot(a.doll.root.position.x - pos.x, a.doll.root.position.z - pos.z) < .3 && y0 > a.doll.root.position.y - floorY(f) && y0 < a.doll.root.position.y - floorY(f) + 1.15); };
 // 조준점이 가리키는 곳: 카메라에서 화면 가운데 쪽으로 광선을 따라가 처음 막히는 자리(없으면 60m 앞). 총구에서 그곳을 향하는 방향(fh)과 위아래(fp)
 const sightDir = new THREE.Vector3(), sightAt = new THREE.Vector3();

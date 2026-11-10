@@ -48,7 +48,7 @@ export function judge(m, seat, p, api) {
   for (const h of pts) {
     const dx = h.x - shot.x, dy = h.y - shot.y, fwd = dx * fx + dy * fy, side = Math.abs(dx * fy - dy * fx);
     const k = fwd <= 0 ? "behind" : fwd > SHOOT.RANGE ? "far" : side > SHOOT.WIDE ? "aim" : Math.abs(h.at - (shot.at + fwd / SHOOT.SPEED * 1000 - 250)) > 1100 ? "aim"
-      : lift < SHOOT.OVER && SHOOT_COVER.some((c) => crosses(c, shot.x, shot.y, h.x, h.y)) ? "cover" : "";
+      : SHOOT_COVER.some((c) => (c.ht > 2 || (c.ht >= 1 && lift < SHOOT.OVER)) && crosses(c, shot.x, shot.y, h.x, h.y)) ? "cover" : "";   // 높은 엄폐물은 늘, 상자 · 통은 낮게 쏘면 막는다(모래주머니는 안 막는다)
     if (!k) return { shot, h, fwd, lift };
     if (rank[k] > best) { best = rank[k]; why = k; }
   }

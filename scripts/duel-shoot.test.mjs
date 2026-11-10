@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createDuel } from "../server/duel/index.js";
 import { DUEL } from "../src/duel/shared.mjs";
-import { SHOOT, SHOOT_ARENA, SHOOT_COVER, SHOOT_FIELD } from "../src/duel/arena/shoot.mjs";
+import { SHOOT, SHOOT_ARENA, SHOOT_COVER, SHOOT_DECKS, SHOOT_FIELD } from "../src/duel/arena/shoot.mjs";
 import { judge } from "../server/duel/games/shoot.js";
 
 // 가짜 접속자 · 시계로 사격 대결을 돌린다(scripts/duel.test.mjs와 같은 틀)
@@ -62,9 +62,12 @@ test("사격: 거리 밖 · 뒤쪽 · 옆으로 크게 빗나감 · 엄폐물 �
   assert.equal(s.shot("pa", { sx: 15, tx: 15 + SHOOT.RANGE + 1 }).why, "far", "맞힐 수 있는 거리(RANGE)보다 멀다");
   assert.equal(s.shot("pa", { dir: W }).why, "behind", "상대가 등 뒤");
   assert.equal(s.shot("pa", { dir: E + .5 }).why, "aim", "방향이 크게 다르다");
-  assert.equal(s.shot("pa", { sx: 20, sy: 15.5, tx: 26, ty: 15.5 }).why, "cover", "가운데 왼쪽 종이벽(23, 14~16) 너머");
-  assert.equal(s.shot("pa", { sx: 20, sy: 15.5, tx: 26, ty: 15.5, lift: 1 }), undefined, "높이 뛰어 쏘면 엄폐물을 넘어간다");
-  assert.deepEqual(s.m.state.hp, [H, H - D]);
+  assert.equal(s.shot("pa", { sx: 20, sy: 15.5, tx: 26, ty: 15.5 }).why, "cover", "높은 벽(22~24, 15) 너머");
+  assert.equal(s.shot("pa", { sx: 20, sy: 15.5, tx: 26, ty: 15.5, lift: 1 }).why, "cover", "높은 벽은 뛰어 쏴도 못 넘는다");
+  assert.equal(s.shot("pa", { sx: 19, sy: 11.5, tx: 25, ty: 11.5 }).why, "cover", "상자(21~22, 11~12) 너머");
+  assert.equal(s.shot("pa", { sx: 19, sy: 11.5, tx: 25, ty: 11.5, lift: 1 }), undefined, "상자는 높이 뛰어 쏘면 넘어간다");
+  assert.equal(s.shot("pa", { sx: 33, sy: 10.5, tx: 40, ty: 10.5 }), undefined, "모래주머니(35~37, 10)는 서버가 막지 않는다");
+  assert.deepEqual(s.m.state.hp, [H, H - 2 * D]);
 });
 
 test("사격: 너무 빠른 연사 · 같은 발 두 번 · 쏜 적 없는 발 · 나 자신 · 관전자는 받지 않는다", () => {
@@ -181,5 +184,21 @@ test("사격: 아래를 겨눠 놓고 머리라고 하면 몸으로만(15) 받�
 test("사격: 위아래(fp)가 없는 예전 발이나 몸 높이(hy < 0.7)는 헤드샷이 아니다", () => {
   const s = setup(); assert.equal(headShot(s, { hy: .9 }).dmg, SHOOT.DMG);
   const s2 = setup(); assert.equal(headShot(s2, { fp: 0, hy: .5 }).dmg, SHOOT.DMG);
+});
+
+test("사격장 배치: 엄폐물 · 단상이 겹치지 않고, 두 선수 자리가 걸어서 이어지며, 180도 돌려도 같다 · 높이가 여러 가지", () => {
+  const F = SHOOT_FIELD, cells = new Map();
+  for (const c of [...SHOOT_COVER, ...SHOOT_DECKS]) for (let y = c.y; y < c.y + c.h; y++) for (let x = c.x; x < c.x + c.w; x++) {
+    assert.ok(!cells.has(`${x},${y}`), `(${x}, ${y}) 겹침`); cells.set(`${x},${y}`, c);
+  }
+  const key = (c) => `${c.look}:${c.w}x${c.h}`, rot = (c) => `${F.x * 2 + F.w - c.x - c.w},${F.y * 2 + F.h - c.y - c.h}:${key(c)}`;
+  const all = new Set([...SHOOT_COVER, ...SHOOT_DECKS].map((c) => `${c.x},${c.y}:${key(c)}`));
+  for (const c of [...SHOOT_COVER, ...SHOOT_DECKS]) assert.ok(all.has(rot(c)), `${key(c)} (${c.x}, ${c.y})를 돌린 자리에도 같은 것`);
+  // 단상 · 엄폐물을 모두 막힌 칸으로 보고도 두 자리가 이어진다
+  const [[ax, ay], [bx, by]] = SHOOT_ARENA.spawns, start = `${Math.floor(ax)},${Math.floor(ay)}`, q = [start], seen = new Set(q);
+  while (q.length) { const [x, y] = q.shift().split(",").map(Number); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy, k = `${nx},${ny}`; if (nx < F.x || ny < F.y || nx >= F.x + F.w || ny >= F.y + F.h || seen.has(k) || cells.has(k)) continue; seen.add(k); q.push(k); } }
+  assert.ok(seen.has(`${Math.floor(bx)},${Math.floor(by)}`), "두 선수 자리가 걸어서 이어진다");
+  const hts = new Set(SHOOT_COVER.map((c) => c.ht)); assert.ok([...hts].some((h) => h > 2) && hts.has(1.2) && [...hts].some((h) => h < 1), "뛰어도 가리는 것 · 뛰면 보이는 것 · 낮은 것");
+  assert.ok(SHOOT_DECKS.some((d) => d.top >= .9), "올라서는 단상");
 });
 

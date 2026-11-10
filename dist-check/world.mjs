@@ -100,45 +100,57 @@ var JUMP_ARENA = (() => {
 })();
 
 // src/duel/arena/shoot.mjs
-var SHOOT_FIELD = { x: 18, y: 7, w: 20, h: 20 };
+var SHOOT_FIELD = { x: 14, y: 5, w: 28, h: 24 };
 var CX = SHOOT_FIELD.x * 2 + SHOOT_FIELD.w;
 var CY = SHOOT_FIELD.y * 2 + SHOOT_FIELD.h;
+var rot = ([x, y, w, h, ...r]) => [CX - x - w, CY - y - h, w, h, ...r];
+var COVER_HT = { tall: 2.8, container: 2.6, stack: 2.4, crate: 1.2, barrel: 1.2, sandbag: 0.8 };
 var HALF = [
   // [x, y, w, h, 모양] 한쪽 절반. 나머지는 돌려서 만든다
-  [22, 10, 2, 2, "crate"],
-  // 내 자리 앞 상자
-  [34, 9, 2, 2, "crate"],
-  // 비어 있는 구석 상자
-  [30, 10, 3, 1, "wall"],
-  // 가로 종이벽
-  [23, 14, 1, 3, "wall"],
-  // 세로 종이벽
-  [27, 12, 1, 1, "barrel"],
-  // 가운데 앞 통
-  [19, 17, 1, 1, "barrel"]
-  // 옆 통
+  [17, 9, 4, 2, "container"],
+  // 내 자리 앞 컨테이너(자리를 가린다)
+  [38, 6, 2, 3, "container"],
+  // 비어 있는 구석 컨테이너
+  [24, 6, 1, 4, "tall"],
+  // 북쪽 길을 나누는 벽
+  [31, 5, 1, 2, "tall"],
+  // 북쪽 끝 짧은 벽(가장자리를 끝까지 못 보게)
+  [40, 19, 2, 1, "tall"],
+  // 동쪽 끝 짧은 벽
+  [29, 12, 1, 3, "tall"],
+  // 가운데를 도는 벽(바람개비 모양)
+  [22, 15, 3, 1, "tall"],
+  [15, 15, 2, 2, "stack"],
+  // 2단 상자 더미
+  [21, 11, 2, 2, "crate"],
+  // 상자
+  [33, 8, 1, 1, "barrel"],
+  [19, 20, 1, 1, "barrel"],
+  [35, 10, 3, 1, "sandbag"]
+  // 모래주머니(다리만 가린다)
 ];
 var SHOOT_COVER = [
-  ...HALF.flatMap(([x, y, w, h, look]) => [{ x, y, w, h, look }, { x: CX - x - w, y: CY - y - h, w, h, look }]),
-  { x: 27, y: 16, w: 2, h: 2, look: "crate", big: true }
-  // 한가운데 큰 상자
-];
+  ...HALF.flatMap((c) => [c, rot(c)]),
+  [27, 16, 2, 2, "crate", true]
+  // 한가운데 큰 상자(뛰면 너머가 보인다)
+].map(([x, y, w, h, look, big]) => ({ x, y, w, h, look, ht: COVER_HT[look], ...big ? { big } : {} }));
+var SHOOT_DECKS = [[36, 14, 3, 2, 0.9], [36, 16, 3, 1, 0.45, "step"]].flatMap((d) => [d, rot(d)]).map(([x, y, w, h, top, look]) => ({ x, y, w, h, top, look: look || "deck" }));
 var SHOOT_ARENA = arena({
   f: 22,
   game: "shoot",
   info: "\uC0AC\uACA9 \uB300\uACB0\uC7A5",
-  rooms: [ring(17, 6, 22, 22, { wall: 15251878 }), ring(17, 28, 22, 5)],
+  rooms: [ring(13, 4, 30, 26, { wall: 15251878 }), ring(13, 30, 30, 5)],
   zones: [
-    tint(18, 7, 20, 20, "\uC0AC\uACA9 \uACBD\uAE30\uC7A5", "#F3EEE4"),
+    tint(14, 5, 28, 24, "\uC0AC\uACA9 \uACBD\uAE30\uC7A5", "#F3EEE4"),
     // 바둑판(checker)은 tint 위에 그려져 자리 색을 덮으므로 쓰지 않는다
-    tint(18, 7, 3, 3, "\uBE68\uAC15 \uC790\uB9AC", "#F6D3CC"),
-    tint(35, 24, 3, 3, "\uD30C\uB791 \uC790\uB9AC", "#CFE0F6"),
-    tint(18, 29, 20, 3, "\uAD00\uC804\uC11D", "#ECEAF4")
+    tint(14, 5, 3, 3, "\uBE68\uAC15 \uC790\uB9AC", "#F6D3CC"),
+    tint(39, 26, 3, 3, "\uD30C\uB791 \uC790\uB9AC", "#CFE0F6"),
+    tint(14, 31, 28, 3, "\uAD00\uC804\uC11D", "#ECEAF4")
   ],
-  furn: SHOOT_COVER.map((c) => ({ ...c, kind: "scover" })),
-  spawns: [[19.5, 8.5, Math.PI / 4], [36.5, 25.5, -Math.PI * 3 / 4]],
+  furn: [...SHOOT_COVER.map((c) => ({ ...c, kind: "scover" })), ...SHOOT_DECKS.map((d) => ({ ...d, kind: "sdeck" }))],
+  spawns: [[15.5, 6.5, Math.PI / 4], [40.5, 27.5, -Math.PI * 3 / 4]],
   // 북서 구석(남동을 본다) · 남동 구석(북서를 본다)
-  watch: [[22.5, 30.5, N], [28, 30.5, N], [33.5, 30.5, N]]
+  watch: [[20.5, 32.5, N], [28, 32.5, N], [35.5, 32.5, N]]
 });
 
 // src/duel/arena/target.mjs
