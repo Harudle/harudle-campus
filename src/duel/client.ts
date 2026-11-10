@@ -120,7 +120,7 @@ export function mountDuel(host: DuelHost) {
     const c = el("div", "duelCard", `<p><b>${esc(m.from.name)}</b>님이 <b>${g.icon} ${esc(g.name)}</b> 대결을 신청했어요</p><div class="dcBtns"><button type="button" class="btn" data-ok="1">수락 <kbd>Y</kbd></button><button type="button" class="btn ghost" data-ok="0">거절 <kbd>N</kbd></button></div><i class="dcBar"></i>`);
     c.addEventListener("click", (e) => { const b = (e.target as HTMLElement).closest<HTMLElement>("[data-ok]"); if (b) answer(m.id, b.dataset.ok === "1"); });
     invites.set(m.id, { id: m.id, game: m.game, from: m.from, expiresAt: m.expiresAt, card: c }); inbox.prepend(c);
-    host.toast("대결 신청이 왔어요", `${m.from.name}님 · ${g.name} · Y 수락, N 거절`, 3200);
+    host.toast("대결 신청이 왔어요", `${m.from.name}님 · ${g.name} · Y 또는 /수락, N 또는 /거절`, 3200);
   }
   function dropInvite(id: string) { const iv = invites.get(id); if (!iv) return; iv.card.remove(); invites.delete(id); }
   function answer(id: string, ok: boolean) { if (!invites.has(id)) return; host.send({ t: "duel:answer", id, ok }); dropInvite(id); if (!ok) host.note("대결 신청을 거절했어요"); }
@@ -285,7 +285,7 @@ export function mountDuel(host: DuelHost) {
           sent = null; showSent(); if (STATE_TEXT[m.state]) { host.note(`${m.to?.name || "상대"}님: ${STATE_TEXT[m.state]}`); host.toast("대결 신청", `${m.to?.name || "상대"}님 · ${STATE_TEXT[m.state]}`, 2400); }
           return;
         }
-        if (invites.has(m.id)) { dropInvite(m.id); if (m.state === "canceled" || m.state === "expired") host.note(`${m.from?.name || "크루"}님의 대결 신청이 ${m.state === "expired" ? "만료됐어요" : "취소됐어요"}`); }
+        if (invites.has(m.id) && m.state !== "pending") { dropInvite(m.id); if (m.state === "canceled" || m.state === "expired") host.note(`${m.from?.name || "크루"}님의 대결 신청이 ${m.state === "expired" ? "만료됐어요" : "취소됐어요"}`); }
         return;
       }
       case "duel:match":
@@ -344,7 +344,7 @@ export function mountDuel(host: DuelHost) {
     fired(dir: number, lift: number) { if (hooks.fire.length) { const s = { x: me.x, y: me.y, dir, lift, at: now() }; for (const fn of hooks.fire) safe(() => fn(s)); } },
     bullet(w: any, pos: THREE.Vector3) { if (!hooks.bullet.length) return false; const b = bulletOf(w, pos); let hit = false; for (const fn of hooks.bullet) safe(() => { if (fn(b)) hit = true; }); return hit; },
     bulletHit(w: any, target: any, pos: THREE.Vector3) { if (!hooks.hit.length) return false; const b = bulletOf(w, pos, target); let eat = false; for (const fn of hooks.hit) safe(() => { if (fn(b)) eat = true; }); return eat; },
-    // 채팅 명령어(/대결 · /관전 · /기권 · /전적)
+    // 채팅 명령어(/대결 · /수락 · /거절 · /관전 · /기권 · /전적)
     commands: {
       games: DUEL_GAMES,
       invite(p: CommandPeer, game?: string) { if (!game && !match) openPick(p); else invite(p, game); },
@@ -352,6 +352,11 @@ export function mountDuel(host: DuelHost) {
         if (!p) { if (match?.seat === null) host.send({ t: "duel:watch" }); else host.note(match ? "선수는 /기권으로 나가요" : "관전 중이 아니에요"); return; }
         if (match?.seat !== null && match) { host.note("경기 중에는 관전할 수 없어요"); return; }
         host.send({ t: "duel:watch", peer: p.id });
+      },
+      answer(ok: boolean, name?: string) {
+        const q = (name || "").trim().toLowerCase(), list = [...invites.values()], iv = q ? list.filter((i) => i.from.name.toLowerCase().includes(q)).at(-1) : list.at(-1);
+        if (!iv) { host.note(q ? `${name}님이 보낸 대결 신청이 없어요` : "받은 대결 신청이 없어요"); return; }
+        answer(iv.id, ok);
       },
       forfeit() { if (!match || match.seat === null || match.phase === "result") { host.note("진행 중인 경기가 없어요"); return; } host.send({ t: "duel:forfeit" }); },
       records(p: CommandPeer | null) { if (p && !p.u) { host.note(`${p.name}님의 전적은 볼 수 없어요`); return; } host.send({ t: "duel:records", ...(p ? { u: p.u, name: p.name } : {}) }); },

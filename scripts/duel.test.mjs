@@ -47,7 +47,7 @@ test("거절 · 만료 · 취소 · 바쁨 · 자기 자신 · 쿨다운 · 받�
   s.duel.message("pa", { t: "duel:invite", to: "pb", game: "jump" }); const inv = s.last("pb", "duel:invited");
   s.duel.message("pb", { t: "duel:answer", id: inv.id, ok: false });
   assert.equal(s.last("pa", "duel:invite-state").state, "declined");
-  s.duel.message("pa", { t: "duel:invite", to: "pb", game: "jump" }); assert.equal(s.last("pa", "duel:error").code, "cooldown", "같은 상대는 60초에 한 번");
+  s.duel.message("pa", { t: "duel:invite", to: "pb", game: "jump" }); assert.equal(s.last("pa", "duel:error").code, "cooldown", "같은 상대는 5초에 한 번");
   s.advance(DUEL.COOLDOWN);
   s.duel.message("pa", { t: "duel:invite", to: "pb", game: "jump" });
   s.advance(DUEL.INVITE + 100); assert.equal(s.last("pb", "duel:invite-state").state, "expired", "30초가 지나면 만료");
@@ -205,5 +205,13 @@ test("지난 신청 기록은 기다림이 끝나면 지우고, 설정은 마지
   s.peers.set("pc2", { uid: "p_cccccccccccccccc", name: "씨", presence: null });
   s.duel.message("pa", { t: "duel:cancel" }); s.duel.message("pa", { t: "duel:invite", to: "pc2", game: "jump" });
   assert.equal(s.last("pa", "duel:invite-state")?.state, "pending", "다시 붙으면 브라우저가 설정을 다시 보낼 때까지 기본(받기)");
+});
+
+test("받는 사람에게는 초대장만 가고 '대기 중' 상태는 보낸 사람에게만 간다(받는 쪽 카드가 바로 지워지지 않게)", () => {
+  const s = setup();
+  s.duel.message("pa", { t: "duel:invite", to: "pb", game: "jump" });
+  assert.ok(s.last("pb", "duel:invited"), "초대장은 간다");
+  assert.equal(s.last("pb", "duel:invite-state"), undefined, "받는 사람에게 pending은 가지 않는다");
+  assert.equal(s.last("pa", "duel:invite-state").state, "pending");
 });
 
