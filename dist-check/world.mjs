@@ -181,7 +181,7 @@ function makeFloor(f) {
     F("bigtable", 15, 14, 2, 12, { raw: true });
     F("wbpost", 14, 13, 1, 1, { raw: true, board: "s" });
     F("wbwall", 9, 27, 4, 1, { raw: true, board: "n" });
-    Z(21, 18, 5, 7, "\uD558\uB8E8\uB4E4 \uBD80\uC2A4", "\uC6B0\uB9AC\uB07C\uB9AC \uD1B5\uD558\uB294 \uB124\uCEF7\uB9CC\uD654, \uD558\uB8E8\uB4E4. \uBD93 \uAF42\uC774\uC5D0\uC11C \uBD93\uC744 \uB4E4\uACE0(F) \uAC00\uC6B4\uB370 \uC774\uC824\uC744 \uB204\uB974\uBA74 \uB2E4 \uAC19\uC774 \uB124\uCEF7\uC744 \uADF8\uB824\uC694.", { tint: "#EFE7FB", raw: true });
+    Z(21, 18, 5, 7, "\uD558\uB8E8\uB4E4 \uBD80\uC2A4", "\uC6B0\uB9AC\uB07C\uB9AC \uD1B5\uD558\uB294 \uB124\uCEF7\uB9CC\uD654, \uD558\uB8E8\uB4E4. \uBD93 \uAF42\uC774\uC5D0\uC11C \uBD93\uC744 \uB4E4\uACE0(F) \uAC00\uC6B4\uB370 \uC774\uC824\uC744 \uB204\uB974\uBA74 \uB2E4 \uAC19\uC774 \uB124\uCEF7\uC744 \uADF8\uB824\uC694. \uC55E \uC785\uAC04\uD310\uC5D0\uC11C \uD558\uB8E8\uB4E4\uB85C \uBC1B\uB294 \uC544\uC774\uD15C\uB3C4 \uD655\uC778\uD574\uC694.", { tint: "#EFE7FB", raw: true });
     F("hbmat", 21, 18, 5, 7, { raw: true });
     F("hbwall", 25, 18, 1, 7, { raw: true });
     F("hbcounter", 23, 20, 1, 3, { raw: true });
@@ -197,6 +197,7 @@ function makeFloor(f) {
     F("easel", 22, 23, 1, 1, { seed: 2, raw: true, tilt: -0.45 });
     F("linkkiosk", 20, 17, 1, 1, { raw: true, tilt: 0.35 });
     F("instaboard", 20, 25, 1, 1, { raw: true, tilt: -0.35 });
+    F("giftsign", 20, 21, 1, 1, { raw: true });
     for (const y of [16, 20, 24]) F("table", 12, y, 2, 2, { raw: true });
     R(1, 24, 17, 9, "\uC791\uC740 \uAC15\uC758\uC2E4", { doors: [{ s: "n", from: 13, len: 2 }], sign: "Small Classroom" });
     Z(2, 25, 15, 7, "\uC791\uC740 \uAC15\uC758\uC2E4", "\uC791\uC740 \uADDC\uBAA8 \uC218\uC5C5\uACFC \uC2A4\uD130\uB514\uAC00 \uC5F4\uB9AC\uB294 \uAC15\uC758\uC2E4\uC774\uC5D0\uC694.");

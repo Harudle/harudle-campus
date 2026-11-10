@@ -1143,6 +1143,17 @@ function buildFurn(G, o, fl) {
       box(head, .78, .78, .06, insta ? 0xE1306C : 0x7B5BD6, 0, -.39, -.04, { line: .01 });
       const m = board(head, .72, .72, insta ? instaTex : siteTex, 0, 0, .001); m.userData.noMerge = true; m.userData.link = insta ? "https://www.instagram.com/harudle.official/" : "https://www.harudle.com/"; linkBoards.push(m);
       break; }
+    case "giftsign": { // 하루들 선물 입간판(서쪽을 본다): A자로 펼친 나무 판 양면에 받는 아이템, 위에 천천히 도는 선물 상자. 누르면 받는 법 창
+      const g2 = new THREE.Group(); g2.position.set(x, 0, z); g2.rotation.y = -Math.PI / 2; G.add(g2);
+      for (const s of [1, -1]) {
+        const leaf = new THREE.Group(); leaf.position.z = s * .19; leaf.rotation.x = -s * .19; g2.add(leaf);   // 두 판이 위에서 맞닿는다
+        box(leaf, .68, 1, .04, C.woodD, 0, 0, 0, { line: .006 });
+        const m = board(leaf, .6, .9, giftTex, 0, .53, s * .025, s > 0 ? 0 : Math.PI); m.userData.noMerge = true; m.userData.gift = true; linkBoards.push(m);
+      }
+      const gift = new THREE.Group(); gift.position.set(x, 1.12, z); gift.userData.noMerge = true; G.add(gift); spinners.push(gift);
+      box(gift, .26, .26, .26, 0xFFD43B, 0, 0, 0, { line: .008 }); box(gift, .27, .27, .05, 0x7B5BD6, 0, -.005, 0, { line: 0 }); box(gift, .05, .27, .27, 0x7B5BD6, 0, -.005, 0, { line: 0 });
+      for (const k of [-1, 1]) ball(gift, .06, 0x7B5BD6, k * .05, .29, 0, { line: .004 }).scale.set(1.3, .8, .8);
+      break; }
     case "painteasel": { // 함께 그리는 이젤(서쪽을 본다): 큰 나무 이젤에 네컷 틀 캔버스. 붓을 든 채 누르면 그린다
       const g2 = new THREE.Group(); g2.position.set(x, 0, z); g2.rotation.y = -Math.PI / 2 + (o.tilt || 0); G.add(g2);
       for (const [lx, lz, rx2] of [[-.4, .14, .1], [.4, .14, -.1], [0, -.4, 0]] as [number, number, number][]) { const l = box(g2, .06, 1.9, .06, C.woodD, lx, 0, lz, { line: .006 }); l.rotation.z = rx2; if (lz < 0) l.rotation.x = .28; }
@@ -2153,6 +2164,59 @@ const instaTex = canvasTex(512, 512, (g, w, h) => {
   g.fillStyle = "#D62976"; g.beginPath(); g.roundRect(106, 386, w - 212, 84, 42); g.fill();
   g.fillStyle = "#FFFFFF"; g.font = `800 38px "Pretendard","Apple SD Gothic Neo",sans-serif`; g.fillText("인스타 바로가기 ↗", w / 2, 429);
 });
+// 하루들 선물 입간판: 하루들에서 해 보면 풀리는 귀 장식 둘(LOCKED_OPTIONS)과 받는 법
+const giftTex = canvasTex(512, 768, (g, w) => {
+  const pf = (wt, px) => `${wt} ${px}px "Pretendard","Apple SD Gothic Neo",sans-serif`, ink = "#111118";
+  g.fillStyle = "#FFFDF6"; g.fillRect(0, 0, w, 768); g.fillStyle = "#7B5BD6"; g.fillRect(0, 0, w, 190);
+  g.textAlign = "center"; g.textBaseline = "middle";
+  g.fillStyle = "#FFD43B"; g.font = pf(800, 32); g.fillText("캐릭터 귀 장식", w / 2, 44);
+  g.fillStyle = "#FFFFFF"; g.font = pf(800, 54); g.fillText("하루들에서", w / 2, 100); g.fillText("예쁜 아이템 받기", w / 2, 154);
+  const card = (y, title, l1, l2, icon) => {
+    g.fillStyle = "#FFFFFF"; g.strokeStyle = ink; g.lineWidth = 5; g.beginPath(); g.roundRect(28, y, w - 56, 200, 28); g.fill(); g.stroke();
+    g.fillStyle = "#EFE7FB"; g.beginPath(); g.arc(112, y + 100, 66, 0, 7); g.fill(); icon(112, y + 100);
+    g.textAlign = "left"; g.fillStyle = ink; g.font = pf(800, 44); g.fillText(title, 200, y + 54);
+    g.fillStyle = "#4A3A80"; g.font = pf(600, 30); g.fillText(l1, 200, y + 112); g.fillText(l2, 200, y + 152); g.textAlign = "center";
+  };
+  card(214, "헤드셋", "네컷만화 그려", "피드에 올리기", (cx, cy) => {   // 머리띠 + 보라 귀컵 둘
+    g.strokeStyle = ink; g.lineWidth = 9; g.beginPath(); g.arc(cx, cy + 4, 36, Math.PI, 0); g.stroke();
+    g.fillStyle = "#B39DDB"; g.lineWidth = 5; for (const k of [-1, 1]) { g.beginPath(); g.roundRect(cx + k * 36 - 15, cy - 4, 30, 44, 12); g.fill(); g.stroke(); }
+  });
+  card(436, "에어팟", "하루들 인스타", "팔로우하기", (cx, cy) => {   // 하얀 콩나물 둘
+    g.fillStyle = "#FFFFFF"; g.strokeStyle = ink; g.lineWidth = 5;
+    for (const k of [-1, 1]) { const bx = cx + k * 22; g.beginPath(); g.roundRect(bx - 7, cy - 14, 14, 50, 7); g.fill(); g.stroke(); g.beginPath(); g.arc(bx, cy - 20, 15, 0, 7); g.fill(); g.stroke(); }
+  });
+  g.fillStyle = "#FFD43B"; g.strokeStyle = ink; g.lineWidth = 5; g.beginPath(); g.roundRect(70, 664, w - 140, 76, 38); g.fill(); g.stroke();
+  g.fillStyle = ink; g.font = pf(800, 36); g.fillText("눌러서 받는 법 보기", w / 2, 703);
+});
+// 받는 법 창: 아이템마다 받았는지와 바로 해 볼 수 있는 버튼(인스타 · 하루들 · 피드 링크 붙여넣기 · 껴 보기)
+const gifts = document.getElementById("gifts");
+const GIFT_ICON = {
+  headset: `<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M9 23v-4a11 11 0 0 1 22 0v4" fill="none" stroke="#111118" stroke-width="3.2"/><rect x="4.5" y="20" width="9" height="13" rx="4" fill="#B39DDB" stroke="#111118" stroke-width="2"/><rect x="26.5" y="20" width="9" height="13" rx="4" fill="#B39DDB" stroke="#111118" stroke-width="2"/></svg>`,
+  airpods: `<svg viewBox="0 0 40 40" aria-hidden="true"><g fill="#fff" stroke="#111118" stroke-width="2"><rect x="10.5" y="15" width="5" height="18" rx="2.5"/><circle cx="13" cy="13" r="5.5"/><rect x="24.5" y="15" width="5" height="18" rx="2.5"/><circle cx="27" cy="13" r="5.5"/></g></svg>`,
+};
+const GIFTS = [
+  { v: "headset", name: "헤드셋", how: "하루들에서 네컷만화를 그려 피드에 올린 뒤, 그 피드 링크를 붙여넣어요.", acts: [["site", "네컷만화 만들러 가기 ↗"], ["paste", "피드 링크 붙여넣기"]] },
+  { v: "airpods", name: "에어팟", how: "하루들 인스타그램(@harudle.official)을 열어 팔로우해요.", acts: [["insta", "인스타 팔로우하러 가기 ↗"]] },
+];
+function renderGifts() {
+  document.getElementById("giftList").innerHTML = GIFTS.map((it) => {
+    const got = unlocked(it.v), worn = myAv.ear === it.v;
+    const acts = got ? `<button type="button" class="btn${worn ? " ghost" : ""}" data-gift-wear="${it.v}"${worn ? " disabled" : ""}>${worn ? "끼고 있어요" : "껴 보기"}</button>`
+      : it.acts.map(([k, l], i) => `<button type="button" class="btn${i ? " ghost" : ""}" data-gift-go="${k}">${l}</button>`).join("");
+    return `<li class="${got ? "got" : ""}"><span class="gicon">${GIFT_ICON[it.v]}</span><div><b>${it.name}<em>${got ? "받았어요 ✓" : "🔒 잠김"}</em></b><p>${got ? "캐릭터 외형 수정 › 귀에서 언제든 바꿔 껴요." : it.how}</p><div class="gacts">${acts}</div></div></li>`;
+  }).join("");
+}
+function openGifts() { if (locked()) document.exitPointerLock(); renderGifts(); gifts.hidden = false; $("giftsClose").focus(); }
+function closeGifts() { gifts.hidden = true; syncCursor(); }
+$("giftsClose").onclick = closeGifts;
+gifts.addEventListener("click", (e) => {
+  if (e.target === gifts) return closeGifts();
+  const b = (e.target as HTMLElement).closest("button"); if (!b) return;
+  if (b.dataset.giftWear) { setMyAv({ ...myAv, ear: b.dataset.giftWear }); renderGifts(); showToast("귀에 꼈어요", "캐릭터 외형 수정 › 귀에서 언제든 바꿔요.", 2200); }
+  else if (b.dataset.giftGo === "site") openLink("https://www.harudle.com/");
+  else if (b.dataset.giftGo === "insta") { openLink("https://www.instagram.com/harudle.official/"); renderGifts(); }   // 인스타를 열면 바로 풀린다
+  else if (b.dataset.giftGo === "paste") { gifts.hidden = true; avUnlock.open = true; openAvPanel(); const inp = document.getElementById("avFeedLink") as HTMLInputElement; inp?.scrollIntoView({ block: "center" }); inp?.focus(); }   // 캐릭터 꾸미기의 헤드셋 칸으로
+});
 // 그림판 창: 미리 고른 색 16개 + RGB 막대 + 색 고르기, 굵기 막대와 미리보기 점, 캔버스 위 굵기 크기의 동그란 커서
 const easelEd = document.getElementById("easelEd");
 const EZ_SW = ["#111118", "#FFFFFF", "#9A97A3", "#F15B5B", "#FF8C1A", "#FFD43B", "#7FCFAE", "#20B486", "#7DB3F0", "#2F80ED", "#B39DDB", "#7B5BD6", "#F7A6A0", "#E83E8C", "#8B5A2B", "#EBD3AE"];
@@ -2305,6 +2369,7 @@ addEventListener("keydown", (e) => {
     if (c === "Escape") closeTour(); else if (c === "ArrowLeft" || c === "KeyA") showTourStep(tourAt - 1); else if (c === "ArrowRight" || c === "KeyD" || c === "Enter" || c === "Space" || c === "KeyF") tourNext.click();
     return;
   }
+  if (!gifts.hidden) { if (c === "Escape" || c === "KeyF") { e.preventDefault(); closeGifts(); } return; }   // 받는 법 창: Esc·F로 닫기
   if ($("loginAsk")?.hidden === false) { if (c === "Escape") { e.preventDefault(); closeLoginAsk(); } return; }   // 연동 안내 창: Esc로 닫기, 다른 키는 게임으로 가지 않게
   if (c === "Escape") {
     // 설정창이 떠 있으면 닫는다(막 열린 직후 같은 Esc는 무시). 여기서 바로 마우스를 고정하면 브라우저가 그 Esc로 다시 풀어 버려서
@@ -2425,7 +2490,7 @@ let lockFailed = false;
 const locked = () => document.pointerLockElement === canvas;
 // 경계: 창(층 고르기·크루 피드·사진·캐릭터 꾸미기·설정)이 떠 있는 동안은 커서를 꺼내 두고, 다 닫히면 게임으로 돌아와 다시 고정한다.
 // 채팅창에 쓰는 동안도 커서를 꺼내 둔다
-const uiOpen = () => !easelEd.hidden || $("loginAsk")?.hidden === false || !$("startrackPanel").hidden || !menu.hidden || !profile.hidden || !tour.hidden || !inv.hidden || !picker.hidden || panel.classList.contains("open") || !avPanel.hidden || !lb.hidden;
+const uiOpen = () => !easelEd.hidden || $("loginAsk")?.hidden === false || !gifts.hidden || !$("startrackPanel").hidden || !menu.hidden || !profile.hidden || !tour.hidden || !inv.hidden || !picker.hidden || panel.classList.contains("open") || !avPanel.hidden || !lb.hidden;
 const typing = () => document.activeElement === sayInput;   // 채팅창에 쓰는 중: 커서를 꺼내 둔다
 function syncCursor() { if (uiOpen()) { if (locked()) document.exitPointerLock(); } else lockMouse(); }
 function lockMouse() {
@@ -2470,7 +2535,7 @@ function boothHit(cx, cy) {   // 커서가 보일 때 바로가기·이젤·14�
 function clickAt(cx, cy) {
   stopFollow();
   ndc.set(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
-  if (me.f === 12 && linkBoards.length) { const lh = ray.intersectObjects(linkBoards, false)[0]; if (lh) { openLink(lh.object.userData.link); return; } }   // 바로가기 장치를 눌렀다
+  if (me.f === 12 && linkBoards.length) { const lh = ray.intersectObjects(linkBoards, false)[0]; if (lh) { if (lh.object.userData.gift) openGifts(); else openLink(lh.object.userData.link); return; } }   // 바로가기 장치·선물 입간판을 눌렀다
   if (me.f === 14 && showSlots.length) { const sh = ray.intersectObjects(showSlots.map((sl) => sl.mesh), false)[0]; if (sh) { openItem(showItem(sh.object.userData.show)); return; } }   // 14층 액자를 눌렀다
   if (me.f === 12 && ezBoards.length) { const eh = ray.intersectObjects(ezBoards, false)[0]; if (eh && eh.object.userData.wb) { if (nearWb(4)) { openEasel("wb"); return; } } else if (eh && nearFurn("painteasel", 3.2)) { tryEasel(); return; } }   // 이젤·화이트보드를 눌렀다   // 이젤을 눌렀다
   const hit = ray.intersectObjects(NPCS.filter((n) => n.f === me.f && n.doll.root.visible).map((n) => n.doll.root), true).find((h) => h.object !== (h.object.parent as any)?.userData?.blob && !(h.object as any).isPoints);
@@ -2538,7 +2603,7 @@ const nearStartrackScreen = () => !me.lie && !me.seat && me.f === 13 && me.x >= 
 function interact() {
   const stand = nearScoop(); if (stand) { openShow(stand.view ?? "scoop"); return; }
   const sh = nearShow(); if (sh) { openItem(showItem(sh)); return; }
-  if (!me.lie && !me.seat && me.f === 12) { if (nearWb(2.4)) { openEasel("wb"); return; } if (me.brush && nearFurn("painteasel", 2.1)) { tryEasel(); return; } if (nearFurn("brushcup", 1.7)) { toggleBrush(); return; } if (nearFurn("painteasel", 2.1)) { tryEasel(); return; } if (nearFurn("linkkiosk", 1.7)) { openLink("https://www.harudle.com/"); return; } if (nearFurn("instaboard", 1.7)) { openLink("https://www.instagram.com/harudle.official/"); return; } }   // 하루들 부스: 붓 꽂이 · 함께 그리는 이젤   // 붓을 들었으면 이젤이 먼저
+  if (!me.lie && !me.seat && me.f === 12) { if (nearWb(2.4)) { openEasel("wb"); return; } if (me.brush && nearFurn("painteasel", 2.1)) { tryEasel(); return; } if (nearFurn("brushcup", 1.7)) { toggleBrush(); return; } if (nearFurn("painteasel", 2.1)) { tryEasel(); return; } if (nearFurn("linkkiosk", 1.7)) { openLink("https://www.harudle.com/"); return; } if (nearFurn("instaboard", 1.7)) { openLink("https://www.instagram.com/harudle.official/"); return; } if (nearFurn("giftsign", 1.6)) { openGifts(); return; } }   // 하루들 부스: 붓 꽂이 · 함께 그리는 이젤   // 붓을 들었으면 이젤이 먼저
   if (nearStartrackScreen()) { startrack.openSettings(); return; }
   { const fr = nearFridge(); if (fr) { fr.want = !fr.want; return; } }   // 냉장고 앞: 문 열기·닫기
   if (me.act?.name === "gun" && !me.lie && !me.seat && !atCall()) { fireFirework(true); return; }   // 종이 총을 들었으면 F도 발사(엘리베이터 앞만 예외)
@@ -2650,14 +2715,18 @@ document.getElementById("tourSkip").onclick = closeTour;
 // 걷기만 하고 달려 본 적이 없으면 한 번 알려 준다
 let walkFor = 0, runTipShown = false;
 const actBtn = document.getElementById("act"); actBtn.onclick = interact;
-function setMyAv(c) { myAv = { ...c }; LS.set("ww.avatar", avEncode(myAv)); const vis = meDoll.root.visible; dropDoll(meDoll); meDoll = makeChar(myAv); meDoll.root.visible = vis; scene.add(meDoll.root); sendPresence(true); renderAvPanel(); avatarPreview.set({ config: { ...DEFAULT_AV, ...myAv } }); }
+function setMyAv(c) { myAv = { ...c }; LS.set("ww.avatar", avEncode(myAv)); const vis = meDoll.root.visible; dropDoll(meDoll); meDoll = makeChar(myAv); meDoll.root.visible = vis; scene.add(meDoll.root); sendPresence(true); renderAvPanel(); }
 // 캐릭터 꾸미기 (하루들 월드의 AvatarCustomizer와 같은 항목)
 const avPanel = document.getElementById("avPanel"); let avColorPart = "headColor", avCamBack = null;
+// 잠긴 장식도 눌러서 미리보기에서만 껴 볼 수 있다(저장·전송은 안 함). 다른 걸 고르거나 창을 닫으면 원래대로
+let avTry: { part: string; v: string } | null = null;
 function renderAvPanel() {
   if (avPanel.hidden) return;
+  if (avTry && unlocked(avTry.v)) avTry = null;   // 미리보는 사이에 풀렸으면 그냥 고른 상태로
+  avatarPreview.set({ config: { ...DEFAULT_AV, ...myAv, ...(avTry && { [avTry.part]: avTry.v }) }, note: avTry ? `🔒 ${AV_LABEL[avTry.part][avTry.v]} 미리보기 · 풀어야 저장돼요` : null });
   const chip = (part, v) => LOCKED_OPTIONS[part]?.includes(v) && !unlocked(v)
-    ? `<button type="button" class="locked" data-lock="${v}" data-tip="${LOCK_TIPS[v]}" aria-disabled="true" aria-label="${AV_LABEL[part][v]} (잠김) · ${LOCK_TIPS[v]}">🔒 ${AV_LABEL[part][v]}</button>`
-    : `<button type="button" data-part="${part}" data-v="${v}" aria-pressed="${myAv[part] === v}">${AV_LABEL[part][v]}</button>`;
+    ? `<button type="button" class="locked" data-lock="${v}" data-lpart="${part}" data-tip="${LOCK_TIPS[v]}" aria-pressed="${avTry?.v === v}" aria-label="${AV_LABEL[part][v]} (잠김, 미리보기만) · ${LOCK_TIPS[v]}">🔒 ${AV_LABEL[part][v]}</button>`
+    : `<button type="button" data-part="${part}" data-v="${v}" aria-pressed="${myAv[part] === v && avTry?.part !== part}">${AV_LABEL[part][v]}</button>`;
   const esc = (t) => t.replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[ch]);
   const unlockBox = avUnlock.open && !unlocked("headset") ? `<div class="avunlock"><p>${LOCK_TIPS.headset}</p><div class="row"><input id="avFeedLink" type="url" inputmode="url" autocomplete="off" placeholder="https://www.harudle.com/feeds/…" value="${esc(avUnlock.link)}"><button type="button" class="btn" data-unlock-go="1"${avUnlock.busy ? " disabled" : ""}>확인</button></div>${avUnlock.msg ? `<p class="msg">${esc(avUnlock.msg)}</p>` : ""}</div>` : "";
   // 색을 고를 수 있는 부위는 줄 이름 옆에 지금 색 동그라미 버튼: 누르면 옆에 색 고르는 창이 뜬다
@@ -2693,15 +2762,19 @@ avPanel.addEventListener("click", (e) => {
   const b = (e.target as HTMLElement).closest("button"); if (!b) return;
   if (b.id === "avDone") return closeAvPanel();
   if (b.dataset.unlockGo) return void tryFeedUnlock();
-  if (b.dataset.lock === "headset") { avUnlock.open = !avUnlock.open; renderAvPanel(); if (avUnlock.open) (document.getElementById("avFeedLink") as HTMLInputElement)?.focus(); return; }   // 헤드셋: 피드 링크 붙여넣는 칸을 연다
-  if (b.dataset.lock) return showToast("🔒 아직 잠겨 있어요", LOCK_TIPS[b.dataset.lock], 3200);   // 터치에선 호버가 없으니 눌렀을 때도 알려 준다
+  if (b.dataset.lock) {   // 잠긴 장식: 미리보기에서만 껴 본다
+    const again = avTry?.v === b.dataset.lock; avTry = { part: b.dataset.lpart, v: b.dataset.lock };
+    if (b.dataset.lock === "headset") { avUnlock.open = again ? !avUnlock.open : true; renderAvPanel(); if (avUnlock.open) (document.getElementById("avFeedLink") as HTMLInputElement)?.focus(); return; }   // 헤드셋: 피드 링크 붙여넣는 칸도 연다
+    renderAvPanel(); return showToast("🔒 미리보기만 할 수 있어요", LOCK_TIPS[b.dataset.lock], 3200);   // 터치에선 호버가 없으니 눌렀을 때도 알려 준다
+  }
+  if (b.dataset.part || b.dataset.preset || b.dataset.random) avTry = null;   // 다른 걸 고르면 미리보기는 끝
   if (b.dataset.part) setMyAv({ ...myAv, [b.dataset.part]: b.dataset.v });
   else if (b.dataset.cpart) { avColorOpen = !(avColorOpen && avColorPart === b.dataset.cpart); avColorPart = b.dataset.cpart; renderAvPanel(); }   // 같은 버튼을 다시 누르면 닫는다
   else if (b.dataset.preset) setMyAv(AV_PRESETS[+b.dataset.preset][1]);
   else if (b.dataset.random) setMyAv(avRandom());
 });
-function openAvPanel() { if (locked()) document.exitPointerLock(); avPanel.hidden = false; renderAvPanel(); avatarPreview.set({ open: true, config: { ...DEFAULT_AV, ...myAv } }); if (!inside()) { avCamBack = cam.distT; cam.distT = 6; cam.yawT = me.h; cam.pitchT = .5; } /* 얼굴이 보이게 앞쪽에서 */ document.getElementById("avDone").focus(); }
-function closeAvPanel() { const was = !avPanel.hidden; avPanel.hidden = true; avColorOpen = false; renderColorPop(); avatarPreview.set({ open: false }); if (was) syncCursor(); if (avCamBack !== null) { cam.distT = avCamBack; avCamBack = null; } }
+function openAvPanel() { if (locked()) document.exitPointerLock(); avPanel.hidden = false; renderAvPanel(); avatarPreview.set({ open: true }); if (!inside()) { avCamBack = cam.distT; cam.distT = 6; cam.yawT = me.h; cam.pitchT = .5; } /* 얼굴이 보이게 앞쪽에서 */ document.getElementById("avDone").focus(); }
+function closeAvPanel() { const was = !avPanel.hidden; avPanel.hidden = true; avColorOpen = false; avTry = null; renderColorPop(); avatarPreview.set({ open: false }); if (was) syncCursor(); if (avCamBack !== null) { cam.distT = avCamBack; avCamBack = null; } }
 /* ───── 설정창(Esc · 왼쪽 위 ⚙️): 설정 탭(프로필 수정 · 캐릭터 외형 수정) · 조작법 탭 ───── */
 const menu = document.getElementById("menu"), profile = document.getElementById("profile"), profileName = $<HTMLInputElement>("profileName");
 let menuAt = 0, renameMe: ((v: string) => void) | null = null, myNameNow = () => "";
@@ -3152,8 +3225,8 @@ function step(dt, t) {
   }
   checkZone();
   const near = nearNPC(), call = atCall(), bag = nearBag(), seat = nearSeat();
-  const ez0 = !me.lie && !me.seat && nearFurn("painteasel", 2.1), cup = !(me.brush && ez0) && !me.lie && !me.seat && nearFurn("brushcup", 1.7), ez = !cup && ez0, site = !cup && !ez && nearFurn("linkkiosk", 1.7), insta = !cup && !ez && !site && nearFurn("instaboard", 1.7), wb = !me.lie && !me.seat && nearWb(2.4), fr = nearFridge(), scoop = nearScoop(), shown = !scoop && nearShow(), screenNear = !scoop && !shown && nearStartrackScreen();   // 하루들 부스
-  actBtn.hidden = !(me.lie || me.seat || near || bag || call || seat || cup || ez || site || insta || wb || fr || scoop || shown || screenNear); actBtn.textContent = screenNear ? "스타트랙 영상 설정" : scoop ? scoop.action ?? "오늘의 특종 보기" : shown ? showItem(shown).action : wb ? "화이트보드에 쓰기" : fr ? (fr.want ? "냉장고 닫기" : "냉장고 열기") : cup ? (me.brush ? "붓 꽂기" : "붓 들기") : ez ? "함께 그리기" : site ? "하루들 바로가기" : insta ? "인스타 바로가기" : me.lie || me.seat ? "일어나기" : seat && !(near && Math.hypot(seat.x - me.x, seat.y - me.y) > .55) ? "앉기" : near ? `${withJosa(near.p.nick, "와", "과")} 대화하기` : bag ? "빈백에 눕기" : "엘리베이터 타기";
+  const ez0 = !me.lie && !me.seat && nearFurn("painteasel", 2.1), cup = !(me.brush && ez0) && !me.lie && !me.seat && nearFurn("brushcup", 1.7), ez = !cup && ez0, site = !cup && !ez && nearFurn("linkkiosk", 1.7), insta = !cup && !ez && !site && nearFurn("instaboard", 1.7), gift = !cup && !ez && !site && !insta && !me.lie && !me.seat && nearFurn("giftsign", 1.6), wb = !me.lie && !me.seat && nearWb(2.4), fr = nearFridge(), scoop = nearScoop(), shown = !scoop && nearShow(), screenNear = !scoop && !shown && nearStartrackScreen();   // 하루들 부스
+  actBtn.hidden = !(me.lie || me.seat || near || bag || call || seat || cup || ez || site || insta || gift || wb || fr || scoop || shown || screenNear); actBtn.textContent = screenNear ? "스타트랙 영상 설정" : scoop ? scoop.action ?? "오늘의 특종 보기" : shown ? showItem(shown).action : wb ? "화이트보드에 쓰기" : fr ? (fr.want ? "냉장고 닫기" : "냉장고 열기") : cup ? (me.brush ? "붓 꽂기" : "붓 들기") : ez ? "함께 그리기" : site ? "하루들 바로가기" : insta ? "인스타 바로가기" : gift ? "아이템 받는 법" : me.lie || me.seat ? "일어나기" : seat && !(near && Math.hypot(seat.x - me.x, seat.y - me.y) > .55) ? "앉기" : near ? `${withJosa(near.p.nick, "와", "과")} 대화하기` : bag ? "빈백에 눕기" : "엘리베이터 타기";
   if (me.say && Date.now() - me.sayAt > 6000) { me.say = ""; sendPresence(true); }
 }
 const tgt = new THREE.Vector3();

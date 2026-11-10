@@ -12,7 +12,7 @@ function Turntable({ drag, children }: { drag: React.RefObject<{ on: boolean; ya
 }
 
 export function AvatarPreview() {
-  const { open, config } = useSyncExternalStore(avatarPreview.subscribe, avatarPreview.get)
+  const { open, config, note } = useSyncExternalStore(avatarPreview.subscribe, avatarPreview.get)
   const drag = useRef({ on: false, yaw: 0, x: 0 })
   useEffect(() => { const host = document.getElementById('avPreview'); if (host) host.hidden = !open; if (open) drag.current.yaw = 0 }, [open])   // 열 때마다 정면부터
   if (!open || !config) return null
@@ -30,7 +30,7 @@ export function AvatarPreview() {
           <Turntable drag={drag}><Avatar key={JSON.stringify(config)} config={config} /></Turntable>
         </Canvas>
       </div>
-      <p className="avpv-cap">미리보기 · 끌어서 돌려 보기</p>
+      <p className="avpv-cap">{note ?? '미리보기 · 끌어서 돌려 보기'}</p>
     </>
   )
 }
