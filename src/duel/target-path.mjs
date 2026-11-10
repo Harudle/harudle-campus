@@ -5,10 +5,10 @@ import { TARGET_X, TARGET_ROWS } from "./arena/target.mjs";
 export const TARGET = {
   DURATION: 60000,   // 경기 시간(ms)
   LEAD: 600,         // 과녁이 나오기 이만큼 전에 알린다(늦게 받아 갑자기 나타나지 않게)
-  GAP: 240,          // 맞힘 사이 최소 간격(ms): 종이 총 0.25초에서 시계 흔들림만큼 뺐다
+  GAP: 110,          // 맞힘 사이 최소 간격(ms): 종이 AK 연사 0.13초에서 시계 흔들림만큼 뺐다
   HIT_R: .4,         // 맞힘 반지름(칸, 0.5m). 브라우저가 총알과 과녁 가운데 거리로 본다
-  BULLET: 19.5 / 1.25,   // 종이 총알 가로 빠르기(칸/초, 엔진 shootPaper 19.5m/s)
-  RANGE: 16,         // 총알이 바닥에 떨어지기 전 닿는 거리(칸, 넉넉히)
+  BULLET: 34 / 1.25,     // 종이 AK 총알 가로 빠르기(칸/초, 엔진 bulletSpeed 34m/s · 사격 대결 SHOOT.SPEED와 같다)
+  RANGE: 22,         // 총알이 닿는 거리(칸, 넉넉히)
   POINTS: [1, 3],    // 보통 · 금색
 };
 // 같은 seed면 같은 난수(mulberry32)

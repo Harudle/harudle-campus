@@ -41,6 +41,7 @@ registerFurn("jpad", (G, o, k) => { // 출발대(노랑) · 체크포인트(초�
 /* ───── 경기 ───── */
 export const game: DuelGame = {
   id: "jump",
+  keys: [{ label: "이동", keys: ["WASD"] }, { label: "점프(두 번)", keys: ["Space"] }, { label: "달리기", keys: ["Shift"] }, { label: "시점", keys: ["V"] }],
   start(ctx) {
     const c = JUMP_COURSES[ctx.match.state?.course ?? 0], last = c.pads.length - 1;
     let reached = ctx.mine ? ctx.match.state?.cp?.[ctx.seat] ?? 0 : 0;

@@ -116,6 +116,21 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--brand);outline-
 #dock{z-index:7;left:50%;transform:translateX(-50%);bottom:calc(12px + env(safe-area-inset-bottom,0px));flex-wrap:nowrap;gap:2px;padding:5px 8px;background:var(--paper);border:2.5px solid var(--ink);border-radius:20px 22px 19px 21px;box-shadow:3px 4px 0 var(--ink);max-width:calc(100% - 24px)}
 .dgroup{display:flex;gap:2px}
 .dgroup[hidden],.dbtn[hidden],#mediaBtns[hidden]+.dsep{display:none}
+/* 대결 중(선수): 표현 버튼 자리에 종목 조작 키(키캡 + 이름)와 내 체력 막대 */
+#duelDock{align-items:center;gap:10px;padding:0 4px}
+#duelDock .ddKeys{display:flex;gap:2px}
+#duelDock .dk{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:58px;padding:4px 6px;font-family:var(--hand);font-size:14px;line-height:1.1}
+#duelDock .dk b{font-weight:700;white-space:nowrap}
+#duelDock .caps{display:flex;gap:3px}
+#duelDock kbd{min-width:22px;padding:0 6px;border:1.5px solid var(--ink);border-radius:6px;background:#FFF6C7;box-shadow:0 1.5px 0 var(--ink);font:700 12px/20px var(--body);text-align:center;white-space:nowrap}
+#duelDock .ddHp{display:flex;align-items:center;gap:6px;padding:6px 12px;border-left:2px dashed var(--line);font-family:var(--body)}#duelDock .ddHp[hidden]{display:none}
+#duelDock .ddHp i{font-style:normal;font-size:20px;color:#E5484D}
+#duelDock .ddHp .bar{display:block;width:150px;height:14px;border:2px solid var(--ink);border-radius:8px;background:#fff;overflow:hidden}
+#duelDock .ddHp .bar b{display:block;height:100%;background:#3FA37C;transition:width .2s}
+#duelDock .ddHp em{min-width:2.2em;font:800 18px/1 var(--body);font-style:normal;font-variant-numeric:tabular-nums}
+#duelDock .ddHp.low .bar b{background:#E5484D}#duelDock .ddHp.low em{color:#E5484D}
+body.touch #duelDock .ddKeys{display:none}body.touch #duelDock .ddHp{flex-direction:column;border-left:0;padding:4px}body.touch #duelDock .ddHp .bar{width:12px;height:90px;display:flex;align-items:flex-end}body.touch #duelDock .ddHp .bar b{width:100%!important;height:var(--hp,100%)}
+@media (prefers-reduced-motion:reduce){#duelDock .ddHp .bar b{transition:none}}
 .dsep{align-self:stretch;margin:8px 6px;border-left:2px dashed var(--line)}
 .dbtn{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:58px;padding:6px 8px 5px;border:2px solid transparent;border-radius:14px;background:none;color:var(--ink);font-family:var(--hand);font-size:15px;line-height:1.1;cursor:pointer;transition:background .15s,transform .1s}
 .dbtn svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
@@ -260,7 +275,7 @@ body.touch.chatting #bottom{display:flex;bottom:auto;top:calc(64px + env(safe-ar
 body.touch #zoneToast{max-width:calc(100% - 40px)}
 body.touch #dock{left:max(12px,env(safe-area-inset-left,0px));top:50%;bottom:auto;transform:translateY(-50%);padding:4px 3px;border-width:2px;box-shadow:2px 3px 0 var(--ink)}   /* 모바일: 음성 묶음만 왼쪽 가운데에 세로로(오른쪽 시점 버튼과 마주 보게) */
 body.touch #mediaBtns{flex-direction:column}
-body.touch #dock:has(#mediaBtns[hidden]),body.touch #dock .dsep{display:none}
+body.touch #dock:has(#mediaBtns[hidden]):not(:has(#duelDock:not([hidden]))),body.touch #dock .dsep{display:none}   /* 음성이 없어도 대결 중이면 내 체력은 보인다 */
 body.touch .dbtn{min-width:0;padding:7px}
 body.touch .dbtn b{display:none}
 body.touch.chatting #topRight,body.touch.peopleOpen #topRight{display:none}
@@ -609,14 +624,15 @@ body.touch .dcBtns kbd{display:none}
 .shootMark{position:fixed;z-index:15;left:50%;top:calc(50% + 34px);transform:translateX(-50%);font-family:var(--hand);font-weight:700;font-size:22px;color:#fff;-webkit-text-stroke:3px var(--ink);paint-order:stroke fill;pointer-events:none}
 .shootFlash{position:fixed;inset:0;z-index:14;pointer-events:none;box-shadow:inset 0 0 90px 30px rgba(241,91,91,.55);opacity:0}
 .shootFlash.on{animation:shootFlash .45s ease-out}
-/* 사격 대결 선수(FPS 1:1): 남은 시간 · 아래쪽 내 체력과 탄창 · 십자 조준점 */
+/* 사격 대결 선수(FPS 1:1): 남은 시간 · 아래 오른쪽 탄창 · 십자 조준점(내 체력은 아래 독 #duelDock) */
 .shootHud .st{font-variant-numeric:tabular-nums;padding:0 6px;border-radius:6px;background:var(--ink);color:#fff;font-size:13px}.shootHud .st.low{background:#E5484D}
-.shootStat{position:fixed;z-index:9;left:0;right:0;bottom:calc(92px + env(safe-area-inset-bottom,0px));display:flex;justify-content:space-between;align-items:flex-end;padding:0 max(24px,env(safe-area-inset-left,0px));pointer-events:none;font-family:"Pretendard","Apple SD Gothic Neo",sans-serif;color:#fff;text-shadow:0 1px 0 #111118,0 0 6px rgba(17,17,24,.6)}
-.shootStat .sh,.shootStat .sa{display:flex;align-items:baseline;gap:6px;padding:6px 14px;border-radius:12px;background:rgba(17,17,24,.45)}
-.shootStat b{font:800 34px/1 "Pretendard",sans-serif;font-variant-numeric:tabular-nums}.shootStat i{font-style:normal;font-size:20px;color:#7FCFAE}
-.shootStat small{font:700 15px "Pretendard",sans-serif;opacity:.75}.shootStat em{font:700 12px "Pretendard",sans-serif;font-style:normal;color:#FFD43B}
-.shootStat .low b,.shootStat .low i{color:#FF8A8A}
-.shootStat .rl{display:block;width:96px;height:8px;border-radius:4px;background:rgba(255,255,255,.25);overflow:hidden;align-self:center}.shootStat .rl b{display:block;height:100%;background:#FFD43B}
+.akAmmo{position:fixed;z-index:9;bottom:calc(92px + env(safe-area-inset-bottom,0px));display:flex;pointer-events:none;font-family:"Pretendard","Apple SD Gothic Neo",sans-serif;color:#fff;text-shadow:0 1px 0 #111118,0 0 6px rgba(17,17,24,.6)}
+.akAmmo{right:max(24px,env(safe-area-inset-right,0px))}
+.akAmmo .sa{display:flex;align-items:baseline;gap:6px;padding:6px 14px;border-radius:12px;background:rgba(17,17,24,.45)}
+.akAmmo b{font:800 34px/1 "Pretendard",sans-serif;font-variant-numeric:tabular-nums}
+.akAmmo small{font:700 15px "Pretendard",sans-serif;opacity:.75}.akAmmo em{font:700 12px "Pretendard",sans-serif;font-style:normal;color:#FFD43B}
+.akAmmo .low b{color:#FF8A8A}
+.akAmmo .rl{display:block;width:96px;height:8px;border-radius:4px;background:rgba(255,255,255,.25);overflow:hidden;align-self:center}.akAmmo .rl b{display:block;height:100%;background:#FFD43B}
 body.duelFps.ads #cross{opacity:0}   /* 조준하면 가늠자로 본다 */
 body.duelFps #cross{transition:opacity .1s;width:18px;height:18px;margin:-9px 0 0 -9px;border:0;border-radius:0;box-shadow:none;background:linear-gradient(#fff,#fff) center/2px 7px no-repeat,linear-gradient(#fff,#fff) center/7px 2px no-repeat;filter:drop-shadow(0 0 1px #111118) drop-shadow(0 0 1px #111118)}
 @keyframes shootFlash{0%{opacity:1}100%{opacity:0}}

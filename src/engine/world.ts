@@ -63,6 +63,7 @@ export function makeFloor(f) {
   for (const y of [15, 18, 21]) { F("elev", 29, y, 1, 2, { turn: Math.PI / 2, raw: true }); calls.push({ x: 30, y, w: 1, h: 2 }); }   // 서쪽 벽, 동쪽을 본다 — 이것만 탄다
   // 동쪽 벽 2대는 안 쓴다: 문 앞을 X배너 현수막이 막고 있다(돌려 세워 홀 쪽, 서쪽을 본다)
   // 2026 신입생 모집 포스터: 엘리베이터 사이 벽마다 한 장씩(모든 층)
+  if (f <= 13) F("duelbanner", 35, 10, 1, 1, { face: "s", raw: true });   // 1:1 대결 안내 배너: 엘리베이터 홀 북쪽 출구 앞(나오면 보인다)
   for (const y of [17, 20]) F("poster", 29, y, 1, 1, { face: "e", at: 30 - .07 / S, raw: true }); F("poster", 36, 18.5, 1, 1, { face: "w", at: 36 + .07 / S, raw: true });   // 엘리베이터 석재 벽 면에
   [16, 20].forEach((y, i) => { F("elev", 36, y, 1, 2, { turn: -Math.PI / 2, raw: true }); F("xbanner", 35, y, 1, 2, { style: i, turn: Math.PI, raw: true }); });   // 홀에서 동쪽 벽을 보면 왼쪽(북)이 검은 배너, 오른쪽이 흰 배너(사진 그대로)
 
@@ -90,6 +91,7 @@ export function makeFloor(f) {
 
 
   if (f === 11) {
+    F("duelbanner", 16, 10, 1, 1, { face: "s", raw: true }); F("duelbanner", 28, 31, 1, 1, { face: "w", raw: true });   // 1:1 대결 안내 배너: 큰 강의실과 코워킹 존 사이 · 캔틴
     // 큰 강의실: 벽 없이 탁 트였다. 입구 쪽(동남)에만 짧은 벽이 서 있고, 바깥 면에 행성 캐릭터와 "큰강의실" 그림
     F("wallpiece", 14, 16, 1, 5, { mural: ["큰강의실", "Large Classroom"] });
     F("pillar", 7, 10, 1, 1); F("pillar", 7, 17, 1, 1);   // 천장까지 닿는 콘크리트 기둥
@@ -128,6 +130,7 @@ export function makeFloor(f) {
   }
 
   if (f === 12) {
+    F("duelbanner", 19, 12, 1, 1, { face: "s", raw: true }); F("duelbanner", 32, 31, 1, 1, { face: "w", raw: true });   // 1:1 대결 안내 배너: 라이브러리와 코워킹 존 사이 · 캔틴
     Z(1, 3, 5, 21, "페어존", "책상 다섯 개가 한 줄로 늘어선 자리. 두 사람이 모니터 하나를 같이 보며 페어 프로그래밍을 해요.", { tint: "#F4F2FA" });
     for (const y of [5, 9, 13, 17, 21]) F("pairrow", 2, y, 2, 2, { raw: true });   // 작은 강의실 쪽으로 3칸 당겼다   // 책상 하나에 의자 넷·모니터 둘(양쪽 한 쌍씩), 모두 모니터 10대
     Z(7, 1, 21, 11, "라이브러리", "12·13층을 잇는 복층 서재. 창가엔 조약돌과 풀 위에 1인 책상, 원형 서가에 기술서와 개발 문화 책이 빼곡해요.", { tint: "#FBF4E6" });
@@ -200,6 +203,7 @@ export function makeFloor(f) {
   }
 
   if (f === 13) {
+    F("duelbanner", 32, 33, 1, 1, { face: "w", raw: true });   // 1:1 대결 안내 배너: 포커스 존 입구 옆(우물가 쪽을 본다)
     // 라이브러리 자리는 13층 바닥이 없다: 난간 너머로 12층 라이브러리·페어존이 통째로 내려다보인다
     F("void", 1, 1, 30, 9);
     // 스타트랙 가는 길: 난간 바로 안쪽에 고사리·이끼 화단이 길게 깔리고, 그 옆 회색 타일 길이 창까지 뻗는다. 길 남쪽엔 콘크리트 기둥, 위엔 선형 조명

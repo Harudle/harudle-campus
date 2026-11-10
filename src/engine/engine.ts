@@ -407,7 +407,7 @@ function paintCheerNotes(g, notes, w, h) {
   });
 }
 // 릴레이 상영관 스크린: 지금 상영 중인 화(slot)를 검은 화면 가운데에 맞춰 그리고, 아래에 화 번호·그린 사람·순서를 쓴다
-const CINEMA_W = 1024, CINEMA_H = 576, CINEMA_EVERY = 7000;
+const CINEMA_W = 1024, CINEMA_H = 576, CINEMA_EVERY = 3500;
 function paintCinema(sl) {
   const g = sl.cv.getContext("2d"), w = CINEMA_W, h = CINEMA_H, list = showcase?.[sl.src] ?? [], item = showItem(sl), n = list.length;
   const caption = (t, sub) => {
@@ -653,6 +653,35 @@ const counterSignTex = (w, h) => canvasTex(2048, Math.round(2048 * h / w), (g, c
   g.fillStyle = "#FFD43B"; for (const sx of [.06, .94]) { g.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, r = (i % 2 ? .45 : 1) * ch * .2; g.lineTo(cw * sx + Math.cos(a) * r, ch * .5 + Math.sin(a) * r); } g.fill(); }
 });
 // 롤업 배너: 보라 바탕에 Harudle·태그라인, 가운데 네 컷 한 장
+// 1:1 대결 안내 배너: "공부하다 지치셨나요?" · /대결 명령어 · 종목 넷. 크림 바탕에 남색 머리, 노란 띠, 먹선 카드(캠퍼스 그림체)
+let duelPosterCache: any = null;
+const duelPosterTex = () => duelPosterCache || (duelPosterCache = canvasTex(600, 1640, (g, w, h) => {
+  const ink = "#111118", navy = "#0E1E46", pf = (wt, px) => `${wt} ${px}px "Pretendard","Apple SD Gothic Neo",sans-serif`;
+  const round = (x, y, rw, rh, r, fill, stroke = ink, lw = 6) => { g.beginPath(); g.roundRect(x, y, rw, rh, r); g.fillStyle = fill; g.fill(); if (stroke) { g.lineWidth = lw; g.strokeStyle = stroke; g.stroke(); } };
+  g.fillStyle = "#FFFBEA"; g.fillRect(0, 0, w, h);
+  g.strokeStyle = "rgba(17,17,24,.05)"; g.lineWidth = 18; for (let k = -h; k < w + h; k += 64) { g.beginPath(); g.moveTo(k, 0); g.lineTo(k + h, h); g.stroke(); }   // 은은한 사선
+  g.textAlign = "center"; g.textBaseline = "middle";
+  // 머리: 남색 판에 질문
+  g.fillStyle = navy; g.fillRect(0, 0, w, 410);
+  for (let i = 0; i < 26; i++) { g.fillStyle = `rgba(255,255,255,${.25 + (i % 3) * .2})`; g.beginPath(); g.arc((i * 137) % w, 30 + (i * 71) % 360, 2 + (i % 3), 0, 7); g.fill(); }   // 별
+  g.fillStyle = "#FFFFFF"; g.font = pf(800, 78); g.fillText("공부하다", w / 2, 130); g.fillText("지치셨나요?", w / 2, 225);
+  g.fillStyle = "#FFD43B"; g.font = pf(700, 38); g.fillText("잠깐 머리 식히고 가요 ☕", w / 2, 320);
+  g.fillStyle = ink; g.fillRect(0, 404, w, 8);
+  // 큰 제목: 노란 띠
+  round(40, 460, w - 80, 150, 75, "#FFD43B"); g.fillStyle = ink; g.font = pf(900, 84); g.fillText("⚔️ 1:1 대결", w / 2, 538);
+  g.fillStyle = "#3A3540"; g.font = pf(700, 36); g.fillText("크루들과 퀄리티 높고", w / 2, 680); g.fillText("재미있는 게임을 즐겨 보세요!", w / 2, 728);
+  // 종목 넷: 2×2 카드
+  const games: [string, string, string][] = [["🏃", "점프맵", "#D5EFE3"], ["🎯", "사격 대결", "#FFD9E2"], ["🎪", "과녁 사격", "#D7E8FB"], ["🥊", "복싱", "#FFE2CC"]];
+  games.forEach(([ic, name, bg], i) => { const cx = i % 2 ? 320 : 40, cy = 790 + Math.floor(i / 2) * 230, cw2 = 240;
+    round(cx, cy, cw2, 200, 30, bg); g.font = pf(400, 82); g.fillStyle = ink; g.fillText(ic, cx + cw2 / 2, cy + 82); g.font = pf(800, 38); g.fillText(name, cx + cw2 / 2, cy + 162); });
+  // 명령어 상자
+  round(40, 1270, w - 80, 230, 30, navy);
+  g.fillStyle = "#9FB0D6"; g.font = pf(700, 30); g.fillText("채팅창(Enter)에 이렇게 써요", w / 2, 1318);
+  g.fillStyle = "#FFFFFF"; g.font = pf(900, 62); g.fillText("/대결 크루이름", w / 2, 1392);
+  g.fillStyle = "#FFD43B"; g.font = pf(700, 34); g.fillText("예) /대결 포비", w / 2, 1460);
+  g.fillStyle = "#6B6880"; g.font = pf(700, 30); g.fillText("Y로 수락 · /관전 · /전적", w / 2, 1560);
+  g.lineWidth = 10; g.strokeStyle = ink; g.strokeRect(5, 5, w - 10, h - 10);   // 먹선 테두리
+}));
 const rollupTex = (i) => canvasTex(600, 1950, (g, cw, ch) => {
   const gr = g.createLinearGradient(0, 0, 0, ch); gr.addColorStop(0, "#EFE7FB"); gr.addColorStop(1, "#B39DDB"); g.fillStyle = gr; g.fillRect(0, 0, cw, ch);
   g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = "#111118"; g.font = `800 96px ${BOOTH_FONT}`; g.fillText("Harudle", cw / 2, 170);
@@ -1466,6 +1495,11 @@ function buildFurn(G, o, fl) {
       for (let i = 0; i < n; i++) { const t = (i + .5) / n, cz = wz(o.y) + .2 + t * len, sag = Math.sin(t * Math.PI * 3 % Math.PI) * .18;
         const tri = new THREE.Mesh(new THREE.ConeGeometry(.11, .22, 3), toon([0xB39DDB, 0xFFD43B, 0xFFFFFF, 0x8E6FD8][i % 4])); tri.rotation.set(Math.PI, 0, 0); tri.scale.z = .15; tri.position.set(px - .03, top - .14 - sag, cz); G.add(tri); }
       cyl(G, .006, .006, len, C.dark, px, top - .03, z, { line: 0, cast: false }).rotation.x = Math.PI / 2; break; }
+    case "duelbanner": { // 1:1 대결 안내 롤업 배너(앞뒤 양면): 은색 받침 · 세로대 위에 포스터. face: 앞면이 보는 쪽(n · s · e · w)
+      const g2 = new THREE.Group(); g2.position.set(x, 0, z); g2.rotation.y = { s: 0, n: Math.PI, e: Math.PI / 2, w: -Math.PI / 2 }[o.face || "s"]; G.add(g2);
+      box(g2, .74, .07, .26, 0xC3C7CD, 0, 0, 0, { line: .006 }); box(g2, .74, .03, .03, 0x9EA3AA, 0, 2.02, 0, { line: .004 });   // 받침 · 위 가로대
+      for (const s of [1, -1]) board(g2, .7, 1.91, duelPosterTex(), 0, .08 + .955, s * .016, s > 0 ? 0 : Math.PI);   // 앞 · 뒤
+      break; }
     case "rollup": { // 롤업 배너(서쪽을 본다): 은색 받침 + 세로로 긴 보라 배너에 하루들·태그라인·네 컷
       const g2 = new THREE.Group(); g2.position.set(x, 0, z); g2.rotation.y = -Math.PI / 2; G.add(g2);
       box(g2, .66, .08, .22, 0xC3C7CD, 0, 0, 0, { line: .006 }); box(g2, .02, 2.05, .02, 0x9EA3AA, .3, .08, -.06, { line: 0 });
@@ -2494,7 +2528,7 @@ function ezUndo() { const S = ezState(); for (let i = S.strokes.length - 1; i >=
 function ezRedoOne() { const S = ezState(), id = S.redo.pop(), st = id && S.strokes.find((x) => x.id === id); if (st) { st.h = 0; netSend({ t: "ez", b: S.b, k: "redo" }); ezRedraw(true); } }
 // 바로가기: harudle.com · 인스타그램. 누르거나(클릭·탭) 앞에서 F → 새 탭
 const linkBoards: THREE.Mesh[] = [];
-function openLink(url) { if (locked()) document.exitPointerLock(); window.open(url, "_blank", "noopener"); showToast("새 탭으로 열었어요", url.replace(/^https:\/\/(www\.)?/, "").replace(/\/$/, ""), 2000);
+function openLink(url) { leaveForTab(); window.open(url, "_blank", "noopener"); showToast("새 탭으로 열었어요", url.replace(/^https:\/\/(www\.)?/, "").replace(/\/$/, ""), 2000);
   if (url.includes("instagram.com") && !unlocked("airpods")) { LS.set("ww.unlock.airpods", "1"); saveCharacter(); renderAvPanel(); setTimeout(() => showToast("🎧 에어팟이 풀렸어요!", "캐릭터 외형 수정 › 귀에서 골라 보세요.", 4200), 1200); }   // 하루들 부스 인스타그램 바로가기를 한 번 열면 해금
   else if (url.startsWith("https://www.harudle.com") && !unlocked("headset")) setTimeout(() => showToast("네컷만화를 피드에 올려 보세요", "올린 피드 링크를 캐릭터 외형 수정 › 귀 › 🔒 헤드셋에 붙여넣으면 헤드셋이 풀려요.", 5200), 1200);
 }
@@ -2626,6 +2660,8 @@ function renderGifts() {
   box.innerHTML = u ? `<p>🔗 하루들 ${esc(u.nickname)}(으)로 연동됨 · 캐릭터와 아이템이 저장되고 있어요</p>`
     : `<p>🔗 연동하면 받은 아이템과 캐릭터가 저장돼요</p><button type="button" class="btn lav" data-gift-go="link">하루들 연동하기</button>`;
 }
+// 새 탭으로 나갈 때: 커서를 꺼내되, 그 풀림을 Esc로 보고 설정창을 열지 않게 잠깐 조용히(새 탭이 앞으로 오기 전에 풀림 신호가 먼저 온다)
+function leaveForTab() { if (!locked()) return; menuQuietUntil = performance.now() + 1500; document.exitPointerLock(); }
 function openGifts() { if (locked()) document.exitPointerLock(); renderGifts(); gifts.hidden = false; $("giftsClose").focus(); }
 function closeGifts() { gifts.hidden = true; syncCursor(); }
 $("giftsClose").onclick = closeGifts;
@@ -2920,7 +2956,8 @@ let lockFailed = false;
 const locked = () => document.pointerLockElement === canvas;
 // 경계: 창(층 고르기·크루 피드·사진·캐릭터 꾸미기·설정)이 떠 있는 동안은 커서를 꺼내 두고, 다 닫히면 게임으로 돌아와 다시 고정한다.
 // 채팅창에 쓰는 동안도 커서를 꺼내 둔다
-const uiOpen = () => !!duelUi?.modal() || !$("shop").hidden || !easelEd.hidden || $("loginAsk")?.hidden === false || !gifts.hidden || !$("startrackPanel").hidden || !menu.hidden || !profile.hidden || !tour.hidden || !inv.hidden || !picker.hidden || panel.classList.contains("open") || !avPanel.hidden || !lb.hidden;
+const uiOpen = () => inWorld || !!duelUi?.modal() ||   // inWorld: 14층 하루들 월드 창(이게 빠지면 창을 열려고 커서를 꺼낼 때 설정창이 같이 떴다)
+   !$("shop").hidden || !easelEd.hidden || $("loginAsk")?.hidden === false || !gifts.hidden || !$("startrackPanel").hidden || !menu.hidden || !profile.hidden || !tour.hidden || !inv.hidden || !picker.hidden || panel.classList.contains("open") || !avPanel.hidden || !lb.hidden;
 const typing = () => document.activeElement === sayInput;   // 채팅창에 쓰는 중: 커서를 꺼내 둔다
 function syncCursor() { if (uiOpen()) { if (locked()) document.exitPointerLock(); } else lockMouse(); }
 function lockMouse() {
@@ -3034,7 +3071,7 @@ function nearNPC() { let best = null, bd = 1.9; for (const n of NPCS) { if (n.f 
 function nearSeat() { if (me.lie || me.seat) return null; let best = null, bd = 1.0; for (const st of floor.seats || []) { if (st.taken) continue; const d = Math.hypot(st.x - me.x, st.y - me.y); if (d < bd) { bd = d; best = st; } } return best; }
 function sitDown(st) { me.seat = st; st.taken = "me"; me.x = st.x; me.y = st.y; if (st.cinema) startMovie(); else showToast("의자에 앉았어요", "앉은 채로 1번을 누르면 네 컷을 그려요. 움직이면 일어나요.", 2600); me.h = st.yaw; me.path = null; if (me.act) endAct(me); sendPresence(true); }
 // 상영관 영화: 좌석에 앉으면 화면이 어두워지고 지금까지 올라온 릴레이 만화를 1화부터 끝까지 차례로 크게 보여 준다. 일어나면 끝난다
-const MOVIE_EVERY = 7000, MOVIE_INTRO = 2600, MOVIE_END = 6000;   // 한 화 · 첫 자막 · 끝 자막(그 뒤 1화부터 다시) 보여 주는 시간
+const MOVIE_EVERY = 3500, MOVIE_INTRO = 2600, MOVIE_END = 6000;   // 한 화 · 첫 자막 · 끝 자막(그 뒤 1화부터 다시) 보여 주는 시간
 const movie = { el: null as HTMLElement | null, reel: [] as ReelEpisode[], at: -1, timer: 0, token: 0 };
 function movieEl() {
   if (movie.el) return movie.el;
@@ -3373,7 +3410,7 @@ let gearTryTimer = 0;
 function setMyGear(g: unknown) { myGear = readGear(g); clearTimeout(gearTryTimer); showGear(myGear); }
 function tryGear(slot: string, sku: string) { clearTimeout(gearTryTimer); showGear(readGear({ ...(myGear || {}), [slot]: sku })); gearTryTimer = window.setTimeout(() => showGear(myGear), 8000); }
 // 컷이 모자랄 때: 하루들의 네컷만화 만들기 화면을 새 탭으로 열고(연동한 크루는 대개 로그인돼 있다. 아니면 하루들이 알아서 로그인 · 체험으로 보낸다), 돌아오면(창에 다시 초점) 바로 정산해서 방금 올린 네컷만화의 컷을 받는다
-function openHarudle() { if (locked()) document.exitPointerLock(); window.open("https://www.harudle.com/diary-write", "_blank", "noopener"); showToast("네컷만화 만들기를 새 탭으로 열었어요", "네컷만화를 피드에 올리고 돌아오면 컷이 들어와요.", 5200); }
+function openHarudle() { leaveForTab(); window.open("https://www.harudle.com/diary-write", "_blank", "noopener"); showToast("네컷만화 만들기를 새 탭으로 열었어요", "네컷만화를 피드에 올리고 돌아오면 컷이 들어와요.", 5200); }
 let lastSettleAt = 0;
 function resettle() { if (!account.user || Date.now() - lastSettleAt < 20_000) return; lastSettleAt = Date.now(); void loadWallet(300).then(() => shopUi.load()); }
 addEventListener("focus", () => { if (shopUi.takeWentOut()) { lastSettleAt = 0; resettle(); } else if (Date.now() - lastSettleAt > 10 * 60_000) resettle(); });   // 오래 떠 있다 돌아와도 한 번

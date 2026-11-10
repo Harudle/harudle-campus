@@ -48,6 +48,7 @@ const FP = { stance: [.2, -.24, -.5], guard: [.1, -.08, -.36], reach: [.06, -.12
 
 export const game: DuelGame = {
   id: "box",
+  keys: [{ label: "잽", keys: ["J", "좌클릭"] }, { label: "스트레이트", keys: ["K", "우클릭"] }, { label: "가드(누르고 있기)", keys: ["Shift", "L"] }, { label: "이동", keys: ["WASD"] }],
   start(ctx) {
     const T = ctx.THREE, k = ctx.kit, now = () => performance.now() / 1000;
     const seats: DuelSeat[] = [0, 1];
@@ -85,9 +86,9 @@ export const game: DuelGame = {
     const box = document.createElement("div"); box.className = "boxHud"; ctx.hud.append(box);
     let key = "";
     function paint() {
-      const m = ctx.match, t = now(), hint = ctx.mine && !ctx.touch && (m.phase === "countdown" || (m.phase === "playing" && ctx.now() - m.startAt < 8000));
-      const html = seats.map((s) => `<div class="bxP s${s}${s === ctx.seat ? " me" : ""}${t - flash[s] < .3 ? " hit" : ""}"><em>${s === ctx.seat ? "나" : esc(m.players[s]?.name)}${pose[s].guard ? " 🛡️" : ""}</em><span class="bxBar"><i style="width:${clamp(hp[s] / BOX.HP * 100, 0, 100)}%"></i></span><b>${Math.ceil(hp[s])}</b></div>`).join("")
-        + (hint ? `<p class="bxKeys">잽 J · 왼쪽 클릭 / 스트레이트 K · 오른쪽 클릭 / 가드 Shift · L 누르고 있기</p>` : "");
+      const m = ctx.match, t = now();
+      if (ctx.mine) ctx.myHp(hp[ctx.seat], BOX.HP);   // 내 체력은 아래 독에도(조작 키도 독에)
+      const html = seats.map((s) => `<div class="bxP s${s}${s === ctx.seat ? " me" : ""}${t - flash[s] < .3 ? " hit" : ""}"><em>${s === ctx.seat ? "나" : esc(m.players[s]?.name)}${pose[s].guard ? " 🛡️" : ""}</em><span class="bxBar"><i style="width:${clamp(hp[s] / BOX.HP * 100, 0, 100)}%"></i></span><b>${Math.ceil(hp[s])}</b></div>`).join("");
       if (html !== key) { key = html; box.innerHTML = html; }
     }
 
@@ -214,7 +215,6 @@ if (typeof document !== "undefined" && !document.getElementById("boxStyle")) {
 .bxP b{min-width:2em;text-align:center;font-variant-numeric:tabular-nums}
 .bxP.hit{animation:bxShake .3s}
 @keyframes bxShake{20%{transform:translateX(-4px)}50%{transform:translateX(4px)}80%{transform:translateX(-2px)}}
-.bxKeys{grid-column:1/-1;margin:0;font:12px var(--body);color:var(--muted);text-align:center}
 .boxPad{position:fixed;z-index:7;right:calc(16px + env(safe-area-inset-right,0px));bottom:calc(172px + env(safe-area-inset-bottom,0px));display:flex;gap:8px;align-items:flex-end}
 .boxPad .mBtn.lg{font-size:14px;line-height:1.1}.boxPad .mBtn.on{background:var(--ink);color:#FFD43B}
 @media (prefers-reduced-motion:reduce){.bxP.hit{animation:none}.bxBar i{transition:none}}`;
