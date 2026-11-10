@@ -85,7 +85,7 @@ export function createDuel({ peers, send = () => { }, now = Date.now, random = M
   function finish(m, winner, reason, summary = null) {
     if (m.phase !== "countdown" && m.phase !== "playing") return;
     m.phase = "result"; m.winner = winner === 0 || winner === 1 ? winner : null; m.reason = reason; m.summary = summary; m.resultUntil = now() + DUEL.RESULT;
-    if (!(reason === "disconnect" && m.players.every((p) => p.away))) score(m);   // 둘 다 끊겼으면 남기지 않는다
+    if (reason !== "stopped" && !(reason === "disconnect" && m.players.every((p) => p.away))) score(m);   // 신청한 사람이 끝냈거나 둘 다 끊겼으면 남기지 않는다
     games[m.game].end?.(m, api);
     toAll(m, { t: "duel:end", id: m.id, winner: m.winner === null ? null : m.players[m.winner].u, seat: m.winner, reason, summary });
     sync(m);
@@ -183,6 +183,11 @@ export function createDuel({ peers, send = () => { }, now = Date.now, random = M
         if (s) unwatch(u, s.match.watchers.get(u));
         ts.match.watchers.set(u, pid); seats.set(u, { match: ts.match, seat: null }); after.delete(u);
         return sync(ts.match);
+      }
+      case "duel:stop": {   // 신청한 사람(0번 자리)이 경기를 끝낸다: 승패 없이, 전적에 남기지 않는다
+        if (!s || s.seat === null || (s.match.phase !== "countdown" && s.match.phase !== "playing")) return oops(pid, "no_match", "진행 중인 경기가 없어요");
+        if (s.seat !== 0) return oops(pid, "not_host", "경기는 신청한 사람만 끝낼 수 있어요");
+        return finish(s.match, null, "stopped");
       }
       case "duel:forfeit": {
         if (!s || s.seat === null || (s.match.phase !== "countdown" && s.match.phase !== "playing")) return oops(pid, "no_match", "진행 중인 경기가 없어요");
