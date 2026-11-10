@@ -4,6 +4,7 @@ import { createDuel } from "../server/duel/index.js";
 import { DUEL, findGame, isArena } from "../src/duel/shared.mjs";
 import { JUMP_COURSES, JUMP_BOUNCE } from "../src/duel/arena/jump.mjs";
 import { ARENAS } from "../src/duel/arena/index.mjs";
+import { SERVER_GAMES } from "../server/duel/games/index.js";
 
 // 가짜 접속자 · 시계 · 저장소로 서버 대결을 돌린다
 function setup({ games } = {}) {
@@ -65,7 +66,7 @@ test("거절 · 만료 · 취소 · 바쁨 · 자기 자신 · 쿨다운 · 받�
 });
 
 test("준비 안 된 종목은 신청할 수 없다", () => {
-  const s = setup();
+  const s = setup({ games: { jump: SERVER_GAMES.jump } });   // 서버 규칙이 없는 종목(여기서는 복싱)은 "준비 중"
   s.duel.message("pa", { t: "duel:invite", to: "pb", game: "nope" }); assert.equal(s.last("pa", "duel:error").code, "game");
   s.duel.message("pa", { t: "duel:invite", to: "pb", game: "box" });
   assert.equal(s.last("pa", "duel:error").code, "not_ready");
