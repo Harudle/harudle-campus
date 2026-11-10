@@ -11,90 +11,81 @@ function arena(def) {
 // src/duel/arena/jump.mjs
 var JUMP_RUN = 7.3;
 var JUMP_BOUNCE = 8;
-var STRIP = 9;
-var X0 = 2;
+var JUMP_CEIL = 40;
+var OUTER = 15;
+var INNER = 9;
+var LOOKS = ["crate", "pipe", "can", "books", "beam"];
 var DEFS = [
-  { id: "cloud", name: "\uAD6C\uB984 \uACC4\uB2E8", segs: [
-    [1, 2, 0.8, 2, 3],
-    [2, 2, 1.2, 1, 3],
-    [2, 2, 1.6, 3, 3],
-    [2, 3, 1.2, 2, 3],
-    [2, 3, 1.4, 0, 7, "cp"],
-    [2, 1, 1.8, 0, 2],
-    [2, 1, 2.2, 2, 2],
-    [2, 1, 2.6, 4, 2],
-    [2, 2, 2, 2, 3],
-    [2, 3, 2, 0, 7, "cp"],
-    [2, 2, 0.6, 2, 3, "t"],
-    [2, 3, 2.6, 0, 7, "end"]
-  ] },
-  { id: "stone", name: "\uC9D5\uAC80\uB2E4\uB9AC", segs: [
-    [1, 1, 0.7, 1, 2],
-    [2, 1, 0.9, 4, 2],
-    [2, 1, 1.1, 1, 2],
-    [2, 1, 1.3, 4, 2],
-    [2, 2, 1, 2, 3],
-    [2, 3, 1.2, 0, 7, "cp"],
-    [2, 1, 1.5, 0, 2],
-    [1, 1, 1.8, 3, 2],
-    [1, 1, 2.1, 5, 2],
-    [2, 1, 1.6, 2, 2],
-    [2, 1, 2, 0, 2],
-    [2, 3, 2, 0, 7, "cp"],
-    [2, 1, 2.4, 2, 3],
-    [2, 1, 2.8, 4, 3],
-    [2, 3, 2.8, 0, 7, "end"]
-  ] },
-  { id: "spring", name: "\uD1B5\uD1B5 \uD2B8\uB7A8\uD384\uB9B0", segs: [
-    [2, 2, 0.4, 2, 3, "t"],
-    [2, 3, 2, 2, 3],
-    [2, 2, 1.2, 1, 3],
-    [2, 3, 1.2, 0, 7, "cp"],
-    [2, 2, 0.6, 3, 3, "t"],
-    [2, 2, 2.6, 1, 3],
-    [2, 2, 0.8, 4, 3, "t"],
-    [2, 2, 3.2, 2, 3],
-    [2, 3, 3, 0, 7, "cp"],
-    [2, 2, 2.2, 1, 2],
-    [2, 3, 2.6, 0, 7, "end"]
-  ] },
-  { id: "tower", name: "\uD558\uB298 \uD0D1", segs: [
-    [1, 2, 1, 0, 3],
-    [1, 2, 1.6, 4, 3],
-    [1, 2, 2.2, 0, 3],
-    [2, 3, 1.6, 2, 3],
-    [2, 3, 1.8, 0, 7, "cp"],
-    [2, 1, 2.9, 3, 2],
-    [2, 1, 2.3, 0, 2],
-    [2, 1, 3.4, 3, 2],
-    [2, 2, 2.8, 5, 2],
-    [2, 3, 2.6, 0, 7, "cp"],
-    [2, 1, 3.2, 1, 2],
-    [2, 1, 3.6, 4, 2],
-    [2, 3, 3, 0, 7, "end"]
-  ] }
+  { id: "tower-sky", name: "\uD558\uB298 \uD0D1", seed: 11, rise: [1, 1.25], drop: 6, tramp: [9] },
+  { id: "tower-junk", name: "\uACE0\uBB3C \uD0D1", seed: 23, rise: [1.05, 1.28], drop: 7, tramp: [] },
+  { id: "tower-bounce", name: "\uD1B5\uD1B5 \uD0D1", seed: 37, rise: [1, 1.2], drop: 5, tramp: [4, 12] },
+  { id: "tower-onlyup", name: "\uC628\uB9AC \uC5C5", seed: 59, rise: [1.15, 1.3], drop: 0, tramp: [] }
 ];
-function course(def, k) {
-  const y0 = 1 + k * STRIP, iy = y0 + 1, pads = [{ x: X0, y: iy, w: 3, h: 7, top: 0.5 }], blocks = [];
-  let x = X0 + 3;
-  for (const [gap, len, top, lane = 0, rows = 7, kind = "b"] of def.segs) {
-    x += gap;
-    const b = { x, y: iy + lane, w: len, h: rows, top, kind };
-    x += len;
-    (kind === "cp" || kind === "end" ? pads : blocks).push(b);
+var QUADS = [[2, 2], [29, 2], [2, 21], [29, 21]];
+var QW = 25;
+var QH = 17;
+var lcg = (seed) => () => {
+  seed = seed * 1103515245 + 12345 & 2147483647;
+  return seed / 2147483647;
+};
+function perim(rx, ry, L, p) {
+  const s = L - 1;
+  if (p < s) return [rx + p, ry];
+  if (p < 2 * s) return [rx + s, ry + p - s];
+  if (p < 3 * s) return [rx + s - (p - 2 * s), ry + s];
+  return [rx, ry + s - (p - 3 * s)];
+}
+function steps(total, r) {
+  const four = (total - 3 * Math.floor(total / 3)) % 3, n4 = [0, 4, 2][four] + 3 * Math.floor(r() * 2);
+  const n3 = (total - 4 * n4) / 3, out = [...Array(n4).fill(4), ...Array(n3).fill(3)];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(r() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
   }
-  const cx = (r) => r.x + r.w / 2, minT = pads.map((p, i) => i ? Math.round((cx(p) - cx(pads[i - 1])) / JUMP_RUN * 1e3 * 0.7) : 0);
-  const spot = (p) => [cx(p), p.y + p.h / 2, E];
-  return { id: def.id, name: def.name, k, y0, pads, blocks, minT, spot: pads.map(spot), spawns: [[X0 + 1.5, iy + 1.5, E], [X0 + 1.5, iy + 5.5, E]], watch: [[X0 + 1.5, iy + 3.5, E]] };
+  return out;
+}
+function course(def, k) {
+  const r = lcg(def.seed), [qx2, qy2] = QUADS[k], rx = qx2 + 7, ry = qy2 + 1;
+  const start = { x: rx - 4, y: ry, w: 3, h: 3, top: 0.5, kind: "start" }, pads = [start], blocks = [], path = [start];
+  let top = start.top, n = 0;
+  const rise = () => def.rise[0] + r() * (def.rise[1] - def.rise[0]);
+  const put = (x, y, kind = "b", w = 1, h = 1) => {
+    n++;
+    const prev = path[path.length - 1], dropNow = kind === "b" && def.drop && n % def.drop === 0, bounce = prev.kind === "t";
+    top = Math.round((dropNow ? top - 0.5 : bounce ? top + 2.4 : kind === "t" ? top + 0.3 : top + rise()) * 100) / 100;
+    const b = { x, y, w, h, top, kind, look: LOOKS[Math.floor(r() * LOOKS.length)] };
+    (kind === "cp" || kind === "end" ? pads : blocks).push(b);
+    path.push(b);
+  };
+  let p = 0;
+  const s1 = steps(4 * (OUTER - 1) - 3, r);
+  for (let i = 0; i <= s1.length; i++) {
+    const [x, y] = perim(rx, ry, OUTER, p);
+    put(x, y, def.tramp.includes(i) ? "t" : "b");
+    p += s1[i] ?? 0;
+  }
+  p = 0;
+  const s2 = steps(4 * (INNER - 1) - 3, r);
+  for (let i = 0; i <= s2.length; i++) {
+    const [x, y] = perim(rx + 3, ry + 3, INNER, p);
+    put(x, y, i === 0 ? "cp" : def.tramp.includes(i + 20) ? "t" : "b");
+    p += s2[i] ?? 0;
+  }
+  put(rx + 6, ry + 6, "end", 3, 3);
+  const cx = (o) => o.x + o.w / 2, cy = (o) => o.y + o.h / 2;
+  const minT = pads.map((o, i) => i ? Math.round(path.slice(path.indexOf(pads[i - 1]) + 1, path.indexOf(o) + 1).reduce((t, b, j, a) => t + Math.hypot(cx(b) - cx(j ? a[j - 1] : pads[i - 1]), cy(b) - cy(j ? a[j - 1] : pads[i - 1])), 0) / JUMP_RUN * 1e3 * 0.5) : 0);
+  const spot = (o) => [cx(o), cy(o), E];
+  return { id: def.id, name: def.name, k, quad: [qx2, qy2], pads, blocks, path, minT, spot: pads.map(spot), spawns: [[start.x + 1.5, start.y + 0.8, E], [start.x + 1.5, start.y + 2.2, E]], watch: [[qx2 + 1.5, qy2 + QH / 2, E]] };
 }
 var JUMP_COURSES = DEFS.map(course);
 var JUMP_ARENA = (() => {
-  const a = arena({ f: 21, game: "jump", info: "\uC810\uD504\uB9F5 \uB300\uACB0\uC7A5", spawns: JUMP_COURSES[0].spawns, watch: JUMP_COURSES[0].watch, starts: JUMP_COURSES.map((c) => [c.pads[0].x + 3.5, c.pads[0].y + 3.5]) });
+  const a = arena({ f: 21, game: "jump", info: "\uC810\uD504\uB9F5 \uB300\uACB0\uC7A5", ceil: JUMP_CEIL, spawns: JUMP_COURSES[0].spawns, watch: JUMP_COURSES[0].watch, starts: JUMP_COURSES.map((c) => [c.pads[0].x + 1.5, c.pads[0].y + 1.5]) });
   for (const c of JUMP_COURSES) {
-    a.rooms.push(ring(1, c.y0, 54, STRIP));
-    a.zones.push(tint(2, c.y0 + 1, 52, 7, `${c.name} \uCF54\uC2A4`, "#DCEBFC", { checker: ["#E4F0FD", "#D2E4F9"] }));
-    c.pads.forEach((p, i) => a.furn.push({ ...p, kind: "jpad", mark: i === 0 ? "start" : i === c.pads.length - 1 ? "end" : "cp", n: i, course: c.k }));
-    for (const b of c.blocks) a.furn.push({ ...b, kind: b.kind === "t" ? "jtramp" : "jblock", ...b.kind === "t" ? { bounce: JUMP_BOUNCE } : {}, course: c.k });
+    const [qx2, qy2] = c.quad;
+    a.rooms.push(ring(qx2 - 1, qy2 - 1, QW + 2, QH + 2));
+    a.zones.push(tint(qx2, qy2, QW, QH, `${c.name} \uCF54\uC2A4`, "#DCEBFC", { checker: ["#E4F0FD", "#D2E4F9"] }));
+    c.pads.forEach((p, i) => a.furn.push({ x: p.x, y: p.y, w: p.w, h: p.h, top: p.top, kind: "jpad", mark: i === 0 ? "start" : i === c.pads.length - 1 ? "end" : "cp", n: i, course: c.k }));
+    for (const b of c.blocks) a.furn.push({ x: b.x, y: b.y, w: b.w, h: b.h, top: b.top, look: b.look, kind: b.kind === "t" ? "jtramp" : "jblock", ...b.kind === "t" ? { bounce: JUMP_BOUNCE } : {}, course: c.k });
   }
   return a;
 })();
@@ -223,7 +214,7 @@ var WALL = 0.9;
 var DOLL = 1.12;
 var CEIL = { 11: 4.4, 12: 4.4, 13: 4.4, 14: 3.8 };
 var CAMPUS = [11, 12, 13, 14];
-for (const a of ARENAS) CEIL[a.f] = 9;
+for (const a of ARENAS) CEIL[a.f] = a.ceil ?? 9;
 var VIEW = { mode: "top" };
 var inside = () => VIEW.mode !== "top";
 var INK = 1118488;
@@ -458,6 +449,7 @@ function makeFloor(f) {
     F("plant", 3, 20, 2, 2);
     F("pebbles", 1, 16, 2, 9, { turn: Math.PI / 2, raw: true });
     for (const y of [17, 20, 23]) F("windowseat", 1, y, 2, 1, { turn: Math.PI / 2, raw: true });
+    F("mcsign", 2, 28, 1, 1, { raw: true });
     Z(1, 29, 13, 10, "\uC2A4\uD0C0\uD2B8\uB799", "", { npc: false, tint: "#F2F4E2", raw: true });
     Z(1, 11, 30, 1, "\uC2A4\uD0C0\uD2B8\uB799 \uAC00\uB294 \uAE38", "", { npc: false, tint: "#E4E3E0" });
     F("pillar", 9, 12, 1, 1);
@@ -799,16 +791,32 @@ function heightAt(fl, x, y) {
 }
 var R_ME = 0.28;
 var bagSpot = (o) => ({ x: o.x + o.w / 2, y: o.y + o.h / 2, yaw: o.yaw || 0 });
+var qmul = (a, b) => [a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1], a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0], a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3], a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2]];
+var qy = (t) => [0, Math.sin(t / 2), 0, Math.cos(t / 2)];
+var qx = (t) => [Math.sin(t / 2), 0, 0, Math.cos(t / 2)];
 function applyLie(doll, lie) {
   const r = doll.root;
   r.rotation.order = "YXZ";
+  if (lie?.lp || lie?.guitar || lie?.club) {
+    r.rotation.set(0, lie.yaw, 0);
+    return;
+  }
+  if (lie?.curl) {
+    const q = qmul(qmul(qy(lie.yaw), qx(-0.7)), qy(1.15));
+    r.quaternion.set(q[0], q[1], q[2], q[3]);
+    r.position.x += Math.sin(lie.yaw) * 0.22;
+    r.position.z += Math.cos(lie.yaw) * 0.22;
+    r.position.y += 0.22;
+    doll.blob.visible = false;
+    return;
+  }
   if (lie) {
     r.rotation.set(-Math.PI / 2 + 0.3, lie.yaw, 0);
     r.position.x += Math.sin(lie.yaw) * 0.42;
     r.position.z += Math.cos(lie.yaw) * 0.42;
     r.position.y += 0.5;
     doll.blob.visible = false;
-  } else if (r.rotation.x) {
+  } else if (r.rotation.x || r.rotation.y || r.rotation.z) {
     r.rotation.set(0, 0, 0);
     doll.blob.visible = true;
   }
