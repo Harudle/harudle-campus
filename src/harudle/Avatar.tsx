@@ -6,6 +6,7 @@ import type { AvatarConfig } from './avatarData'
 import { COLORS } from './brand'
 import { drawSketch, Ink, INK, Line, Skin, useLegSwing, type WalkMotion } from './Characters'
 import { useCanvasTexture } from './useCanvasTexture'
+import { GearFx, GearHead, GearHeld, GearNeck, type GearState } from '../scene/Gear'   // 캠퍼스 확장: 컷 상점 장식
 
 const HEAD_Y = 1.3
 const HEAD_RADIUS = 0.34
@@ -509,10 +510,16 @@ type AvatarProps = {
   config: AvatarConfig
   motion?: RefObject<WalkMotion>
   pose?: RefObject<AvatarPose>
+  /** 캠퍼스 확장: 컷 상점에서 사서 쓰고 있는 장식. 있으면 그 부위는 외형 대신 이것을 그린다 */
+  gear?: GearState | null
 }
 
 /** 시안의 낙서 캐릭터를 기본 몸으로 삼아 고른 악세서리를 입힌 방문자 캐릭터. 발이 원점이고 +z를 바라본다. */
-export function Avatar({ config, motion, pose }: AvatarProps) {
+export function Avatar({ config: look, motion, pose, gear }: AvatarProps) {
+  // 상점 장식을 쓰면 그 부위의 외형은 비운다. 네컷 원고는 연필처럼 옆으로 든 자세를 쓴다
+  const config: AvatarConfig = gear && (gear.head || gear.neck || gear.held)
+    ? { ...look, head: gear.head ? 'none' : look.head, neck: gear.neck ? 'none' : look.neck, held: gear.held ? 'pencil' : look.held }
+    : look
   const { left, right } = useLegSwing(motion)
   const holdingBoard = config.held === 'sketch'
   const holdingSide = config.held === 'pencil' || config.held === 'heart'
@@ -616,7 +623,7 @@ export function Avatar({ config, motion, pose }: AvatarProps) {
             <Line length={0.38} />
           </group>
         )}
-        <group ref={heldItem}>{holdingSide && <HeldItem kind={config.held} color={config.heldColor} />}</group>
+        <group ref={heldItem}>{gear?.held ? <GearHeld sku={gear.held} /> : holdingSide && <HeldItem kind={config.held} color={config.heldColor} />}</group>
       </group>
 
       <group ref={head} position-y={HEAD_Y}>
@@ -628,7 +635,10 @@ export function Avatar({ config, motion, pose }: AvatarProps) {
         <Eyewear kind={config.eyewear} />
         <Headwear kind={config.head} color={config.headColor} skinColor={config.skinColor} />
         <Earwear kind={config.ear} />
+        <GearHead sku={gear?.head} />
+        <GearFx sku={gear?.fx} />
       </group>
+      <GearNeck sku={gear?.neck} />
     </group>
   )
 }

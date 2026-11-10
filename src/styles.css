@@ -81,6 +81,7 @@ button.chip{cursor:pointer}
 #floorHud{top:calc(12px + env(safe-area-inset-top,0px));left:max(12px,env(safe-area-inset-left,0px));max-width:calc(100% - 24px)}
 #floorBadge b{font-size:24px;color:var(--brand-strong);margin-right:6px}
 #setBtn{width:40px;height:40px;padding:0;display:grid;place-items:center;font-size:19px}
+#walletChip{height:40px;display:flex;align-items:baseline;gap:4px;background:#EFE7FB}#walletChip b{font-size:22px}   /* 하루들 연동 크루의 컷 잔액 */
 button:focus-visible,input:focus-visible{outline:3px solid var(--brand);outline-offset:2px}
 #topRight{top:calc(12px + env(safe-area-inset-top,0px));right:max(12px,env(safe-area-inset-right,0px));justify-content:flex-end;max-width:calc(100% - 24px)}
 @media (max-width:640px){#topRight{top:calc(96px + env(safe-area-inset-top,0px))}}
@@ -312,22 +313,22 @@ body.touch.chatting #topRight,body.touch.peopleOpen #topRight{display:none}
 .modal .plabel{display:grid;gap:6px;font-size:14px}
 .modal .plabel input{font:inherit;font-size:16px;padding:8px 10px;border:2px solid var(--ink);border-radius:10px}
 .modal .prow{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
-/* 하루들 부스 선물 입간판: 받는 법 창 */
-#gifts .giftbox{width:min(400px,calc(100% - 32px));max-height:calc(100dvh - 32px);overflow-y:auto}   /* 연동 안내까지 들어가 작은 화면에서는 스크롤 */
-#gifts h4{margin-bottom:4px}
-#gifts .gsub{margin:0 0 12px;font-size:14px;color:var(--muted)}
-#gifts .glist{list-style:none;margin:0;padding:0;display:grid;gap:10px}
-#gifts .glist li{display:flex;gap:12px;align-items:flex-start;padding:12px;border:2px solid var(--ink);border-radius:14px;background:#fff}
-#gifts .glist li.got{background:#F4F0FD}
-#gifts .gicon{flex:0 0 52px;height:52px;border-radius:50%;background:#EFE7FB;display:grid;place-items:center}
-#gifts .gicon svg{width:38px;height:38px}
-#gifts .glist b{display:flex;align-items:center;gap:8px;font-size:18px}
-#gifts .glist em{font-style:normal;font-size:12px;padding:1px 8px;border-radius:999px;background:var(--paper-2);color:var(--muted)}
-#gifts .glist li.got em{background:#7B5BD6;color:#fff}
-#gifts .glist p{margin:4px 0 8px;font-size:14px;line-height:1.4}
-#gifts .gacts{display:flex;flex-wrap:wrap;gap:6px}
-#gifts .gacts .btn{font-size:14px;padding:4px 10px}
-#gifts .gacts .btn:disabled{opacity:.6;cursor:default}
+/* 하루들 부스 선물 입간판: 받는 법 창 · 컷 상점(같은 목록 모양) */
+:is(#gifts,#shop) .giftbox{width:min(400px,calc(100% - 32px));max-height:calc(100dvh - 32px);overflow-y:auto}   /* 연동 안내까지 들어가 작은 화면에서는 스크롤 */
+:is(#gifts,#shop) h4{margin-bottom:4px}
+:is(#gifts,#shop) .gsub{margin:0 0 12px;font-size:14px;color:var(--muted)}
+:is(#gifts,#shop) .glist{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+:is(#gifts,#shop) .glist li{display:flex;gap:12px;align-items:flex-start;padding:12px;border:2px solid var(--ink);border-radius:14px;background:#fff}
+:is(#gifts,#shop) .glist li.got{background:#F4F0FD}
+:is(#gifts,#shop) .gicon{flex:0 0 52px;height:52px;border-radius:50%;background:#EFE7FB;display:grid;place-items:center}
+:is(#gifts,#shop) .gicon svg{width:38px;height:38px}
+:is(#gifts,#shop) .glist b{display:flex;align-items:center;gap:8px;font-size:18px}
+:is(#gifts,#shop) .glist em{font-style:normal;font-size:12px;padding:1px 8px;border-radius:999px;background:var(--paper-2);color:var(--muted)}
+:is(#gifts,#shop) .glist li.got em{background:#7B5BD6;color:#fff}
+:is(#gifts,#shop) .glist p{margin:4px 0 8px;font-size:14px;line-height:1.4}
+:is(#gifts,#shop) .gacts{display:flex;flex-wrap:wrap;gap:6px}
+:is(#gifts,#shop) .gacts .btn{font-size:14px;padding:4px 10px}
+:is(#gifts,#shop) .gacts .btn:disabled{opacity:.6;cursor:default}
 .modal .macct{margin:-4px 0 12px;font-size:14px;opacity:.8}
 .modal .lreason{margin:0 0 4px;font-size:16px}
 
@@ -517,3 +518,11 @@ body.touch #nearCard{width:150px}
 /* 14층 하루들 월드 창(src/worldFloor.ts): 바탕이 비어 있어 14층이 뒤에 비쳐 보인다 */
 #worldWindow{position:fixed;inset:0;z-index:100}
 #worldWindow iframe{position:absolute;inset:0;width:100%;height:100%;border:0;display:block;color-scheme:normal;background:transparent}
+
+/* 컷 상점: 종류 탭 · 잔액 */
+#shop .shoptabs{display:flex;gap:6px;margin:0 0 12px}
+#shop .shoptabs .dbtn{flex:1;font-family:var(--hand);font-size:16px;padding:6px 4px;border:2px solid var(--ink);border-radius:10px;background:#fff;cursor:pointer}
+#shop .shoptabs .dbtn.on{background:#B9A6EC}
+#shop #shopCuts b{font-size:18px;color:var(--ink)}
+#shop .glist .btn{font-size:15px;padding:5px 12px}
+#shop .glist .btn:disabled{opacity:.5;cursor:default}

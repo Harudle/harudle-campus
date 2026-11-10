@@ -3,6 +3,9 @@
 import * as THREE from 'three'
 import type { AvatarConfig } from '../harudle/avatarData'
 
+import type { GearState } from '../scene/Gear'
+import type { PetKind } from '../scene/Pets'
+
 export type DollAnim = {
   moving: boolean
   run: boolean
@@ -20,6 +23,10 @@ export type Doll = {
   id: number
   /** harudle·haru는 14층 특종 가판대의 하루들 기자와 손 흔드는 하루(움직이지 않는다) */
   kind: 'avatar' | 'dog' | 'harudle' | 'haru'
+  /** kind가 dog일 때 그릴 펫(없으면 두들) */
+  pet: PetKind
+  /** 컷 상점에서 사서 쓰고 있는 장식(아바타만) */
+  gear: GearState | null
   config: AvatarConfig | null
   root: THREE.Group
   turn: THREE.Group
@@ -43,12 +50,12 @@ export const dollStore = {
 
 const turnTo = (from: number, to: number) => { let d = (to - from) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return d }
 
-export function makeDoll(kind: Doll['kind'], config: AvatarConfig | null, blob: THREE.Mesh): Doll {
+export function makeDoll(kind: Doll['kind'], config: AvatarConfig | null, blob: THREE.Mesh, extra: { pet?: PetKind; gear?: GearState | null } = {}): Doll {
   const root = new THREE.Group(), turn = new THREE.Group()
   root.add(turn); root.add(blob)
   let heading = 0
   const doll: Doll = {
-    id: nextId++, kind, config, root, turn, blob, look: config,
+    id: nextId++, kind, config, root, turn, blob, look: config, pet: extra.pet ?? 'doodle', gear: extra.gear ?? null,
     anim: { moving: false, run: false, air: false, seated: false, act: null, waving: false, style: 0, actT: 0, noHead: false },
     update(dt, _t, moving, wantHeading, _seed = 0, waving = false, act = null, air = false, run = false) {
       if (wantHeading !== undefined && wantHeading !== null) heading = wantHeading
