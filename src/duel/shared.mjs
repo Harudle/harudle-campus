@@ -14,7 +14,7 @@ export const gameAtFloor = (f) => DUEL_GAMES.find((g) => g.floor === f) || null;
 export const findGame = (q) => { const k = String(q ?? "").replace(/\s+/g, "").toLowerCase(); return k ? DUEL_GAMES.find((g) => g.id === k || g.alias.some((a) => a.toLowerCase() === k)) || null : null; };
 
 // 시간은 모두 ms. MOVE: 수락 뒤 대결장으로 옮겨 가는 동안 · COUNTDOWN: 3·2·1 · GRACE: 끊긴 선수를 기다리는 시간 · AFTER: 경기가 닫힌 뒤에도 대결장 위치를 받아 주는 시간(돌아가는 중)
-export const DUEL = { INVITE: 30000, COOLDOWN: 60000, MOVE: 1200, COUNTDOWN: 3000, RESULT: 5000, GRACE: 20000, AFTER: 5000, TICK: 100, SPECTATORS: 20, DURATION: 180000 };
+export const DUEL = { INVITE: 30000, COOLDOWN: 5000, MOVE: 1200, COUNTDOWN: 3000, RESULT: 5000, GRACE: 20000, AFTER: 5000, TICK: 100, SPECTATORS: 20, DURATION: 180000 };
 export const DUEL_REASON = { finish: "도착", timeout: "시간 종료", forfeit: "기권", disconnect: "연결 끊김", ko: "KO", score: "점수" };
 // 0:42.31
 export const fmtMs = (ms) => { const s = Math.max(0, ms) / 1000; return `${Math.floor(s / 60)}:${(s % 60).toFixed(2).padStart(5, "0")}`; };

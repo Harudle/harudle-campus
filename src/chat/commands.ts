@@ -22,7 +22,7 @@ export type CommandHost = {
   open(what: "menu" | "voice" | "keys" | "profile" | "look" | "inv" | "tour"): void
   prefill(text: string): void
   // 1:1 대결(src/duel/client.ts). game은 종목 id(jump · shoot · target · box), 없으면 종목 고르는 창
-  duel: { games: readonly { id: string; name: string }[]; invite(p: CommandPeer, game?: string): void; watch(p: CommandPeer | null): void; forfeit(): void; records(p: CommandPeer | null): void }
+  duel: { games: readonly { id: string; name: string }[]; invite(p: CommandPeer, game?: string): void; answer(ok: boolean, name?: string): void; watch(p: CommandPeer | null): void; forfeit(): void; records(p: CommandPeer | null): void }
 };
 type Command = { names: string[]; args?: string; desc: string; run(arg: string, host: CommandHost): void };
 
@@ -99,6 +99,8 @@ const COMMANDS: Command[] = [
     if (rest) { const g2 = findGame(rest); if (!g2) { h.note(`종목은 ${h.duel.games.map((x) => x.name).join(" · ")} 중에서 골라 주세요`); return; } h.duel.invite(p, g2.id); return; }
     h.duel.invite(p, g?.id);
   } },
+  { names: ["수락", "accept"], args: "[이름]", desc: "받은 대결 신청 수락 (Y)", run: (a, h) => h.duel.answer(true, a) },
+  { names: ["거절", "decline"], args: "[이름]", desc: "받은 대결 신청 거절 (N)", run: (a, h) => h.duel.answer(false, a) },
   { names: ["관전", "watch"], args: "[이름]", desc: "크루의 대결 보기 · 이름 없이 쓰면 그만 보기", run: (a, h) => { if (!a) { h.duel.watch(null); return; } const p = findPeer(h, a); if (p) h.duel.watch(p); } },
   { names: ["기권", "forfeit"], desc: "진행 중인 대결 기권", run: (_, h) => h.duel.forfeit() },
   { names: ["전적", "record"], args: "[이름]", desc: "대결 승 · 패 · 무와 점프맵 기록", run: (a, h) => { if (!a) { h.duel.records(null); return; } const p = findPeer(h, a); if (p) h.duel.records(p); } },

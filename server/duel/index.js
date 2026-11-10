@@ -38,8 +38,8 @@ export function createDuel({ peers, send = () => { }, now = Date.now, random = M
   const view = (m, seat) => ({ t: "duel:match", id: m.id, game: m.game, ar: m.ar, floor: m.floor, seat, players: m.players.map((p) => ({ u: p.u, peer: p.peer, name: p.name, ...(p.away ? { away: 1 } : {}) })), phase: m.phase, startAt: m.startAt, endsAt: m.endsAt, state: m.state, spawns: m.spawns, watch: m.watch, watchers: m.watchers.size, serverTime: now() });
   function sync(m) { m.players.forEach((p, i) => tell(p.peer, view(m, i))); for (const pid of m.watchers.values()) tell(pid, view(m, null)); }
   const toAll = (m, msg) => { for (const pid of people(m)) tell(pid, msg); };
-  // role: from(보낸 사람) · to(받은 사람). busy는 보낸 사람에게만(받는 사람은 초대장을 받은 적이 없다)
-  const inviteState = (inv, state) => { for (const role of state === "busy" ? ["from"] : ["from", "to"]) tell(inv[role].peer, { t: "duel:invite-state", id: inv.id, role, state, game: inv.game, expiresAt: inv.expiresAt, from: { name: inv.from.name }, to: { name: inv.to.name } }); };
+  // role: from(보낸 사람) · to(받은 사람). busy는 보낸 사람에게만(받는 사람은 초대장을 받은 적이 없다), pending도 보낸 사람에게만(받는 사람에겐 초대장이 갔다)
+  const inviteState = (inv, state) => { for (const role of state === "busy" || state === "pending" ? ["from"] : ["from", "to"]) tell(inv[role].peer, { t: "duel:invite-state", id: inv.id, role, state, game: inv.game, expiresAt: inv.expiresAt, from: { name: inv.from.name }, to: { name: inv.to.name } }); };
 
   /* ───── 전적 ───── */
   const user = (u, name) => { const r = (rec.users[u] ||= { name: "크루", w: 0, l: 0, d: 0, best: {} }); if (name) r.name = name; return r; };
