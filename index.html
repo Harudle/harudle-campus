@@ -243,7 +243,15 @@
   <p class="gsub">하루들에서 하나씩 해 보면 캐릭터 귀 장식이 풀려요.</p>
   <ul class="glist" id="giftList"></ul>
   <div class="linkcard" id="giftLink" hidden></div>
-  <div class="prow"><button class="btn ghost" type="button" id="giftsClose">닫기</button></div>
+  <div class="prow"><button class="btn lav" type="button" id="giftsShop" hidden>컷 상점 열기</button><button class="btn ghost" type="button" id="giftsClose">닫기</button></div>
+</div></div>
+<!-- 컷 상점: 하루들 피드에 네컷만화를 올려 받은 컷으로 펫 · 만화 효과 · 장식을 산다(연동한 크루만) -->
+<div id="shop" class="modal" hidden><div class="box giftbox" role="dialog" aria-labelledby="shopTitle">
+  <h4 id="shopTitle">컷 상점</h4>
+  <p class="gsub" id="shopCuts"></p>
+  <div class="shoptabs" id="shopTabs" role="tablist"></div>
+  <ul class="glist" id="shopList"></ul>
+  <div class="prow"><button class="btn ghost" type="button" id="shopClose">닫기</button></div>
 </div></div>
 <!-- 하루들 부스 함께 그리는 이젤: 그림판 -->
 <div id="easelEd" class="modal" hidden><div class="box ezbox" role="dialog" aria-label="함께 그리는 네컷">

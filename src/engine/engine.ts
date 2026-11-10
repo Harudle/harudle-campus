@@ -5,6 +5,9 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { AVATAR_COLOR_PARTS, AVATAR_COLORS, AVATAR_OPTIONS, AVATAR_PRESETS, LOCKED_OPTIONS, sanitizeAvatar, type AvatarConfig } from "../harudle/avatarData";
 import { dropDoll, makeDoll } from "./dolls";
+import { gearKey, readGear, type GearState } from "../scene/Gear";
+import { petOfSku, type PetKind } from "../scene/Pets";
+import { createShopUi } from "./shop";
 import { avatarPreview } from "../scene/avatarPreviewStore";
 import { createEnvironment } from "./environment";
 import { openWorldWindow } from "../worldFloor";
@@ -1497,8 +1500,9 @@ const avFromSeed = (seed: string) => { const h = hash(seed), r = rng(h); if (h %
 const avKey = (c: AvatarConfig) => avEncode(c);
 // 피드 창 2D 얼굴용으로 대략 옮긴 모습
 const avToLook = (c: AvatarConfig) => ({ hair: { beret: "beret", curly: "curl", cap: "cap" }[c.head] || "none", acc: c.headColor, prop: c.bag !== "none" ? "bag" : c.eyewear !== "none" ? "glasses" : c.neck === "scarf" ? "scarf" : "none" });
-function makeChar(cfg: AvatarConfig) { const blob = new THREE.Mesh(blobGeo, blobMat); blob.position.y = .012; blob.renderOrder = 1; return makeDoll("avatar", { ...DEFAULT_AV, ...cfg }, blob); }
-function makeDog() { const blob = new THREE.Mesh(blobGeo, blobMat); blob.scale.setScalar(.9); blob.position.y = .012; blob.renderOrder = 1; return makeDoll("dog", null, blob); }
+function makeChar(cfg: AvatarConfig, gear: GearState | null = null) { const blob = new THREE.Mesh(blobGeo, blobMat); blob.position.y = .012; blob.renderOrder = 1; return makeDoll("avatar", { ...DEFAULT_AV, ...cfg }, blob, { gear }); }
+// 따라다니는 펫: 기본은 강아지 두들, 컷 상점에서 산 펫(고양이 · 판다 · 여우)을 쓰면 그것으로 바뀐다
+function makePet(kind: PetKind = "doodle") { const blob = new THREE.Mesh(blobGeo, blobMat); blob.scale.setScalar(.9); blob.position.y = .012; blob.renderOrder = 1; return makeDoll("dog", null, blob, { pet: kind }); }
 // 피드 창 얼굴 사진은 2D 하루들 낙서로
 const avatarCache = new Map();
 const avatarURL = (look) => { const k = lookKey(look); if (avatarCache.has(k)) return avatarCache.get(k); const cv = document.createElement("canvas"); cv.width = cv.height = 128; const g = cv.getContext("2d"); g.fillStyle = WEAK; g.fillRect(0, 0, 128, 128); g.translate(64, 122); g.scale(3.4, 3.4); drawChar(g, look); const u = cv.toDataURL(); avatarCache.set(k, u); return u; };
@@ -2307,6 +2311,7 @@ let myAv = (() => { try { return avDecode(LS.get("ww.avatar")) || { ...DEFAULT_A
 const lookOf = (i) => ({ hair: HAIRS[i % HAIRS.length], acc: ACC[Math.floor(i / HAIRS.length) % ACC.length], prop: "bag" });
 const me = { jumps: 0, prop: null, goal: null, lie: null, seat: null, f: 12, x: ELEV_SPAWN[0], y: ELEV_SPAWN[1], h: Math.PI / 2, follow: null as string | null, followAt: 0, rideAt: 0, brush: false, brushMesh: null, fc: 0, fh: 0, fk: 0, kickAt: -9, hc: 0, hd: 0, up: 0, jz: 0, jv: 0, jc: 0, ac: 0, an: null, as: 0, act: null, board: null, runHold: false, runToggle: false, moving: false, say: "", sayAt: 0, path: null };
 let floor = FLOORS[12];   // 처음 들어오면 12층 엘리베이터 앞
+let myGear: GearState | null = null;   // 컷 상점에서 사서 쓰고 있는 것(서버가 알려 준 값만)
 let meDoll = makeChar(myAv); scene.add(meDoll.root);
 Object.defineProperty(me, "doll", { get: () => meDoll });
 const running = () => me.runHold || me.runToggle;
@@ -2323,7 +2328,7 @@ function useSkill(name) { if (!SKILLS[name]) return;
     if (!me.seat && !me.lie) { showToast("앉아서 읽어요", "의자나 빈백 앞에서 F로 앉거나 누운 다음 인벤토리(Tab)에서 책을 골라요.", 2600); return; }
     me.path = null; startAct(me, "read"); me.ac++; me.an = "read"; me.as = me.act.seed; sendPresence(true); showToast("책을 펼쳤어요", "인벤토리에서 책을 다시 고르거나 일어나면 덮어요.", 2000); return;
   } if (name === "dance" && me.act?.name === "dance") { endAct(me); sendPresence(true); return; } if (me.lie) standUp(); me.path = null; startAct(me, name, name === "dance" ? nextDance() : undefined); if (name === "dance") showToast(DANCES[me.act.style], "Z를 다시 누르거나 움직이면 멈춰요.", 1600); me.ac++; me.an = name; me.as = me.act.seed; sendPresence(true); }
-const dog = { x: ELEV_SPAWN[0] - 1, y: ELEV_SPAWN[1] + 1, moving: false, h: 0, doll: makeDog() }; scene.add(dog.doll.root);
+const dog = { x: ELEV_SPAWN[0] - 1, y: ELEV_SPAWN[1] + 1, moving: false, h: 0, doll: makePet() }; scene.add(dog.doll.root);
 const peers = new Map();
 const setPos = (d, f, x, y) => d.root.position.set(wx(x), floorY(f) + heightAt(FLOORS[f], x, y), wz(y));
 
@@ -2375,6 +2380,7 @@ addEventListener("keydown", (e) => {
     if (c === "Escape") closeTour(); else if (c === "ArrowLeft" || c === "KeyA") showTourStep(tourAt - 1); else if (c === "ArrowRight" || c === "KeyD" || c === "Enter" || c === "Space" || c === "KeyF") tourNext.click();
     return;
   }
+  if (shopUi.isOpen()) { if (c === "Escape") { e.preventDefault(); shopUi.close(); } return; }   // 컷 상점: Esc로 닫기
   if (!gifts.hidden) { if (c === "Escape" || c === "KeyF") { e.preventDefault(); closeGifts(); } return; }   // 받는 법 창: Esc·F로 닫기
   if ($("loginAsk")?.hidden === false) { if (c === "Escape") { e.preventDefault(); closeLoginAsk(); } return; }   // 연동 안내 창: Esc로 닫기, 다른 키는 게임으로 가지 않게
   if (c === "Escape") {
@@ -2496,7 +2502,7 @@ let lockFailed = false;
 const locked = () => document.pointerLockElement === canvas;
 // 경계: 창(층 고르기·크루 피드·사진·캐릭터 꾸미기·설정)이 떠 있는 동안은 커서를 꺼내 두고, 다 닫히면 게임으로 돌아와 다시 고정한다.
 // 채팅창에 쓰는 동안도 커서를 꺼내 둔다
-const uiOpen = () => !easelEd.hidden || $("loginAsk")?.hidden === false || !gifts.hidden || !$("startrackPanel").hidden || !menu.hidden || !profile.hidden || !tour.hidden || !inv.hidden || !picker.hidden || panel.classList.contains("open") || !avPanel.hidden || !lb.hidden;
+const uiOpen = () => !$("shop").hidden || !easelEd.hidden || $("loginAsk")?.hidden === false || !gifts.hidden || !$("startrackPanel").hidden || !menu.hidden || !profile.hidden || !tour.hidden || !inv.hidden || !picker.hidden || panel.classList.contains("open") || !avPanel.hidden || !lb.hidden;
 const typing = () => document.activeElement === sayInput;   // 채팅창에 쓰는 중: 커서를 꺼내 둔다
 function syncCursor() { if (uiOpen()) { if (locked()) document.exitPointerLock(); } else lockMouse(); }
 function lockMouse() {
@@ -2726,7 +2732,7 @@ document.getElementById("tourSkip").onclick = closeTour;
 // 걷기만 하고 달려 본 적이 없으면 한 번 알려 준다
 let walkFor = 0, runTipShown = false;
 const actBtn = document.getElementById("act"); actBtn.onclick = interact;
-function setMyAv(c) { myAv = { ...c }; LS.set("ww.avatar", avEncode(myAv)); saveCharacter(); const vis = meDoll.root.visible; dropDoll(meDoll); meDoll = makeChar(myAv); meDoll.root.visible = vis; scene.add(meDoll.root); sendPresence(true); renderAvPanel(); }
+function setMyAv(c) { myAv = { ...c }; LS.set("ww.avatar", avEncode(myAv)); saveCharacter(); const vis = meDoll.root.visible; dropDoll(meDoll); meDoll = makeChar(myAv, myGear); meDoll.root.visible = vis; scene.add(meDoll.root); sendPresence(true); renderAvPanel(); }
 // 캐릭터 꾸미기 (하루들 월드의 AvatarCustomizer와 같은 항목)
 const avPanel = document.getElementById("avPanel"); let avColorPart = "headColor", avCamBack = null;
 // 잠긴 장식도 눌러서 미리보기에서만 껴 볼 수 있다(저장·전송은 안 함). 다른 걸 고르거나 창을 닫으면 원래대로
@@ -2870,7 +2876,15 @@ async function loadWallet(toastAfter: number) {
     }
   } catch { }
 }
-walletChip.onclick = () => showToast(`내 컷 ${cuts.toLocaleString("ko-KR")}컷`, "하루들 피드에 네컷만화를 올린 날마다 하루 한 번 받아요.", 4200);
+/* 컷 상점: 산 펫 · 장식(gear)은 서버가 정한다. 내 것은 /api/shop 응답으로, 다른 크루 것은 접속자 목록의 g로 받는다 */
+function setMyGear(g: unknown) {
+  const next = readGear(g); if (gearKey(next) === gearKey(myGear)) return;
+  const petChanged = (next?.pet || "") !== (myGear?.pet || ""); myGear = next;
+  const vis = meDoll.root.visible; dropDoll(meDoll); meDoll = makeChar(myAv, myGear); meDoll.root.visible = vis; scene.add(meDoll.root);
+  if (petChanged) { dropDoll(dog.doll); dog.doll = makePet(petOfSku(myGear?.pet) ?? "doodle"); scene.add(dog.doll.root); }
+}
+const shopUi = createShopUi({ showToast, requireLogin, showCuts, setGear: setMyGear, onOpen: () => { if (locked()) document.exitPointerLock(); gifts.hidden = true; }, onClose: () => syncCursor() });
+walletChip.onclick = () => { if (shopUi.isAvailable()) shopUi.open(); else showToast(`내 컷 ${cuts.toLocaleString("ko-KR")}컷`, "하루들 피드에 네컷만화를 올린 날마다 하루 한 번 받아요.", 4200); };
 async function loadAccount() {
   const q = new URLSearchParams(location.search), result = q.get("login");
   if (result) { q.delete("login"); history.replaceState(null, "", location.pathname + (q.toString() ? `?${q}` : "") + location.hash); }
@@ -2879,7 +2893,7 @@ async function loadAccount() {
     if (r.ok) { const d = await r.json(); account.enabled = !!d.enabled; account.user = d.loggedIn && d.user ? d.user : null; }
   } catch { }
   applyAccount();
-  if (account.user) { void loadCharacter(); void loadWallet(result ? 5400 : 1500); }
+  if (account.user) { void loadCharacter(); void loadWallet(result ? 5400 : 1500).then(() => shopUi.load()); } else void shopUi.load();   // 게스트도 상점은 구경한다
   if (result === "ok" && account.user) setTimeout(() => showToast("하루들과 연동했어요", `${account.user.nickname}(으)로 들어왔어요.`, 4200), 600);
   else if (result) setTimeout(() => showToast("하루들과 연동하지 못했어요", "다시 시도해 주세요. 하루들 앱 안에서 열었다면 브라우저에서 열어 주세요.", 5200), 600);
 }
@@ -3053,7 +3067,7 @@ async function joinRoom() {
       room.onPeers((ch) => {
         peerList = [...ch.peers.filter((p) => !p.sameTab), ...mockPeers];
         updateMediaWorld();
-        for (const [k, v] of peers) if (!peerList.some((p) => p.peer === k)) { endAct(v); holdBrush(v, false); dropDoll(v.doll); v.tag.remove(); v.bub.remove(); v.zzz.remove(); peers.delete(k); }
+        for (const [k, v] of peers) if (!peerList.some((p) => p.peer === k)) { endAct(v); holdBrush(v, false); dropDoll(v.doll); dropDoll(v.pet?.doll); v.tag.remove(); v.bub.remove(); v.zzz.remove(); peers.delete(k); }
         online.textContent = peerList.length ? `같이 있는 크루 ${peerList.length + 1}명` : "혼자 둘러보는 중";
       });
       sendPresence(true); return;
@@ -3063,7 +3077,7 @@ async function joinRoom() {
     room.onPeers(async (ch) => {
       peerList = ch.peers.filter((p) => !p.sameTab && p.kind === "viewer");
       const ids = peerList.map((p) => p.by).filter(Boolean); if (user && ids.length) { const ps = await user.profiles(ids); for (const id of ids) names[id] = ps[id]?.name || ""; }
-      for (const [k, v] of peers) if (!peerList.some((p) => p.peer === k)) { endAct(v); holdBrush(v, false); dropDoll(v.doll); v.tag.remove(); v.bub.remove(); v.zzz.remove(); peers.delete(k); }
+      for (const [k, v] of peers) if (!peerList.some((p) => p.peer === k)) { endAct(v); holdBrush(v, false); dropDoll(v.doll); dropDoll(v.pet?.doll); v.tag.remove(); v.bub.remove(); v.zzz.remove(); peers.delete(k); }
       online.textContent = peerList.length ? `같이 있는 크루 ${peerList.length + 1}명` : "혼자 둘러보는 중";
     }, () => { });
     sendPresence(true);
@@ -3078,14 +3092,19 @@ function syncOccupancy() {
     if (s.st) { let best = null, bd = .5; for (const st of floor.seats || []) { if (st.taken) continue; const d = Math.hypot(st.x - s.x, st.y - s.y); if (d < bd) { bd = d; best = st; } } if (best) best.taken = "peer"; const pv = peers.get(p.peer); if (pv) pv.seat = best; }
     else for (const o of floor.furn) if (o.kind === "beanbag" && !o.taken && Math.hypot(bagSpot(o).x - s.x, bagSpot(o).y - s.y) < .6) { o.taken = "peer"; break; } }
 }
+// 펫이 주인 뒤 오른쪽을 졸졸 따라간다(내 펫 · 다른 크루의 펫이 같이 쓴다)
+function followPet(pet: { x: number; y: number; h: number; moving: boolean }, tx: number, ty: number, th: number, dt: number) {
+  const ddx = tx - Math.sin(th) * .9 + Math.cos(th) * .35 - pet.x, ddy = ty - Math.cos(th) * .9 - Math.sin(th) * .35 - pet.y, dd = Math.hypot(ddx, ddy); pet.moving = dd > .35;
+  if (dd > 6) { pet.x = tx; pet.y = ty; } else if (pet.moving) { const s = Math.min(dd, 6 * dt); pet.x += ddx / dd * s; pet.y += ddy / dd * s; pet.h = Math.atan2(ddx, ddy); }
+}
 function syncPeers(dt, t) {
   syncOccupancy();
   for (const p of peerList) {
     const s = p.presence || {}; if (typeof s.x !== "number" || !FLOORS[s.f]) continue;
-    const l = avDecode(s.av) || avFromSeed(p.peer), key = avKey(l);
+    const g = readGear(p.g), l = avDecode(s.av) || avFromSeed(p.peer), key = `${avKey(l)}/${gearKey(g)}`;   // g: 서버가 붙여 준 상점 장식
     let v = peers.get(p.peer);
-    if (!v) { v = { doll: makeChar(l), key, x: s.x, y: s.y, tag: mkLabel("name-tag peer", "크루"), bub: mkLabel("bub", ""), zzz: mkZzz() }; v.bub.hidden = true; scene.add(v.doll.root); peers.set(p.peer, v); }
-    if (v.key !== key) { const vis0 = v.doll.root.visible; dropDoll(v.doll); v.doll = makeChar(l); v.doll.root.visible = vis0; scene.add(v.doll.root); v.key = key; }
+    if (!v) { v = { doll: makeChar(l, g), key, x: s.x, y: s.y, tag: mkLabel("name-tag peer", "크루"), bub: mkLabel("bub", ""), zzz: mkZzz() }; v.bub.hidden = true; scene.add(v.doll.root); peers.set(p.peer, v); }
+    if (v.key !== key) { const vis0 = v.doll.root.visible; dropDoll(v.doll); v.doll = makeChar(l, g); v.doll.root.visible = vis0; scene.add(v.doll.root); v.key = key; }
     v.x = lerp(v.x, s.x, Math.min(1, dt * 10)); v.y = lerp(v.y, s.y, Math.min(1, dt * 10));
     if (s.jc !== v.jc) { if (v.jc !== undefined) { const air = (v.jz || 0) > .05; v.jv = air ? 4.2 : 4.6; if (air && v.doll.root.visible) spawnFx(starTex, v.doll.root.position, 3, .5, .2); } v.jc = s.jc; }   // 공중에서 또 뛰면 더블 점프(별)
     if (s.fc !== v.fc) { if (v.fc !== undefined && v.doll.root.visible) { if (s.fk) { v.kickAt = performance.now() / 1000; shootPaper(s.f, v.x, v.y, +s.fh || 0, +s.u || 0, v); } else launchFirework(s.f, v.x, v.y, +s.fh || 0, +s.u || 0); } v.fc = s.fc; }   // 다른 크루의 폭죽
@@ -3106,6 +3125,10 @@ function syncPeers(dt, t) {
     v.jz = v.jz || 0; v.jv = v.jv || 0; if (v.jz > 0 || v.jv > 0) { v.jv -= 15 * dt; v.jz += v.jv * dt; if (v.jz <= 0) { v.jz = 0; v.jv = 0; } }
     // 같은 층이거나, 뚫린 자리(라이브러리·계단 구멍) 너머 위·아래층이면 보인다(그 사람의 폭죽·노트북·춤도 같이)
     const vis = s.f === me.f || (Math.abs(s.f - me.f) === 1 && nearRects(voidsOf(FLOORS[Math.max(s.f, me.f)]), s.x, s.y, s.x, s.y)); v.doll.root.visible = vis; setPos(v.doll, s.f, v.x, v.y); v.doll.root.position.y += (+s.u || 0) + v.jz; v.doll.blob.position.y = .012 - v.jz; applyLie(v.doll, s.l ? { yaw: +s.ly || 0 } : null); v.doll.setSeated(s.st ? v.seat || true : null);
+    // 그 크루가 데리고 다니는 펫
+    const pk = petOfSku(g?.pet);
+    if (pk !== (v.pet?.kind ?? null)) { dropDoll(v.pet?.doll); v.pet = pk ? { kind: pk, x: v.x - .6, y: v.y + .4, moving: false, h: 0, doll: makePet(pk) } : null; if (v.pet) scene.add(v.pet.doll.root); }
+    if (v.pet) { followPet(v.pet, v.x, v.y, typeof s.h === "number" ? s.h : 0, dt); v.pet.doll.root.visible = vis; setPos(v.pet.doll, s.f, v.pet.x, v.pet.y); v.pet.doll.update(dt, t, v.pet.moving, v.pet.h); }
     // 받는 쪽 안전장치: "걷는 중"이라고 와도 위치가 0.5초 넘게 그대로면 멈춘 것으로 본다(멈춤 신호가 빠졌거나 그 사람이 다른 탭으로 갔을 때)
     if (s.x !== v.sx || s.y !== v.sy) { v.sx = s.x; v.sy = s.y; v.movedAt = t; }
     const walking = (v.walking = !!s.m && t - (v.movedAt ?? -9) < .5);
@@ -3272,8 +3295,7 @@ function step(dt, t) {
   npcSkillTimer -= dt; if (npcSkillTimer <= 0) { npcSkillTimer = 8 + Math.random() * 12; const idle = NPCS.filter((n) => n.f === me.f && !n.moving && !n.act && !n.talk && !n.lie); const n = idle[Math.floor(Math.random() * idle.length)]; if (n) startAct(n, ["draw", "draw", "wave", "heart"][Math.floor(Math.random() * 4)]); }
   if (t * 1000 - lastPortal > 1400) for (const p of floor.portals) if (inRect(p, me.x, me.y)) { lastPortal = t * 1000; goFloor(p.to, p.spawn); break; }
   // 강아지는 내 옆을 졸졸
-  const ddx = me.x - Math.sin(me.h) * .9 + Math.cos(me.h) * .35 - dog.x, ddy = me.y - Math.cos(me.h) * .9 - Math.sin(me.h) * .35 - dog.y, dd = Math.hypot(ddx, ddy); dog.moving = dd > .35;
-  if (dd > 6) { dog.x = me.x; dog.y = me.y; } else if (dog.moving) { const s = Math.min(dd, 6 * dt); dog.x += ddx / dd * s; dog.y += ddy / dd * s; dog.h = Math.atan2(ddx, ddy); }
+  followPet(dog, me.x, me.y, me.h, dt);
   // 크루들은 제자리 근처를 서성인다
   for (const n of NPCS) {
     if (n.f !== me.f) continue; const fl = FLOORS[n.f];

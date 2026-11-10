@@ -16,6 +16,7 @@ export function createStoreFromEnv(env, { fetch } = {}) {
 export function createMemoryStore() {
   const users = new Map(), sessions = new Map(), usedTokens = new Map(), characters = new Map();
   const wallets = new Map(), entries = [];   // 회원 → 잔액, 거래 기록
+  const inventory = new Map(), gears = new Map();   // 회원 → 가진 sku 목록, 쓰고 있는 것
   return {
     kind: "memory",
     async useLinkToken(jti, expiresAt) { if (usedTokens.has(jti)) return false; usedTokens.set(jti, expiresAt); return true; },
@@ -45,10 +46,23 @@ export function createMemoryStore() {
     async listWalletEntries(userId, limit = 20) {
       return entries.filter((e) => e.userId === userId).slice(-limit).reverse().map((e) => ({ kind: e.kind, refKey: e.refKey, amount: e.amount, balanceAfter: e.balanceAfter, at: e.at }));
     },
+    async getInventory(userId) { return [...(inventory.get(userId) || [])]; },
+    async buyItem({ userId, sku, price, at }) {
+      if (!users.has(userId)) throw new Error("memory no_user");
+      if (!Number.isInteger(price) || price <= 0) throw new Error("memory price");
+      const balance = wallets.get(userId) ?? 0, mine = inventory.get(userId) || [];
+      if (mine.includes(sku)) return { ok: false, reason: "owned", balance };
+      if (balance < price) return { ok: false, reason: "insufficient", balance };
+      wallets.set(userId, balance - price); inventory.set(userId, [...mine, sku]);
+      entries.push({ userId, kind: "purchase", refKey: sku, amount: -price, balanceAfter: balance - price, meta: {}, at });
+      return { ok: true, reason: null, balance: balance - price };
+    },
+    async getGear(userId) { return { ...(gears.get(userId) || {}) }; },
+    async saveGear({ userId, gear }) { gears.set(userId, { ...gear }); },
     async cleanup({ sessionsBefore, usersBefore }) {
       for (const [k, at] of usedTokens) if (at < sessionsBefore) usedTokens.delete(k);
       for (const [k, s] of sessions) if (s.expiresAt < sessionsBefore) sessions.delete(k);
-      for (const [id, u] of users) if (u.lastLoginAt < usersBefore) { users.delete(id); characters.delete(id); wallets.delete(id); for (let i = entries.length - 1; i >= 0; i--) if (entries[i].userId === id) entries.splice(i, 1); for (const [k, s] of sessions) if (s.userId === id) sessions.delete(k); }
+      for (const [id, u] of users) if (u.lastLoginAt < usersBefore) { users.delete(id); characters.delete(id); wallets.delete(id); inventory.delete(id); gears.delete(id); for (let i = entries.length - 1; i >= 0; i--) if (entries[i].userId === id) entries.splice(i, 1); for (const [k, s] of sessions) if (s.userId === id) sessions.delete(k); }
     },
   };
 }
@@ -118,10 +132,28 @@ export function createSupabaseStore({ url, key, fetch = globalThis.fetch }) {
       const rows = await call(`/campus_wallet_entries?harudle_user_id=${eq(userId)}&select=kind,ref_key,amount,balance_after,created_at&order=id.desc&limit=${Math.max(1, Math.min(100, limit | 0))}`, { method: "GET" }, "count=none");
       return (Array.isArray(rows) ? rows : []).map((r) => ({ kind: r.kind, refKey: r.ref_key, amount: Number(r.amount), balanceAfter: Number(r.balance_after), at: Date.parse(r.created_at) }));
     },
+    async getInventory(userId) {
+      const rows = await call(`/campus_inventory?harudle_user_id=${eq(userId)}&select=sku&order=acquired_at.asc`, { method: "GET" }, "count=none");
+      return (Array.isArray(rows) ? rows : []).map((r) => r.sku).filter((v) => typeof v === "string");
+    },
+    // 차감 · 거래 기록 · 보유 추가를 DB 함수 하나로. 이미 가졌거나 컷이 모자라면 ok:false와 사유가 돌아온다
+    async buyItem({ userId, sku, price }) {
+      const r = await call("/rpc/campus_shop_buy", { method: "POST", body: JSON.stringify({ p_user: userId, p_sku: sku, p_price: price }) }, "count=none");
+      if (!r || typeof r.ok !== "boolean" || !Number.isSafeInteger(Number(r.balance))) throw new Error("supabase shop_buy");
+      return { ok: r.ok, reason: r.ok ? null : String(r.reason), balance: Number(r.balance) };
+    },
+    async getGear(userId) {
+      const rows = await call(`/campus_gear?harudle_user_id=${eq(userId)}&select=gear&limit=1`, { method: "GET" }, "count=none");
+      const g = (Array.isArray(rows) ? rows[0] : null)?.gear;
+      return g && typeof g === "object" ? g : {};
+    },
+    saveGear: ({ userId, gear, at }) => call("/campus_gear?on_conflict=harudle_user_id", {
+      method: "POST", body: JSON.stringify({ harudle_user_id: userId, gear, updated_at: iso(at) }),
+    }, "resolution=merge-duplicates,return=minimal"),
     async cleanup({ sessionsBefore, usersBefore }) {
       await call(`/campus_used_link_tokens?expires_at=lt.${encodeURIComponent(iso(sessionsBefore))}`, { method: "DELETE" });
       await call(`/campus_sessions?expires_at=lt.${encodeURIComponent(iso(sessionsBefore))}`, { method: "DELETE" });
-      await call(`/campus_users?last_login_at=lt.${encodeURIComponent(iso(usersBefore))}`, { method: "DELETE" });   // 세션 · 캐릭터 · 지갑은 ON DELETE CASCADE
+      await call(`/campus_users?last_login_at=lt.${encodeURIComponent(iso(usersBefore))}`, { method: "DELETE" });   // 세션 · 캐릭터 · 지갑 · 보유 · 착용은 ON DELETE CASCADE
     },
   };
 }

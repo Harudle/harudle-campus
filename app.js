@@ -152,6 +152,8 @@ server.on("upgrade", (req, socket, head) => {
   else if (!(world && pathname === "/world/ws")) socket.destroy();
 });
 const peers = new Map();   // id -> { ws, name, presence }
+// 연동 크루가 상점에서 펫 · 장식을 쓰거나 벗으면 접속 중인 그 크루의 gear를 바로 바꾼다
+auth.onGear((userId, gear) => { const uid = `h_${userId}`; for (const p of peers.values()) if (p.uid === uid) { if (Object.keys(gear).length) p.gear = gear; else delete p.gear; dirty = true; } });
 const startrack = createStartrack({ onChange: (state) => ezAll({ t: "startrack", state }) });
 const admission = process.env.MEDIA_PROVIDER === "managed-draft" ? createMediaAdmission({ peers, maxParticipants: Number(process.env.MEDIA_MAX_PARTICIPANTS || 20), perAddressPerMinute: Number(process.env.MEDIA_JOIN_PER_IP_PER_MINUTE || 12) }) : null;
 const mediaSwitch = createSwitchCoordinator(peers, process.env.MEDIA_PROVIDER === "managed-draft" ? 2000 : 15000);
@@ -291,6 +293,8 @@ wss.on("connection", (ws, request) => {
   const ready = auth.userFromUpgrade(request).then((user) => {
     const me = peers.get(id); if (!user || !me) return;
     me.uid = `h_${user.id}`; me.name = user.nickname; me.verified = true; dirty = true;
+    // 산 펫 · 장식(gear)은 서버가 DB에서 읽어 붙인다. 브라우저가 보내는 값은 받지 않는다
+    auth.gearOf(user.id).then((gear) => { const p = peers.get(id); if (p && Object.keys(gear).length) { p.gear = gear; dirty = true; } }, () => {});
     ws.send(JSON.stringify({ t: "me", u: me.uid, verified: true, name: user.nickname }));
     sendHistory(me);
   }, () => {});
@@ -426,7 +430,7 @@ wss.on("connection", (ws, request) => {
 });
 setInterval(() => { // 초당 12번, 바뀐 게 있을 때만 모두에게 전체 상태를 보낸다
   if (!dirty) return; dirty = false;
-  const list = [...peers].filter(([, p]) => p.presence).map(([peer, p]) => ({ peer, name: p.name, u: p.uid || null, ...(p.verified ? { hv: 1 } : {}), presence: p.presence }));
+  const list = [...peers].filter(([, p]) => p.presence).map(([peer, p]) => ({ peer, name: p.name, u: p.uid || null, ...(p.verified ? { hv: 1 } : {}), ...(p.gear ? { g: p.gear } : {}), presence: p.presence }));
   const msg = JSON.stringify({ t: "peers", peers: list });
   for (const { ws } of peers.values()) if (ws.readyState === 1) ws.send(msg);
 }, 83);
