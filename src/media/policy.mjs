@@ -1,4 +1,4 @@
-export const VOICE_DISTANCE = 6;
+export const VOICE_DISTANCE = 12;   // 근처 채팅(app.js NEAR)도 같은 거리
 
 export function areaOf(position) {
   return `${position.f}:${position.rm || "open"}`;

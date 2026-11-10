@@ -8,7 +8,7 @@
 //   쓰는 것(gear)은 서버가 접속자 목록에 직접 붙인다: 브라우저는 gear를 보내지 않으므로 안 산 것을 낀 척할 수 없다.
 //   지갑과 같은 스위치(CAMPUS_WALLET=on)로 켠다.
 import { CATALOG, SLOTS, itemOf, cleanGear } from "./catalog.js";
-import { CURRENCY } from "./wallet.js";
+import { CURRENCY, FEED_DAILY, kstDate } from "./wallet.js";
 
 async function readJson(req, max = 512) {
   let body = "";
@@ -16,7 +16,7 @@ async function readJson(req, max = 512) {
   return JSON.parse(body);
 }
 
-export function createShop({ env = {}, store, now = () => Date.now(), log = console }) {
+export function createShop({ env = {}, store, feedReward = 0, now = () => Date.now(), log = console }) {
   const enabled = env.CAMPUS_WALLET === "on" && !!store?.buyItem;
   const listeners = new Set();
   const notify = (userId, gear) => { for (const fn of listeners) try { fn(userId, gear); } catch (e) { log.error?.("[shop] gear listener failed:", e.message); } };
@@ -35,12 +35,14 @@ export function createShop({ env = {}, store, now = () => Date.now(), log = cons
     if (!enabled) { json(res, 404, { error: "shop_disabled" }); return true; }
     if (!list && req.headers.origin !== origin) { json(res, 403, { error: "origin" }); return true; }
     const u = await user(req);
-    if (list && !u) { json(res, 200, { currency: CURRENCY, catalog: CATALOG, loggedIn: false }); return true; }
+    // earn: 컷을 받는 법(상점이 컷이 모자랄 때 하루들로 안내하는 데 쓴다). reward = 하루 한 번 받는 컷, today = 오늘 이미 받았는지
+    if (list && !u) { json(res, 200, { currency: CURRENCY, catalog: CATALOG, loggedIn: false, earn: { reward: feedReward } }); return true; }
     if (!u) { json(res, 401, { error: "login" }); return true; }
     try {
       if (list) {
-        const [owned, gear, w] = await Promise.all([store.getInventory(u.id), store.getGear(u.id), store.getWallet(u.id)]);
-        json(res, 200, { currency: CURRENCY, catalog: CATALOG, loggedIn: true, owned, gear: cleanGear(gear, owned), balance: w.balance });
+        const [owned, gear, w, entries] = await Promise.all([store.getInventory(u.id), store.getGear(u.id), store.getWallet(u.id), store.listWalletEntries(u.id, 20)]);
+        const today = entries.some((e) => e.kind === FEED_DAILY && e.refKey === kstDate(now()));
+        json(res, 200, { currency: CURRENCY, catalog: CATALOG, loggedIn: true, owned, gear: cleanGear(gear, owned), balance: w.balance, earn: { reward: feedReward, today } });
         return true;
       }
       let body; try { body = await readJson(req); } catch { json(res, 400, { error: "body" }); return true; }
