@@ -1569,7 +1569,7 @@ const fwDot = canvasTex(32, 32, (g) => { const r = g.createRadialGradient(16, 16
 function fireFirework(paper = false, aim: number | null = null) {
   if (paper && (me.act?.name !== "gun" || duelMove.noFire)) return;
   const now = performance.now(); if (now < fwReady) return; fwReady = now + (paper ? 250 : 600);
-  me.fh = aim ?? (inside() ? cam.yaw + Math.PI : me.h); me.fc++; me.fk = paper ? 1 : 0;
+  const fh = aim ?? (inside() ? cam.yaw + Math.PI : me.h); me.fh = Math.atan2(Math.sin(fh), Math.cos(fh)); me.fc++; me.fk = paper ? 1 : 0;   // fh는 -π~π로: 카메라를 여러 바퀴 돌리면 서버(±50으로 자른다)와 방향이 어긋난다
   if (me.fk) { me.h = me.fh; me.kickAt = now / 1000; shootPaper(me.f, me.x, me.y, me.fh, me.up + me.jz, me); duelUi?.fired(me.fh, me.up + me.jz); } else launchFirework(me.f, me.x, me.y, me.fh, me.up + me.jz);
   sendPresence(true);
 }

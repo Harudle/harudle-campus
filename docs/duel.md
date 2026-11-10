@@ -62,7 +62,7 @@ invite ─(수락)→ countdown(3초) → playing → result(5초) → 복귀
 |---|---|
 | `src/duel/shared.mjs` | 서버와 브라우저가 같이 쓰는 종목 목록(id · 이름 · 층 · 별칭 · 아이콘), 시간 상수(`DUEL`), `findGame` · `isArena` · `fmtMs` |
 | `src/duel/arena/kit.mjs` | 배치 도우미: `arena(def)`, 낮은 난간 방 `ring(x, y, w, h)`, 바닥 색 `tint(...)`, 방향 상수, `rectDist` |
-| `src/duel/arena/<종목>.mjs` | 대결장 배치(순수 데이터). world.ts가 층을 만들고 서버 규칙도 읽는다. 사격 · 과녁 · 복싱은 지금 임시 배치(난간 방 + 관전석) |
+| `src/duel/arena/<종목>.mjs` | 대결장 배치(순수 데이터). world.ts가 층을 만들고 서버 규칙도 읽는다. 과녁 · 복싱은 지금 임시 배치(난간 방 + 관전석) |
 | `src/duel/arena/index.mjs` | 대결장 모음 `ARENAS`, `arenaOfGame(game)` |
 | `src/duel/furniture.ts` | 대결장 가구 그리기 등록부 `registerFurn(kind, draw)`. 엔진 buildFurn이 모르는 종류를 여기로 넘긴다 |
 | `src/duel/client.ts` | 신청 · 초대장 · 종목 고르기 · 이동/복귀 · 관전 · 경기 HUD 틀 · 결과 화면 |
@@ -131,7 +131,7 @@ export const BOX_ARENA = arena({
 - 좌표는 캠퍼스와 같은 56×40칸(한 칸 1.25m), 방향은 엔진의 `me.h`(0 남 · π/2 동 · π 북 · −π/2 서).
 - `top`이 있는 가구는 그 높이로 올라섭니다(엔진 `topOf`). 정밀 충돌은 바닥 위 0.06~1.5m 사이 메시를 깎으므로, 높은 발판은 바닥에서 솟은 기둥으로 그립니다(떠 있는 판은 충돌이 안 생긴다).
 - 엔진이 모르는 가구 종류는 `registerFurn(kind, draw)`(`src/duel/furniture.ts`)로 종목 파일에서 그립니다. `draw(G, o, k)`의 `k`는 엔진 그리기 도구(`box` · `cyl` · `ball` · `board` · `toon` · `solidMesh` · `canvasTex` · `signTex` · `C` · `S` · `wx` · `wz` · `HAND` · `INK`)와 이 가구의 가운데 `x` · `z`, 크기 `w` · `d`(m), 층 `fl`입니다. `y`는 층 바닥 기준.
-- 지금 임시 배치: 사격 `SHOOT_FIELD`(난간 안 18×18) + 남쪽 관전석, 과녁 `TARGET_RANGE`(과녁 마당) · `TARGET_LINE`(사대)이 한 방 + 관전석, 복싱 `BOX_RING`(로프 안 6×6) + 둘레 관전 마당. 방 벽(난간)은 총알을 막는다.
+- 지금 임시 배치: 과녁 `TARGET_RANGE`(과녁 마당) · `TARGET_LINE`(사대)이 한 방 + 관전석, 복싱 `BOX_RING`(로프 안 6×6) + 둘레 관전 마당. 방 벽(난간)은 총알을 막는다.
 
 ### 서버 (`server/duel/games/<id>.js`)
 
@@ -219,7 +219,7 @@ type DuelRun = {
 - `buildFloor`의 `fl.arena` — 떠 있는 판 · 바깥 유리벽 · 천장 없음 / `showFloors`의 `isArena(me.f) ? 15` — 건물을 14층 지붕까지
 - `bakeCollision`의 `topOf(o)` · world.ts `topOf` · `walkThrough` — 배치의 `top` · `walk`
 - `step`의 `duelMove.lock` · `duelMove.speed`, 트램펄린의 `o.bounce`, `jump()`의 `duelMove.lock`
-- `fireFirework`의 `duelMove.noFire` · `duelUi?.fired`, `tickFireworks`의 `duelUi?.bullet` · `duelUi?.bulletHit`
+- `fireFirework`의 `duelMove.noFire` · `duelUi?.fired`(쏜 방향 `fh`는 −π~π로 맞춰 보낸다: 서버 sanitize가 ±50으로 자르고, 사격 판정이 그 값을 쓴다), `tickFireworks`의 `duelUi?.bullet` · `duelUi?.bulletHit`
 - keydown `duelUi?.key(e)`(Esc · 창 처리 다음, 게임 키보다 먼저), keyup, `mousedown` · `mouseup` · `contextmenu`, `endDrag`의 `duelUi?.ateClick()`, `uiOpen`의 `duelUi?.modal()`
 - `goFloor(f, spawn, exact)` — exact면 그 자리 그대로, `spawn[2]`가 있으면 그쪽을 본다
 - `roomKey()` · `updateMediaWorld` · `sendPresence`의 `ar` — 경기 방, `syncPeers`의 `duelUi?.hides(s)`
@@ -251,6 +251,13 @@ type DuelRun = {
 - 체력 100, 한 발에 20입니다. 라운드마다 체력이 다시 차고, 3라운드 중 2라운드를 먼저 이기면 승리입니다.
 - 라운드 제한 90초입니다. 시간이 다 되면 체력이 많은 쪽이 라운드를 이기고, 같으면 다시 합니다.
 - 명중은 서버가 판정합니다(지금 캠퍼스의 종이 총은 맞은 사람 브라우저가 판정하므로 그대로 쓰지 않습니다). 쏜 위치 · 방향 · 시각과 상대의 최근 위치로 확인하고, 연사 간격(0.25초)을 지킵니다.
+- 구현: 22층 난간 안 20×20칸(`SHOOT_FIELD`)에 엄폐물 13개(`SHOOT_COVER`: 나무 상자 · 종이벽 · 파란 통, 가운데를 두고 180도 돌려도 같은 모양). 엄폐물은 1.2m로 올라설 수 없고 1.25m 아래로 오는 총알을 막는다. 선수 자리는 북서(빨강) · 남동(파랑) 구석, 관전석은 남쪽 난간 너머 따로 둘린 방. 규칙 숫자는 `SHOOT`(arena/shoot.mjs)에 모아 서버 · 브라우저가 같이 쓴다.
+- 브라우저: 선수는 3·2·1부터 결과 전까지 늘 종이 총을 든다(넣거나 다른 동작으로 바뀌면 0.5초 뒤 다시 든다, 1~4 · Z 동작 키는 막는다). 쏘기는 엔진 그대로(고정 중 왼쪽 클릭 · F · 모바일 🎆). 라운드가 진행 중일 때만 `canFire`, 관전자는 쏘지 못한다. 경기가 끝나면(`stop`) 총을 넣는다.
+- 판정 흐름: `onFire`로 내 발(방향 · 시각 · 높이)을 기억해 두고, `onBulletHit`에서 내 총알이 상대 캐릭터에 닿으면 속도 방향으로 그 발을 찾아 `{ k: "hit", to, dir, at, lift }`를 보낸다. `onBulletHit`은 늘 true를 돌려 맞은 쪽의 엔진 기본 처리(hc)를 막는다.
+- 서버(`judge`): 라운드 진행 중 · `to`가 상대 · 시각이 2초 안 · 브라우저 시각 간격 0.23초 이상 → 쏜 사람 위치 기록에서 그 발(fk이고 fc가 바뀐 위치, fh가 dir과 같고, 아직 안 쓴 fc)을 찾는다(위치 · 방향은 이 기록을 쓴다). 서버에 닿은 간격도 0.115초 이상. 그다음 상대의 위치 기록(쏜 때 −1초 ~ +1.6초, 위치 사이 가운데 포함) 중 하나라도 앞쪽 16칸 안 · 쏜 줄에서 옆으로 1칸 안 · 총알이 닿을 시각과 1.1초 안 · 엄폐물에 가리지 않음(0.65m 넘게 뛰어 쏘면 넘어간다)이면 받는다. 안 받으면 그 선수에게만 `{ k: "miss", why }`(round · self · bad · late · fast · shot · behind · far · cover · aim).
+- 받으면 모두에게 `{ k: "hit", seat, to, dir, hp }` → 모두 `hitReact`. 체력이 0이면 라운드 끝 `{ k: "round", seat(이긴 자리 · null), why: ko · time · tie, round, wins, hp }`. 다음 판은 3초 3·2·1(`phase: "ready"`) 동안 체력이 차고 선수는 자기 구석으로 옮겨져 제자리. 무승부(tie)면 같은 라운드를 다시 하고, 다시 하는 판까지 6판이 되면 이긴 라운드 수로 끝낸다(같으면 무승부).
+- `match.state = { n(몇 번째 판), round, again, phase: ready · go · over, at(그 판 시작 시각), hp: [], wins: [], last }`. 서버는 판마다 `match.endsAt`을 그 라운드 끝으로 바꾼다(틀의 남은 시간이 라운드 남은 시간. 3·2·1 동안은 1:33처럼 3초 더 보인다). 결과: 이유 `ko`(마지막 라운드를 KO로) · `timeout`, summary `{ wins, rounds }`, 결과 카드에 "라운드 2 : 1".
+- 화면: 경기 틀 아래 라운드 · 두 선수 체력 막대 · 이긴 라운드 점, 상대(관전자는 둘 다) 머리 위 체력 막대(엄폐물에 가려진다), 라운드 사이 3·2·1, 명중 표시, 맞으면 화면 둘레가 붉게.
 
 ### 과녁 사격 (`target`, 23층)
 
