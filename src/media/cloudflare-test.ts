@@ -16,6 +16,7 @@ export class CloudflareTestMediaProvider implements MediaProvider {
   private syncing = false;
   private queued = false;
   private localScreen?: HTMLVideoElement;
+  private micDevice = "";
 
   constructor(private callbacks: MediaCallbacks, private request: CloudflareRequest) {}
 
@@ -67,7 +68,7 @@ export class CloudflareTestMediaProvider implements MediaProvider {
         if (element instanceof HTMLVideoElement) element.playsInline = true;
         element.srcObject = new MediaStream([event.track]);
         sub.element = element;
-        this.callbacks.addTrack(item.track, kind, element, item.name);
+        this.callbacks.addTrack(item.track, kind, element, item.name, item.kind === "audio" ? item.peer : undefined);
         void element.play().catch(() => { if (kind === "audio") this.callbacks.audioPlaybackChanged(false); });
       };
       pc.onconnectionstatechange = () => { if (this.active && pc.connectionState === "failed") this.callbacks.connectionLost(); };
@@ -122,11 +123,27 @@ export class CloudflareTestMediaProvider implements MediaProvider {
   }
   async setMicrophone(enabled: boolean) {
     if (!enabled) { await this.closePublication("audio"); return; }
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-    const track = stream.getAudioTracks()[0];
-    if (!track) throw new Error("microphone_unavailable");
+    const track = await this.captureMicrophone();
     await this.publish("audio", track);
   }
+  private async captureMicrophone() {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: this.micDevice ? { deviceId: this.micDevice } : true, video: false });
+    const track = stream.getAudioTracks()[0];
+    if (!track) throw new Error("microphone_unavailable");
+    return track;
+  }
+  async setMicrophoneDevice(deviceId: string) {
+    this.micDevice = deviceId;
+    const publication = this.published.get("audio");
+    if (!publication) return;
+    // 보내는 연결은 그대로 두고 소리만 새 마이크로 바꿔 끼운다
+    const track = await this.captureMicrophone();
+    const sender = publication.pc.getSenders().find((s) => s.track?.kind === "audio");
+    if (!sender) { track.stop(); throw new Error("microphone_unavailable"); }
+    await sender.replaceTrack(track);
+    publication.track.stop(); publication.track = track;
+  }
+  microphoneTrack() { return this.published.get("audio")?.track ?? null; }
   async setScreenShare(enabled: boolean) {
     if (!enabled) {
       const results = await Promise.allSettled([this.closePublication("screen"), this.closePublication("screenAudio")]);

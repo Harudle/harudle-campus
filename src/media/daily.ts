@@ -8,6 +8,7 @@ export class DailyMediaProvider implements MediaProvider {
   private elements = new Map<string, { track: MediaStreamTrack; element: HTMLMediaElement }>();
   private closing = false;
   private receivePermissionKey = "";
+  private micDevice = "";
 
   constructor(private callbacks: MediaCallbacks) {}
 
@@ -41,7 +42,7 @@ export class DailyMediaProvider implements MediaProvider {
     if (!call || call.isDestroyed()) return;
     const participants = Object.values(call.participants());
     const current = new Set<string>();
-    const keep = (id: string, kind: "audio" | "screen", track: MediaStreamTrack | undefined, name: string, muted = false) => {
+    const keep = (id: string, kind: "audio" | "screen", track: MediaStreamTrack | undefined, name: string, muted = false, speaker?: string) => {
       if (!track || track.readyState !== "live") return;
       current.add(id);
       const existing = this.elements.get(id);
@@ -52,7 +53,7 @@ export class DailyMediaProvider implements MediaProvider {
       if (element instanceof HTMLVideoElement) element.playsInline = true;
       element.srcObject = new MediaStream([track]);
       this.elements.set(id, { track, element });
-      this.callbacks.addTrack(id, kind, element, name);
+      this.callbacks.addTrack(id, kind, element, name, speaker);
       void element.play().catch(() => { if (kind === "audio") this.callbacks.audioPlaybackChanged(false); });
     };
     for (const p of participants) {
@@ -66,7 +67,7 @@ export class DailyMediaProvider implements MediaProvider {
         call.updateParticipant(p.session_id, { setSubscribedTracks: { audio: allowed, video: false, screenVideo: allowed, screenAudio: allowed } });
       }
       if (!allowed) continue;
-      keep(`${p.session_id}:audio`, "audio", p.tracks.audio.track, p.user_name || "크루");
+      keep(`${p.session_id}:audio`, "audio", p.tracks.audio.track, p.user_name || "크루", false, p.user_id);
       keep(`${p.session_id}:screen-audio`, "audio", p.tracks.screenAudio.track, p.user_name || "크루");
       keep(`${p.session_id}:screen`, "screen", p.tracks.screenVideo.track, p.user_name || "크루");
     }
@@ -92,8 +93,20 @@ export class DailyMediaProvider implements MediaProvider {
       };
       timer = window.setTimeout(failed, 60000);
       call.on("participant-updated", check).on("camera-error", failed);
+      if (this.micDevice) void call.setInputDevicesAsync({ audioDeviceId: this.micDevice }).catch(() => {});
       call.setLocalAudio(true); check();
     });
+  }
+
+  async setMicrophoneDevice(deviceId: string) {
+    this.micDevice = deviceId;
+    if (this.microphoneTrack()) await this.call!.setInputDevicesAsync({ audioDeviceId: deviceId || "default" });
+  }
+  microphoneTrack() {
+    const call = this.call;
+    if (!call || call.isDestroyed()) return null;
+    const audio = call.participants().local?.tracks.audio;
+    return audio && ["playable", "sendable"].includes(audio.state) ? audio.persistentTrack ?? audio.track ?? null : null;
   }
 
   async setScreenShare(enabled: boolean) {

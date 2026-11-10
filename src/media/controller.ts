@@ -2,10 +2,14 @@ import { areaOf, canHear, canShareScreen } from "./policy.mjs";
 import { createMediaProvider } from "./provider";
 import type { CloudflareRequest, MediaCallbacks, MediaJoin, MediaProvider, NearbyPeer, Position } from "./types";
 import { mountMeetings } from "./meetings";
+import { mountMicrophone } from "./microphone";
+import { mountSpeaking } from "./speaking";
 
-type Options = { requestJoin: (area: string) => Promise<MediaJoin>; requestRenew: () => Promise<number>; requestCloudflare: CloudflareRequest; requestMeeting: (operation: string, data?: Record<string, unknown>) => Promise<any>; notifyDailyReady?: () => void; notifyLeft?: () => void; acknowledgeSwitch?: (revision: number) => void; meetingChanged?: () => void };
+type Options = { requestJoin: (area: string) => Promise<MediaJoin>; requestRenew: () => Promise<number>; requestCloudflare: CloudflareRequest; requestMeeting: (operation: string, data?: Record<string, unknown>) => Promise<any>; notifyDailyReady?: () => void; notifyLeft?: () => void; acknowledgeSwitch?: (revision: number) => void; meetingChanged?: () => void; voiceChanged?: (state: VoiceState) => void; speakingChanged?: (peers: Set<string>) => void };
+// 남들에게 보여 줄 내 음성 상태: 0 음성 연결 안 함 · 1 연결했지만 마이크 꺼짐 · 2 마이크 켜짐
+export type VoiceState = 0 | 1 | 2;
 
-export function mountMediaControls({ requestJoin, requestRenew, requestCloudflare, requestMeeting, notifyDailyReady = () => {}, notifyLeft = () => {}, acknowledgeSwitch = () => {}, meetingChanged = () => {} }: Options) {
+export function mountMediaControls({ requestJoin, requestRenew, requestCloudflare, requestMeeting, notifyDailyReady = () => {}, notifyLeft = () => {}, acknowledgeSwitch = () => {}, meetingChanged = () => {}, voiceChanged = () => {}, speakingChanged = () => {} }: Options) {
   const dock = document.getElementById("mediaDock")!;
   const buttons = document.getElementById("mediaBtns")!;
   const voice = document.getElementById("voiceToggle") as HTMLButtonElement;
@@ -24,7 +28,13 @@ export function mountMediaControls({ requestJoin, requestRenew, requestCloudflar
   let microphone = false, sharing = false, audioBlocked = false, actionBusy = false;
   let reconciling = false, queued = false, message = "";
   let leaseTimer: number | undefined, renewLease = false, pendingSwitch: number | null = null;
-  let cleanupUnconfirmed = false;
+  let cleanupUnconfirmed = false, voiceState: VoiceState = 0;
+  // 말하는 중 표시 · 설정창 마이크 고르기
+  const micUi = mountMicrophone({
+    track: () => provider?.microphoneTrack() ?? null,
+    live: () => !!provider && connected && microphone,
+    switchDevice: async (id) => { if (provider) await provider.setMicrophoneDevice(id); },
+  });
   const meetings = mountMeetings(requestMeeting, async () => {
     if (connecting || actionBusy) throw new Error("meeting_busy");
     wanted = false; microphone = false; sharing = false;
@@ -36,7 +46,9 @@ export function mountMediaControls({ requestJoin, requestRenew, requestCloudflar
     if (!position) return [];
     return peers.filter((p) => p.presence && canHear(position, p.presence)).map((p) => p.peer);
   }
+  const speaking = mountSpeaking((peers) => speakingChanged(peers));   // 근처 크루 중 지금 말하는 크루
   function clearTracks() {
+    speaking.clear();
     for (const element of elements.values()) element.remove();
     elements.clear(); screens.hidden = true;
   }
@@ -51,6 +63,8 @@ export function mountMediaControls({ requestJoin, requestRenew, requestCloudflar
     label(mic, "마이크", !wanted ? "음성을 연결하면 마이크를 켤 수 있어요" : microphone ? "마이크 끄기" : "마이크 켜기");
     mic.setAttribute("aria-pressed", String(microphone));
     mic.classList.toggle("muted", wanted && !microphone);
+    const nextVoice: VoiceState = !wanted || !connected ? 0 : microphone ? 2 : 1;
+    if (nextVoice !== voiceState) { voiceState = nextVoice; voiceChanged(voiceState); }
     const shareHere = !!position && canShareScreen(position);
     screen.disabled = !wanted || !shareHere || !connected || connecting || actionBusy;
     label(screen, sharing ? "공유 중지" : "화면 공유", !shareHere ? "회의실에서 음성을 연결하면 화면을 공유할 수 있어요" : !wanted ? "음성을 연결하면 화면을 공유할 수 있어요" : sharing ? "공유 중지" : "화면 공유");
@@ -59,19 +73,21 @@ export function mountMediaControls({ requestJoin, requestRenew, requestCloudflar
     // 상태 글은 알려야 할 때(오류 · 연결 중 · 회의 선택)만 띄운다. 평소 안내는 음성 버튼 풍선 도움말로
     const notice = message || (meetings.isRequired() && !meetings.isSelected() ? "회의를 만들거나 선택한 뒤 음성을 연결해 주세요." : connecting ? "음성을 연결하고 있어요." : wanted && !network ? "캠퍼스에 다시 연결하고 있어요." : "");
     status.textContent = notice; status.hidden = !notice;
+    micUi.sync();
   }
 
   function callbacksFor(candidate: () => MediaProvider | null): MediaCallbacks {
     const current = () => provider !== null && provider === candidate();
     return {
-      addTrack(id, kind, element, name) {
+      addTrack(id, kind, element, name, speaker) {
         if (!current()) { element.remove(); return; }
-        if (kind === "audio") { audio.append(element); elements.set(id, element); return; }
+        if (kind === "audio") { audio.append(element); elements.set(id, element); if (speaker) speaking.add(id, speaker, element); return; }
         const figure = document.createElement("figure"); figure.className = "sharedScreen";
         const caption = document.createElement("figcaption"); caption.textContent = name === "내 화면" ? name : `${name}의 화면`;
         figure.append(element, caption); screenList.append(figure); elements.set(id, figure); screens.hidden = false;
       },
       removeTrack(id) {
+        speaking.remove(id);
         const element = elements.get(id);
         if (element) { element.remove(); elements.delete(id); }
         screens.hidden = !screenList.querySelector(".sharedScreen");
@@ -157,6 +173,7 @@ export function mountMediaControls({ requestJoin, requestRenew, requestCloudflar
         candidate = await createMediaProvider(join.provider, callbacksFor(() => candidate), requestCloudflare);
         if (!wanted || !network || !position || areaOf(position) !== area) { notifyLeft(); queued = true; continue; }
         provider = candidate; providerArea = area;
+        await candidate.setMicrophoneDevice(micUi.device()).catch(() => {});   // 설정창에서 고른 마이크
         candidate.setAllowedPeers(allowedPeers());
         await candidate.connect(join);
         if (!wanted || !network || !position || areaOf(position) !== area) { await closeProvider(); queued = true; continue; }

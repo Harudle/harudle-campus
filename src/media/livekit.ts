@@ -10,6 +10,7 @@ export class LiveKitMediaProvider implements MediaProvider {
   private allowedKey = "";
   private attached = new Map<string, { track: any; element: HTMLMediaElement }>();
   private closing = false;
+  private micDevice = "";
 
   constructor(private callbacks: MediaCallbacks) {}
 
@@ -17,7 +18,7 @@ export class LiveKitMediaProvider implements MediaProvider {
     const room = new Room({ adaptiveStream: true, dynacast: true, publishDefaults: {
       audioPreset: { maxBitrate: 64000 }, screenShareEncoding: { maxBitrate: 3000000, maxFramerate: 15 },
       simulcast: false, backupCodec: false,
-    } });
+    }, ...(this.micDevice && { audioCaptureDefaults: { deviceId: this.micDevice } }) });
     this.room = room;
     room.on(RoomEvent.TrackPublished, () => this.updateSubscriptions());
     room.on(RoomEvent.ParticipantConnected, () => this.updateSubscriptions());
@@ -75,7 +76,7 @@ export class LiveKitMediaProvider implements MediaProvider {
       const audio = track.attach() as HTMLAudioElement;
       audio.autoplay = true;
       this.attached.set(publication.trackSid, { track, element: audio });
-      this.callbacks.addTrack(publication.trackSid, "audio", audio, participant.name || "크루");
+      this.callbacks.addTrack(publication.trackSid, "audio", audio, participant.name || "크루", publication.source === Track.Source.Microphone ? campusPeer(participant.identity) : undefined);
     } else if (publication.source === Track.Source.ScreenShare) {
       const video = track.attach() as HTMLVideoElement;
       video.playsInline = true; video.autoplay = true;
@@ -96,6 +97,14 @@ export class LiveKitMediaProvider implements MediaProvider {
   async setMicrophone(enabled: boolean) {
     if (!this.room) throw new Error("not_connected");
     await this.room.localParticipant.setMicrophoneEnabled(enabled);
+  }
+  async setMicrophoneDevice(deviceId: string) {
+    this.micDevice = deviceId;
+    // 켜져 있는 마이크도 바로 바꾸고, 다음에 켤 때의 기본값도 바꾼다
+    if (this.room) await this.room.switchActiveDevice("audioinput", deviceId || "default", !!deviceId);
+  }
+  microphoneTrack() {
+    return this.room?.localParticipant.getTrackPublication(Track.Source.Microphone)?.track?.mediaStreamTrack ?? null;
   }
   async setScreenShare(enabled: boolean) {
     if (!this.room) throw new Error("not_connected");

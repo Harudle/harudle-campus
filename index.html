@@ -134,6 +134,8 @@
 <div id="sideShow">
   <button type="button" id="showPeople" title="같이 있는 크루 보기" aria-label="같이 있는 크루 보기"><i class="dot"></i><em id="sideShowCnt">1</em>명</button>
 </div>
+<!-- 근처 크루: 근처 채팅 · 음성이 닿는 크루(같은 층 6칸 안, 방 안이면 같은 방). 사이드바를 접었거나 모바일일 때 오른쪽 위에 뜬다 -->
+<section id="nearCard" aria-label="근처에 있는 크루" title="크루 목록 열기" hidden><p class="nhead"><i class="dot"></i>근처 <em id="nearCnt">0</em>명<span>채팅 · 음성이 닿아요</span></p><ul id="nearList"></ul></section>
 <aside id="side" aria-label="같이 있는 크루">
   <button type="button" id="sideTab" aria-label="사이드바 접기/펼치기" title="사이드바 접기 (\)"><span class="chev">›</span></button>
   <div class="spanel">
@@ -183,6 +185,7 @@
   <h4 id="menuTitle">설정</h4>
   <div class="mtabs" role="tablist">
     <button type="button" role="tab" data-mtab="main" aria-selected="true">설정</button>
+    <button type="button" role="tab" data-mtab="voice" aria-selected="false">음성</button>
     <button type="button" role="tab" data-mtab="keys" aria-selected="false">조작법</button>
   </div>
   <div class="mview mlist" data-mtab="main" role="tabpanel">
@@ -190,6 +193,13 @@
     <button class="btn ghost" type="button" id="menuLogin" hidden>하루들 연동하기</button>
     <button class="btn ghost" type="button" id="menuProfile">프로필 수정</button>
     <button class="btn ghost" type="button" id="menuLook">캐릭터 외형 수정</button>
+  </div>
+  <!-- 음성: 마이크 고르기와 소리 막대(말하면 움직인다) -->
+  <div class="mview mvoice" data-mtab="voice" role="tabpanel" hidden>
+    <label class="plabel">마이크<select id="micSelect"><option value="">시스템 기본 마이크</option></select></label>
+    <div class="vmeter" aria-hidden="true"><i id="micMeter"></i></div>
+    <p class="vnote" id="micNote" aria-live="polite"></p>
+    <button class="btn ghost" type="button" id="micPermit" hidden>마이크 권한 허용하기</button>
   </div>
   <div class="mview mkeys" data-mtab="keys" role="tabpanel" hidden>
     <ul class="kb-only glist">
@@ -199,6 +209,7 @@
       <li><span><kbd>F</kbd></span>상호작용</li>
       <li><span><kbd>C</kbd></span>폭죽</li>
       <li><span><kbd>Enter</kbd></span>채팅</li>
+      <li><span><kbd>/</kbd></span>채팅 명령어 (/도움)</li>
       <li><span><kbd>Tab</kbd></span>인벤토리</li>
       <li><span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></span>네 컷 · 인사 · 하트</li>
       <li><span><kbd>Z</kbd></span>춤 (켜고 끄기)</li>
@@ -216,7 +227,7 @@
       <li><span>🖍️👋💗💃</span>표현</li>
       <li><span>🎆</span>폭죽 · 종이 총</li>
       <li><span>🎒</span>인벤토리</li>
-      <li><span>💬</span>채팅</li>
+      <li><span>💬</span>채팅 · /로 명령어</li>
       <li><span>⚙️</span>설정</li>
     </ul>
   </div>
