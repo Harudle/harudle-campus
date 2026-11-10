@@ -2851,6 +2851,26 @@ $("loginAskGo").onclick = startHarudleLogin;
 $("loginAskLater").onclick = closeLoginAsk;
 loginAsk.addEventListener("click", (e) => { if (e.target === loginAsk) closeLoginAsk(); });
 $("menuLogin").onclick = () => { if (account.user) void harudleLogout(); else startHarudleLogin(); };
+/* ───── 지갑 '컷' (연동한 크루만) ─────
+   들어올 때 서버에 정산을 부탁한다: 서버가 하루들 공개 피드를 읽어, 내가 네컷만화를 올린 날마다 하루 한 번 컷을 준다(docs/campus-wallet.md).
+   서버가 지갑을 꺼 두었으면(404) 칩이 보이지 않는다. 잔액은 서버가 돌려준 값만 보여 준다 */
+const walletChip = $("walletChip");
+let cuts = 0;
+function showCuts(n: number) { cuts = n; walletChip.hidden = false; walletChip.querySelector("b").textContent = n.toLocaleString("ko-KR"); walletChip.setAttribute("aria-label", `내 컷 ${n}컷`); }
+async function loadWallet(toastAfter: number) {
+  try {
+    const r = await fetch("/api/me/wallet/settle", { method: "POST", credentials: "same-origin" });
+    if (r.ok) {
+      const d = await r.json(), days = d.granted.length, got = d.granted.reduce((sum: number, g: { amount: number }) => sum + g.amount, 0);
+      showCuts(d.balance);
+      if (got > 0) setTimeout(() => showToast(`${got}컷을 받았어요`, days > 1 ? `하루들 피드에 네컷만화를 올린 ${days}일 치예요.` : "하루들 피드에 네컷만화를 올려서 받았어요.", 4200), toastAfter);
+    } else if (r.status === 502) {   // 하루들이나 저장소가 잠깐 응답하지 않으면 잔액만 보여 준다
+      const w = await fetch("/api/me/wallet", { credentials: "same-origin", cache: "no-store" });
+      if (w.ok) showCuts((await w.json()).balance);
+    }
+  } catch { }
+}
+walletChip.onclick = () => showToast(`내 컷 ${cuts.toLocaleString("ko-KR")}컷`, "하루들 피드에 네컷만화를 올린 날마다 하루 한 번 받아요.", 4200);
 async function loadAccount() {
   const q = new URLSearchParams(location.search), result = q.get("login");
   if (result) { q.delete("login"); history.replaceState(null, "", location.pathname + (q.toString() ? `?${q}` : "") + location.hash); }
@@ -2859,7 +2879,7 @@ async function loadAccount() {
     if (r.ok) { const d = await r.json(); account.enabled = !!d.enabled; account.user = d.loggedIn && d.user ? d.user : null; }
   } catch { }
   applyAccount();
-  if (account.user) void loadCharacter();
+  if (account.user) { void loadCharacter(); void loadWallet(result ? 5400 : 1500); }
   if (result === "ok" && account.user) setTimeout(() => showToast("하루들과 연동했어요", `${account.user.nickname}(으)로 들어왔어요.`, 4200), 600);
   else if (result) setTimeout(() => showToast("하루들과 연동하지 못했어요", "다시 시도해 주세요. 하루들 앱 안에서 열었다면 브라우저에서 열어 주세요.", 5200), 600);
 }
