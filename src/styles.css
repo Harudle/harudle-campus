@@ -88,6 +88,14 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--brand);outline-
 #sayInput{flex:1;min-width:0;font:inherit;font-size:15px;border:2px solid var(--ink);border-radius:12px;padding:8px 12px;background:var(--paper);color:var(--ink)}
 .btn{font-family:var(--hand);font-size:18px;border:2px solid var(--ink);background:var(--brand);color:var(--brand-strong);border-radius:12px;padding:6px 14px;cursor:pointer;box-shadow:2px 2px 0 var(--ink)}
 .btn.ghost{background:var(--paper);color:var(--ink)}
+.btn.lav{background:#E6DDF6;color:var(--ink)}   /* 하루들 연동하기 */
+/* 하루들 연동 안내(첫 안내 마지막 장 · 하루들 부스 선물 창) */
+.linkcard{margin-top:12px;padding:12px;border:2px solid var(--ink);border-radius:14px;background:#F4F0FD;font-family:var(--body)}
+.linkcard[hidden]{display:none}
+.linkcard b{display:block;font-family:var(--hand);font-size:18px;margin-bottom:2px}
+.linkcard p{margin:0 0 8px;font-size:13px;line-height:1.5;color:#33313C;word-break:keep-all}
+.linkcard p:last-child{margin-bottom:0}
+.linkcard .btn{width:100%;font-size:16px;padding:6px 12px}
 .mkeys kbd{display:inline-block;min-width:20px;padding:0 5px;margin-right:2px;border:1.5px solid var(--ink);border-radius:5px;background:#FFF6C7;color:var(--ink);font:700 11px/18px system-ui,sans-serif;text-align:center;box-shadow:0 1.5px 0 var(--ink)}
 #updateChip{position:fixed;z-index:35;top:calc(64px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);font-family:var(--hand);font-size:16px;font-weight:700;background:#FFD43B;color:#0E1E46;border:2px solid var(--ink);border-radius:999px;padding:6px 16px;box-shadow:2px 2px 0 var(--ink);cursor:pointer}
 #cross{position:fixed;z-index:3;left:50%;top:50%;width:10px;height:10px;margin:-5px 0 0 -5px;border:2px solid #fff;border-radius:50%;box-shadow:0 0 0 1.5px var(--ink);pointer-events:none}
@@ -244,7 +252,7 @@ body.touch.chatting #topRight,body.touch.peopleOpen #topRight{display:none}
 /* 첫 방문 안내(세 장): 가운데 종이 카드, 그림 + 큰 키 + 한 줄 설명, 아래 점과 이전·다음 */
 #tour{position:fixed;inset:0;z-index:41;display:grid;place-items:center;background:rgba(14,30,70,.55);padding:16px}
 #tour[hidden]{display:none!important}
-.tbox{background:var(--paper);border:3px solid var(--ink);border-radius:22px;box-shadow:4px 6px 0 var(--ink);width:min(380px,100%);padding:18px 20px 16px;font-family:var(--hand)}
+.tbox{background:var(--paper);border:3px solid var(--ink);border-radius:22px;box-shadow:4px 6px 0 var(--ink);width:min(380px,100%);padding:18px 20px 16px;font-family:var(--hand);max-height:100%;overflow-y:auto}
 .tstep.in{animation:tourIn .28s ease-out}
 @keyframes tourIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 .tcount{margin:0 0 6px;font-size:14px;color:var(--muted)}
@@ -288,7 +296,7 @@ body.touch.chatting #topRight,body.touch.peopleOpen #topRight{display:none}
 .modal .plabel input{font:inherit;font-size:16px;padding:8px 10px;border:2px solid var(--ink);border-radius:10px}
 .modal .prow{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
 /* 하루들 부스 선물 입간판: 받는 법 창 */
-#gifts .giftbox{width:min(400px,calc(100% - 32px))}
+#gifts .giftbox{width:min(400px,calc(100% - 32px));max-height:calc(100dvh - 32px);overflow-y:auto}   /* 연동 안내까지 들어가 작은 화면에서는 스크롤 */
 #gifts h4{margin-bottom:4px}
 #gifts .gsub{margin:0 0 12px;font-size:14px;color:var(--muted)}
 #gifts .glist{list-style:none;margin:0;padding:0;display:grid;gap:10px}

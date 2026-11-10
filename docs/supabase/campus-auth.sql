@@ -24,6 +24,15 @@ create table if not exists public.campus_used_link_tokens (
     expires_at timestamptz not null
 );
 
+-- 연동한 크루의 캐릭터: 처음 연동할 때 그 브라우저의 캐릭터가 들어가고, 그 뒤로는 캠퍼스가 이것을 불러온다
+-- (이 표는 나중에 더해졌다. 이미 위 표들을 만든 프로젝트도 이 파일 전체를 다시 실행하면 된다)
+create table if not exists public.campus_characters (
+    harudle_user_id uuid        primary key references public.campus_users (harudle_user_id) on delete cascade,
+    avatar          text        not null,              -- 엔진 avEncode 44글자 (부위 · 색 · 귀 장식)
+    unlocks         text[]      not null default '{}', -- 푼 잠긴 장식 (airpods, headset)
+    updated_at      timestamptz not null default now()
+);
+
 create index if not exists campus_sessions_expires_at_idx on public.campus_sessions (expires_at);
 create index if not exists campus_sessions_user_idx on public.campus_sessions (harudle_user_id);
 create index if not exists campus_users_last_login_at_idx on public.campus_users (last_login_at);
@@ -31,7 +40,8 @@ create index if not exists campus_users_last_login_at_idx on public.campus_users
 alter table public.campus_users enable row level security;
 alter table public.campus_sessions enable row level security;
 alter table public.campus_used_link_tokens enable row level security;
+alter table public.campus_characters enable row level security;
 
 -- 캠퍼스 서버(service_role)에만 권한을 준다. 브라우저용 역할(anon, authenticated)에는 주지 않는다.
-revoke all on table public.campus_users, public.campus_sessions, public.campus_used_link_tokens from anon, authenticated;
-grant select, insert, update, delete on table public.campus_users, public.campus_sessions, public.campus_used_link_tokens to service_role;
+revoke all on table public.campus_users, public.campus_sessions, public.campus_used_link_tokens, public.campus_characters from anon, authenticated;
+grant select, insert, update, delete on table public.campus_users, public.campus_sessions, public.campus_used_link_tokens, public.campus_characters to service_role;

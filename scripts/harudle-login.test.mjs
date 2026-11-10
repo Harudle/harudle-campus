@@ -112,3 +112,48 @@ test("위조 · 만료 · 다른 state · 다른 대상의 토큰은 거절한�
   const ok = await callback(origin, sign(claimsFor(state)), state);
   assert.equal(ok.headers.get("location"), "/?login=ok");
 });
+
+test("처음 연동하면 연동하기를 누른 브라우저의 캐릭터가 저장되고, 다시 연동해도 저장된 캐릭터가 남는다", async (t) => {
+  const origin = await startApp(t, enabledEnv);
+  const AV1 = "0000000FFFFFFF4F1EADBD6D1F4F1EAFFFFFFF6D7C11", AV2 = "1210000B9A6ECF4F1EADBD6D1F4F1EAFFFFFFF6D7C10";
+  const link = async (query) => {
+    const start = await fetch(`${origin}/auth/harudle/start${query}`, { redirect: "manual" });
+    const state = new URL(start.headers.get("location")).searchParams.get("state"), char = cookieOf(start, "campus_link_char");
+    const res = await fetch(`${origin}/auth/harudle/callback?token=${sign(claimsFor(state))}&state=${state}`, { redirect: "manual", headers: { cookie: `campus_link_state=${state}; campus_link_char=${char}` } });
+    assert.equal(res.headers.get("location"), "/?login=ok");
+    assert.equal(cookieOf(res, "campus_link_char"), "");
+    return { char, cookie: `campus_sid=${cookieOf(res, "campus_sid")}` };
+  };
+  const get = async (cookie) => (await (await fetch(`${origin}/api/me/character`, { headers: { cookie } })).json()).character;
+
+  // 모양이 틀린 캐릭터 · 모르는 장식은 받지 않는다
+  assert.equal(cookieOf(await fetch(`${origin}/auth/harudle/start?av=<script>`, { redirect: "manual" }), "campus_link_char"), "");
+
+  // 1) 처음 연동: 그 브라우저의 외형 · 푼 장식이 저장된다
+  const first = await link(`?av=${AV1}&ul=airpods,headset,crown`);
+  assert.equal(first.char, `${AV1}.airpods_headset`);
+  assert.deepEqual(await get(first.cookie), { av: AV1, unlocks: ["airpods", "headset"] });
+
+  // 2) 다른 브라우저에서 다시 연동해도 저장된 캐릭터가 이긴다
+  const again = await link(`?av=${AV2}`);
+  assert.deepEqual(await get(again.cookie), { av: AV1, unlocks: ["airpods", "headset"] });
+
+  // 3) 연동한 채로 꾸미면 덮어쓴다. 캠퍼스 Origin · 로그인 · 올바른 모양만
+  const put = (body, headers) => fetch(`${origin}/api/me/character`, { method: "PUT", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body) });
+  assert.equal((await put({ av: AV2, unlocks: [] }, { cookie: again.cookie })).status, 403);
+  assert.equal((await put({ av: AV2, unlocks: [] }, { origin })).status, 401);
+  assert.equal((await put({ av: "nope", unlocks: [] }, { cookie: again.cookie, origin })).status, 400);
+  assert.equal((await put({ av: AV2, unlocks: ["headset"] }, { cookie: again.cookie, origin })).status, 204);
+  assert.deepEqual(await get(first.cookie), { av: AV2, unlocks: ["headset"] });
+  assert.equal((await fetch(`${origin}/api/me/character`)).status, 401);
+});
+
+test("캐릭터 없이 연동해도 로그인은 되고, 저장된 캐릭터는 없다", async (t) => {
+  const origin = await startApp(t, enabledEnv);
+  const start = await fetch(`${origin}/auth/harudle/start`, { redirect: "manual" });
+  const state = new URL(start.headers.get("location")).searchParams.get("state");
+  const res = await callback(origin, sign(claimsFor(state)), state);
+  assert.equal(res.headers.get("location"), "/?login=ok");
+  const cookie = `campus_sid=${cookieOf(res, "campus_sid")}`;
+  assert.deepEqual(await (await fetch(`${origin}/api/me/character`, { headers: { cookie } })).json(), { character: null });
+});

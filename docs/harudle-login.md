@@ -6,10 +6,21 @@
 
 ## 흐름
 
-1. `GET /auth/harudle/start` — state(32바이트)를 `campus_link_state` 쿠키(10분, `/auth/harudle`)에 넣고 `HARUDLE_BASE_URL/campus/connect?state=…`로 보낸다.
+1. `GET /auth/harudle/start?av&ul` — state(32바이트)를 `campus_link_state` 쿠키(10분, `/auth/harudle`)에 넣고 `HARUDLE_BASE_URL/campus/connect?state=…`로 보낸다. 지금 캐릭터(`av` 외형 44글자, `ul` 푼 장식)는 `campus_link_char` 쿠키에 같이 둔다.
 2. 하루들 웹 `/campus/connect`: 로그인(새 탭) → [연동하기] → `POST /api/v1/campus/link-tokens` → `redirectUri?token&state`로 이동.
-3. `GET /auth/harudle/callback?token&state` — 쿠키 state 비교 → 토큰 확인 → jti 한 번만 쓰기 → 사용자 저장 → `campus_sid`(30일, HttpOnly, SameSite=Lax) → `/?login=ok`. 실패하면 `/?login=fail`.
+3. `GET /auth/harudle/callback?token&state` — 쿠키 state 비교 → 토큰 확인 → jti 한 번만 쓰기 → 사용자 저장 → `campus_sid`(30일, HttpOnly, SameSite=Lax) → 이 회원의 캐릭터가 아직 없으면 `campus_link_char`로 저장 → `/?login=ok`. 실패하면 `/?login=fail`.
 4. `GET /api/me` — `{enabled, loggedIn, user}`. `POST /auth/logout` — `Origin`이 캠퍼스일 때만.
+5. `GET /api/me/character` — `{character: {av, unlocks} | null}`. `PUT /api/me/character` — `{av, unlocks}`로 덮어쓰기, `Origin`이 캠퍼스일 때만.
+
+## 캐릭터
+
+연동하지 않은 채 꾸민 캐릭터(외형 · 에어팟 · 헤드셋)는 브라우저에만 있다(`ww.avatar`, `ww.unlock.*`).
+
+- **처음 연동**: [연동하기]를 누른 브라우저의 캐릭터가 캠퍼스 DB(`campus_characters`)에 저장된다.
+- **그 뒤**: 들어올 때 DB의 캐릭터로 바꾼다. 다른 브라우저 · 기기에서 연동해도 DB의 캐릭터가 이긴다. 푼 장식은 합친다.
+- **연동한 채로 꾸미면**: 0.8초 뒤(창을 닫으면 바로) DB에 저장한다.
+- 콜백에서 저장을 못 했거나 이 기능 전에 연동한 크루면, 들어온 화면이 그 브라우저의 캐릭터를 올린다.
+- 이름은 그대로 하루들 닉네임이다(따로 저장하지 않는다). 연동을 끊으면 이 브라우저의 마지막 캐릭터 · 이름으로 돌아간다.
 
 ## 연결 토큰 (하루들 발급, HS256 JWT)
 
@@ -34,7 +45,7 @@
 
 | | 설정 | 비고 |
 | --- | --- | --- |
-| Supabase (운영) | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | 표: `docs/supabase/campus-auth.sql`(사용자 · 세션 · 사용한 토큰). RLS 켜고 정책 없음 |
+| Supabase (운영) | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | 표: `docs/supabase/campus-auth.sql`(사용자 · 세션 · 사용한 토큰 · 캐릭터). RLS 켜고 정책 없음 |
 | 메모리 (로컬) | `CAMPUS_AUTH_STORE=memory` | 운영(`NODE_ENV=production`)에서는 무시. 워커가 바뀌면 로그아웃 |
 
 하루에 한 번 끝난 세션 · 지난 토큰 기록, 마지막 로그인 후 90일 지난 사용자를 지운다(단방향이라 하루들 탈퇴를 알 수 없음).
@@ -53,7 +64,8 @@
 
 ## 화면
 
-- 설정 창: `하루들 연동하기` / `하루들 연동 끊기`, 연동 중이면 `하루들 ○○(으)로 연동됨`.
+- 설정 창: `하루들 연동하기`(연보라) / `하루들 연동 끊기`, 연동 중이면 `하루들 ○○(으)로 연동됨`.
+- 첫 안내 마지막 장 · 하루들 부스 선물 창: 연동하면 무엇이 되는지(닉네임 · 캐릭터와 아이템 저장)와 `하루들 연동하기` 버튼. 부스 창은 연동 중이면 연동됨을 보여 준다.
 - 연동하면 이름 칩이 `하루들: 닉네임`이 되고 프로필 이름 수정은 막힌다.
 - 연동이 필요한 기능은 엔진의 `requireLogin("이유")`를 먼저 부른다.
 

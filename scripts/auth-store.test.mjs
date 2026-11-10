@@ -85,3 +85,36 @@ test("새 비밀 키(sb_secret_)는 apikey 헤더로만 보낸다", async () => 
   assert.equal(f.calls.at(-1).headers.apikey, "sb_secret_abc");
   assert.equal(f.calls.at(-1).headers.authorization, undefined);
 });
+
+test("캐릭터: Supabase는 처음엔 있으면 두고(ignore), 바꿀 땐 덮어쓰고(merge), 읽는다", async () => {
+  const f = fakeFetch((url, init) => (init.method === "GET" ? { status: 200, body: [{ avatar: "AV", unlocks: ["airpods"] }] } : { status: 201 }));
+  const s = createSupabaseStore({ url: "https://abc.supabase.co", key: "k", fetch: f.fn });
+  const at = Date.parse("2026-11-09T00:00:00.000Z");
+
+  await s.createCharacter({ userId: "u1", av: "AV", unlocks: ["airpods"], at });
+  let c = f.calls.at(-1);
+  assert.equal(c.url, "https://abc.supabase.co/rest/v1/campus_characters?on_conflict=harudle_user_id");
+  assert.equal(c.headers.prefer, "resolution=ignore-duplicates,return=minimal");
+  assert.deepEqual(c.body, { harudle_user_id: "u1", avatar: "AV", unlocks: ["airpods"], updated_at: "2026-11-09T00:00:00.000Z" });
+
+  await s.saveCharacter({ userId: "u1", av: "AV2", unlocks: [], at });
+  c = f.calls.at(-1);
+  assert.equal(c.headers.prefer, "resolution=merge-duplicates,return=minimal");
+  assert.deepEqual(c.body, { harudle_user_id: "u1", avatar: "AV2", unlocks: [], updated_at: "2026-11-09T00:00:00.000Z" });
+
+  assert.deepEqual(await s.getCharacter("u1"), { av: "AV", unlocks: ["airpods"] });
+  assert.match(f.calls.at(-1).url, /campus_characters\?harudle_user_id=eq\.u1&select=avatar,unlocks&limit=1$/);
+});
+
+test("캐릭터: 메모리 저장소도 처음 것만 만들고, 사용자를 지우면 같이 지운다", async () => {
+  const s = createMemoryStore();
+  assert.equal(await s.getCharacter("u"), null);
+  await s.createCharacter({ userId: "u", av: "first", unlocks: [], at: 0 });
+  await s.createCharacter({ userId: "u", av: "second", unlocks: [], at: 0 });
+  assert.deepEqual(await s.getCharacter("u"), { av: "first", unlocks: [] });
+  await s.saveCharacter({ userId: "u", av: "third", unlocks: ["headset"], at: 0 });
+  assert.deepEqual(await s.getCharacter("u"), { av: "third", unlocks: ["headset"] });
+  await s.upsertUser({ id: "u", nickname: "a", profileImageUrl: null, at: 0 });
+  await s.cleanup({ sessionsBefore: 5, usersBefore: 1 });
+  assert.equal(await s.getCharacter("u"), null);
+});
