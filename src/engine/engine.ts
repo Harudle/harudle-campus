@@ -2208,8 +2208,8 @@ function renderGifts() {
   // 아래에 하루들 연동: 받은 아이템을 계정에 남기려면 연동하라고 알려 준다(연동을 못 쓰는 서버면 숨김)
   const box = document.getElementById("giftLink"), u = account.user;
   box.hidden = !account.enabled;
-  box.innerHTML = u ? `<b>🔗 하루들 ${esc(u.nickname)}(으)로 연동됨</b><p>꾸민 캐릭터와 받은 아이템이 하루들 계정에 저장되고 있어요.</p>`
-    : `<b>🔗 하루들 연동하기</b><p>${LINK_PERKS}</p><button type="button" class="btn lav" data-gift-go="link">하루들 연동하기</button>`;
+  box.innerHTML = u ? `<p>🔗 하루들 ${esc(u.nickname)}(으)로 연동됨 · 캐릭터와 아이템이 저장되고 있어요</p>`
+    : `<p>🔗 연동하면 받은 아이템과 캐릭터가 저장돼요</p><button type="button" class="btn lav" data-gift-go="link">하루들 연동하기</button>`;
 }
 function openGifts() { if (locked()) document.exitPointerLock(); renderGifts(); gifts.hidden = false; $("giftsClose").focus(); }
 function closeGifts() { gifts.hidden = true; syncCursor(); }
@@ -2691,7 +2691,7 @@ const nearShow = () => {
 const nearScoop = () => (me.f === 14 && !me.lie && !me.seat && FLOORS[14].furn.find((o) => o.kind === "scoopstand" && Math.hypot(Math.max(o.x - me.x, 0, me.x - o.x - o.w), Math.max(o.y - me.y, 0, me.y - o.y - o.h)) < 2.2)) || null;
 // 층 바로가기 버튼은 없다: 다른 층은 엘리베이터나 계단으로만 간다
 function updateFloorHud() { document.querySelector("#floorBadge b").textContent = me.f + "F"; document.querySelector("#floorBadge span").textContent = FLOOR_INFO[me.f]; }
-// 처음 온 사람에게 세 장짜리 안내: F 상호작용 → V 시점 → Tab 인벤토리
+// 처음 온 사람에게 안내: F 상호작용 → V 시점 → Tab 인벤토리 → 조작 한눈에 (→ 하루들 연동)
 const tour = document.getElementById("tour"), tourStep = document.getElementById("tourStep"), tourDots = document.getElementById("tourDots");
 const tourNext = document.getElementById("tourNext") as HTMLButtonElement, tourPrev = document.getElementById("tourPrev") as HTMLButtonElement;
 const TOUR = [
@@ -2704,19 +2704,22 @@ const TOUR = [
   { title: "조작 한눈에 보기", art: `<div class="tart tkeys">${[["WASD", "걷기"], ["Shift", "달리기"], ["Space", "점프 · 두 번 더블"], ["F", "상호작용"], ["C", "폭죽"], ["Enter", "채팅"], ["Tab", "인벤토리"], ["1 2 3", "네 컷 · 인사 · 하트"], ["Z", "춤 켜고 끄기"], ["클릭", "종이 총 발사"], ["V", "시점 바꾸기"], ["Q E", "화면 돌리기"], ["\\", "사이드바 접기"], ["Esc", "설정"]].map(([k, t]) => `<span><kbd>${k}</kbd>${t}</span>`).join("")}</div>`,
     kb: "왼쪽 위 ⚙️(또는 Esc) 설정창의 <b>조작법</b> 탭에서 언제든 다시 볼 수 있어요. 채팅과 같이 있는 크루는 오른쪽 💬 👥 버튼으로 열어요.", touch: "왼쪽 조이스틱으로 걷고, 오른쪽 버튼으로 점프·표현·채팅을 해요. 화면을 끌면 둘러봐요. 설정과 조작법은 왼쪽 위 ⚙️에서 봐요." },
 ];
+// 연동할 수 있고 아직 안 했으면 맨 끝에 한 장 더: 연동하면 캐릭터가 저장된다
+const TOUR_LINK = { title: "하루들 연동하면 저장돼요", link: true,
+  art: `<div class="tart tart-link"><svg viewBox="0 0 170 96" aria-hidden="true"><circle cx="40" cy="36" r="15" fill="#FFE3C8" stroke="#111118" stroke-width="2.5"/><path d="M22 80c0-14 8-22 18-22s18 8 18 22z" fill="#B9A6EC" stroke="#111118" stroke-width="2.5" stroke-linejoin="round"/><path d="M27 36a13 13 0 0 1 26 0" fill="none" stroke="#111118" stroke-width="3"/><rect x="21" y="33" width="8" height="11" rx="3" fill="#7B5BD6" stroke="#111118" stroke-width="2"/><rect x="51" y="33" width="8" height="11" rx="3" fill="#7B5BD6" stroke="#111118" stroke-width="2"/><path d="M72 52h24m-7-7 7 7-7 7" fill="none" stroke="#111118" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M114 72h34a13 13 0 0 0 1-26 17 17 0 0 0-32-5 14 14 0 0 0-3 31z" fill="#fff" stroke="#111118" stroke-width="2.5" stroke-linejoin="round"/><path d="M123 57l7 7 12-13" fill="none" stroke="#7B5BD6" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>`,
+  kb: "꾸민 캐릭터와 받은 아이템이 계정에 남아서 다른 기기에서도 그대로예요.", touch: "꾸민 캐릭터와 받은 아이템이 계정에 남아서 다른 기기에서도 그대로예요." };
+const tourSteps = () => (account.enabled && !account.user ? [...TOUR, TOUR_LINK] : TOUR);
 let tourAt = 0;
-tourDots.innerHTML = TOUR.map(() => "<i></i>").join("");
-function showTourStep(i) {
-  tourAt = clamp(i, 0, TOUR.length - 1); const st = TOUR[tourAt];
-  const linkCard = tourAt === TOUR.length - 1 && account.enabled && !account.user ? `<div class="linkcard"><p>${LINK_PERKS}</p><button type="button" class="btn lav" data-tour-link="1">하루들 연동하기</button></div>` : "";   // 마지막 장: 하루들 연동
-  tourStep.innerHTML = `<p class="tcount">${tourAt + 1} / ${TOUR.length}</p>${st.art}<h4 id="tourTitle">${st.title}</h4><p class="tdesc kb-only">${st.kb}</p><p class="tdesc touch-only">${st.touch}</p>${linkCard}`;
-  tourStep.classList.remove("in"); void tourStep.offsetWidth; tourStep.classList.add("in");   // 장이 넘어갈 때 살짝 올라온다
-  [...tourDots.children].forEach((d, k) => d.classList.toggle("on", k === tourAt));
-  tourPrev.hidden = tourAt === 0; tourNext.textContent = tourAt === TOUR.length - 1 ? "시작하기" : "다음"; tourNext.focus();
+function showTourStep(i, fresh = true) {
+  const steps = tourSteps(); tourAt = clamp(i, 0, steps.length - 1); const st = steps[tourAt], last = tourAt === steps.length - 1;
+  tourStep.innerHTML = `<p class="tcount">${tourAt + 1} / ${steps.length}</p>${st.art}<h4 id="tourTitle">${st.title}</h4><p class="tdesc kb-only">${st.kb}</p><p class="tdesc touch-only">${st.touch}</p>${"link" in st ? `<button type="button" class="btn lav tlink" data-tour-link="1">하루들 연동하기</button>` : ""}`;
+  tourDots.innerHTML = steps.map((_, k) => `<i${k === tourAt ? ` class="on"` : ""}></i>`).join("");
+  tourPrev.hidden = tourAt === 0; tourNext.textContent = last ? "시작하기" : "다음";
+  if (fresh) { tourStep.classList.remove("in"); void tourStep.offsetWidth; tourStep.classList.add("in"); tourNext.focus(); }   // 장이 넘어갈 때 살짝 올라온다
 }
 function openTour() { tour.hidden = false; if (locked()) document.exitPointerLock(); showTourStep(0); }
 function closeTour() { tour.hidden = true; LS.set("ww.tour", "1"); syncCursor(); }
-tourNext.onclick = () => (tourAt === TOUR.length - 1 ? closeTour() : showTourStep(tourAt + 1));
+tourNext.onclick = () => (tourAt === tourSteps().length - 1 ? closeTour() : showTourStep(tourAt + 1));
 tourStep.addEventListener("click", (e) => { if ((e.target as HTMLElement).closest("[data-tour-link]")) { LS.set("ww.tour", "1"); startHarudleLogin(); } });   // 연동하고 돌아오면 안내는 다시 안 뜬다
 tourPrev.onclick = () => showTourStep(tourAt - 1);
 document.getElementById("tourSkip").onclick = closeTour;
@@ -2803,11 +2806,9 @@ function applyAccount() {
   btn.classList.toggle("lav", !u); btn.classList.toggle("ghost", !!u);   // 연동하기는 연보라, 끊기는 흰 버튼
   line.hidden = !u; line.textContent = u ? `하루들 ${u.nickname}(으)로 연동됨` : "";
   if (u) { myNameNow = () => u.nickname; myTag.textContent = u.nickname; const nb = $("nameBtn"); nb.textContent = `하루들: ${u.nickname}`; nb.title = "하루들 닉네임으로 보여요"; }
-  if (!tour.hidden && tourAt === TOUR.length - 1) showTourStep(tourAt);   // 연동 여부를 늦게 알았으면 열린 창을 다시 그린다
+  if (!tour.hidden) showTourStep(tourAt, false);   // 연동 여부를 늦게 알았으면 장 수(연동 장)를 다시 그린다
   if (!gifts.hidden) renderGifts();
 }
-// 연동하면 무엇이 되는지(첫 안내 마지막 장 · 하루들 부스 선물 창)
-const LINK_PERKS = "연동하면 하루들 닉네임으로 들어오고, 꾸민 캐릭터와 받은 아이템(에어팟 · 헤드셋)이 하루들 계정에 저장돼요. 다른 기기에서 연동해도 그대로 이어져요.";
 // 지금 캐릭터를 같이 넘긴다: 처음 연동이면 서버가 이 모습으로 저장한다(이미 저장된 캐릭터가 있으면 그것을 쓴다)
 function startHarudleLogin() { const ul = UNLOCK_KEYS.filter(unlocked); location.href = `/auth/harudle/start?av=${avEncode(myAv)}${ul.length ? `&ul=${ul.join(",")}` : ""}`; }
 /* 연동한 크루의 캐릭터(외형 · 푼 장식)는 캠퍼스 DB에 있다. 들어오면 그것으로 바꾸고, 바꿀 때마다 다시 저장한다.

@@ -88,12 +88,11 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--brand);outline-
 #sayInput{flex:1;min-width:0;font:inherit;font-size:15px;border:2px solid var(--ink);border-radius:12px;padding:8px 12px;background:var(--paper);color:var(--ink)}
 .btn{font-family:var(--hand);font-size:18px;border:2px solid var(--ink);background:var(--brand);color:var(--brand-strong);border-radius:12px;padding:6px 14px;cursor:pointer;box-shadow:2px 2px 0 var(--ink)}
 .btn.ghost{background:var(--paper);color:var(--ink)}
-.btn.lav{background:#E6DDF6;color:var(--ink)}   /* 하루들 연동하기 */
-/* 하루들 연동 안내(첫 안내 마지막 장 · 하루들 부스 선물 창) */
-.linkcard{margin-top:12px;padding:12px;border:2px solid var(--ink);border-radius:14px;background:#F4F0FD;font-family:var(--body)}
+.btn.lav{background:#B9A6EC;color:var(--ink)}   /* 하루들 연동하기 */
+/* 하루들 부스 선물 창 아래 연동 안내 */
+.linkcard{margin-top:12px;padding:10px 12px;border:2px solid var(--ink);border-radius:14px;background:#F4F0FD}
 .linkcard[hidden]{display:none}
-.linkcard b{display:block;font-family:var(--hand);font-size:18px;margin-bottom:2px}
-.linkcard p{margin:0 0 8px;font-size:13px;line-height:1.5;color:#33313C;word-break:keep-all}
+.linkcard p{margin:0 0 8px;font-size:15px;line-height:1.4;word-break:keep-all}
 .linkcard p:last-child{margin-bottom:0}
 .linkcard .btn{width:100%;font-size:16px;padding:6px 12px}
 .mkeys kbd{display:inline-block;min-width:20px;padding:0 5px;margin-right:2px;border:1.5px solid var(--ink);border-radius:5px;background:#FFF6C7;color:var(--ink);font:700 11px/18px system-ui,sans-serif;text-align:center;box-shadow:0 1.5px 0 var(--ink)}
@@ -271,6 +270,8 @@ body.touch.chatting #topRight,body.touch.peopleOpen #topRight{display:none}
 .tbox h4{margin:0 0 6px;font-size:26px}
 .tdesc{margin:0 0 14px;font-family:var(--body);font-size:14px;line-height:1.55;color:#33313C;word-break:keep-all}
 .tdesc kbd{font-family:var(--body);font-size:12px;background:var(--brand-weak);border:1px solid var(--ink);border-radius:5px;padding:0 5px;color:var(--brand-strong)}
+.tart-link{background:#F4F0FD}.tart-link svg{width:200px;height:113px}
+.tlink{display:block;width:100%;margin:-4px 0 14px;font-size:17px;padding:8px 12px}
 .tfoot{display:flex;align-items:center;gap:8px}
 .tdots{display:flex;gap:6px;margin-right:auto}.tdots i{width:8px;height:8px;border-radius:50%;background:#D3D0DA;border:1.5px solid var(--ink)}.tdots i.on{background:var(--brand);width:20px;border-radius:6px}
 .tskip{font-family:var(--body);font-size:13px;background:none;border:0;color:var(--muted);text-decoration:underline;cursor:pointer;padding:4px}
