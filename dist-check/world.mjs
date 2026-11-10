@@ -497,23 +497,29 @@ function makeFloor(f) {
     Z(1, 1, 54, 10, "\uBA54\uC778 \uC804\uC2DC\uC2E4", "\uD558\uB8E8\uB4E4\uC5D0\uC11C \uC9C0\uAE08 \uAC00\uC7A5 \uC0AC\uB791\uBC1B\uB294 \uB124\uCEF7\uB9CC\uD654\uB97C \uAC70\uB294 \uBA54\uC778 \uC804\uC2DC\uC2E4\uC774\uC5D0\uC694. \uBCF4\uB77C \uCE74\uD3AB \uB05D \uD070 \uC561\uC790\uAC00 1\uC704\uC608\uC694. \uC561\uC790\uB97C \uB204\uB974\uBA74 \uD06C\uAC8C \uBCF4\uACE0, \uC774\uC824\uC5D0 \uB2E4 \uAC19\uC774 \uADF8\uB9BC\uC744 \uADF8\uB9B4 \uC218 \uC788\uC5B4\uC694.", { tint: "#FFF6D6", ...R2 });
     F("runway", 31, 3, 4, 9, R2);
     F("showwall", 29, 1, 8, 1, { src: "work", slots: [0], big: true, sign: "\uAC00\uC7A5 \uC0AC\uB791\uBC1B\uC740 \uB9CC\uD654", ...R2 });
-    F("showwall", 13, 1, 15, 1, { src: "work", slots: [7, 5, 3, 1], ...R2 });
-    F("showwall", 38, 1, 15, 1, { src: "work", slots: [2, 4, 6, 8], ...R2 });
-    [14, 17, 20, 23, 26].forEach((x, i) => F("showframe", x, 7, 1, 1, { src: "work", slot: 9 + i * 2, ...R2 }));
-    [38, 41, 44, 47].forEach((x, i) => F("showframe", x, 7, 1, 1, { src: "work", slot: 10 + i * 2, ...R2 }));
-    F("scoopstand", 2, 2, 8, 4, { sign: "\uD558\uB8E8\uB4E4 \uC791\uAC00 \uCCB4\uD5D8", hint: "\uB9CC\uD654 \uADF8\uB9AC\uAE30", view: "author", action: "\uC791\uAC00 \uCCB4\uD5D8\uD558\uAE30", keeper: true, ...R2 });
+    F("scoopstand", 24, 2, 5, 3, { sign: "\uD558\uB8E8\uB4E4 \uC791\uAC00 \uCCB4\uD5D8", hint: "\uB9CC\uD654 \uADF8\uB9AC\uAE30", view: "author", action: "\uC791\uAC00 \uCCB4\uD5D8\uD558\uAE30", keeper: true, ...R2 });
+    F("phonestand", 37, 2, 4, 2, R2);
+    F("showwall", 12, 1, 12, 1, { src: "work", slots: [11, 9, 7, 5, 3, 1], ...R2 });
+    F("showwall", 42, 1, 12, 1, { src: "work", slots: [2, 4, 6, 8, 10, 12], ...R2 });
+    F("showwall", 2, 1, 9, 1, { src: "work", slots: [37, 38, 39], ...R2 });
+    [5, 7, 9].forEach((y, i) => {
+      F("showframe", 29, y, 1, 1, { src: "work", slot: 13 + i * 2, face: "e", ...R2 });
+      F("showframe", 36, y, 1, 1, { src: "work", slot: 14 + i * 2, face: "w", ...R2 });
+    });
+    F("showwall", 1, 2, 1, 4, { src: "work", slots: [20, 22, 24], face: "e", ...R2 });
+    F("showwall", 54, 2, 1, 4, { src: "work", slots: [19, 21, 23], face: "w", ...R2 });
+    [11, 13, 15, 17, 19, 21].forEach((x, i) => F("showframe", x, 9, 1, 1, { src: "work", slot: 25 + i * 2, ...R2 }));
+    [43, 45, 47, 49, 51, 53].forEach((x, i) => F("showframe", x, 9, 1, 1, { src: "work", slot: 26 + i * 2, ...R2 }));
     F("drawingeasel", 3, 7, 2, 2, R2);
     F("sketchstand", 7, 8, 1, 1, R2);
-    F("phonestand", 50, 2, 4, 2, R2);
-    for (const x of [17, 23, 41, 46]) F("bench", x, 10, 2, 1, R2);
+    for (const x of [14, 19, 44, 49]) F("bench", x, 6, 2, 1, R2);
     F("plant", 29, 3, 1, 1, R2);
     F("plant", 36, 3, 1, 1, R2);
-    Z(1, 12, 26, 15, "\uC791\uAC00 \uC804\uC2DC\uC2E4", "\uD558\uB8E8\uB4E4 \uC778\uAE30 \uC791\uAC00 \uC5EC\uB35F \uBA85\uC758 \uBC29\uC774\uC5D0\uC694. \uBC29\uB9C8\uB2E4 \uADF8 \uC791\uAC00\uC758 \uB9CC\uD654\uAC00 \uAC78\uB824 \uC788\uACE0, \uC568\uBC94\uBD81\uC73C\uB85C \uBAA8\uB4E0 \uB9CC\uD654\uB97C \uB118\uACA8 \uBCFC \uC218 \uC788\uACE0, \uBC29\uBA85\uB85D\uC5D0 \uC751\uC6D0\uC744 \uB0A8\uAE38 \uC218 \uC788\uC5B4\uC694.", { tint: "#F7F3FF", npc: false, ...R2 });
+    Z(1, 12, 26, 15, "\uC791\uAC00 \uC804\uC2DC\uC2E4", "\uD558\uB8E8\uB4E4 \uC778\uAE30 \uC791\uAC00 \uC5EC\uB35F \uBA85\uC758 \uC791\uD488\uC744 \uAC70\uB294 \uACF3\uC774\uC5D0\uC694. \uC791\uAC00\uB9C8\uB2E4 \uADF8 \uC791\uAC00\uC758 \uB9CC\uD654\uAC00 \uAC78\uB824 \uC788\uACE0, \uC568\uBC94\uBD81\uC73C\uB85C \uBAA8\uB4E0 \uB9CC\uD654\uB97C \uB118\uACA8 \uBCFC \uC218 \uC788\uACE0, \uBC29\uBA85\uB85D\uC5D0 \uC751\uC6D0\uC744 \uB0A8\uAE38 \uC218 \uC788\uC5B4\uC694.", { tint: "#F7F3FF", npc: false, ...R2 });
     const ZONE_TINTS = ["#E6DDF6", "#FFE9B5", "#FFD9E2", "#D5EFE3", "#D7E8FB", "#FFE2CC", "#DCD3FA", "#F6DFF4"];
-    [13, 21].forEach((y, row) => [2, 8, 14, 20].forEach((x, col) => {
+    [12, 21].forEach((y, row) => [2, 8, 14, 20].forEach((x, col) => {
       const i = row * 4 + col;
-      R(x, y, 6, 6, "", { raw: true, doors: [{ s: "s", from: 1, len: 4 }] });
-      Z(x + 1, y + 1, 4, 4, `\uC791\uAC00\uC758 \uBC29 ${i + 1}`, "", { tint: ZONE_TINTS[i], npc: false, ...R2 });
+      Z(x + 1, y + 1, 4, 5, `\uC791\uAC00 \uC791\uD488 ${i + 1}`, "", { tint: ZONE_TINTS[i], npc: false, ...R2 });
       F("showwall", x + 1, y + 1, 4, 1, { src: `a${i}`, slots: [0, 1], plate: i, ...R2 });
       F("showframe", x + 4, y + 3, 1, 1, { src: "cheer", slot: i, ...R2 });
       F("albumstand", x + 1, y + 3, 1, 1, { slot: i, ...R2 });
@@ -545,21 +551,23 @@ function makeFloor(f) {
     quizRoom(18, "w", "drama", "\uB4DC\uB77C\uB9C8\xB7\uC601\uD654 \uB9DE\uCD94\uAE30 \uBC29", { wall: 14543867, floor: ["#EAF3FF", "#D6E7FB"], sign: "#6FB2EC", chars: ["\u2605", "\u2726", "\u2605", "\u2727", "\u2605"], charColors: ["#FFC94D", "#6FB2EC", "#9A82E6"] });
     F("clapper", 26, 30, 1, 1, R2);
     F("popcorn", 26, 37, 1, 1, R2);
-    R(40, 13, 13, 26, "", { raw: true, wall: 16181202, doors: [{ s: "w", from: 20, len: 4 }] });
-    Z(41, 14, 11, 24, "\uB9B4\uB808\uC774 \uB9CC\uD654 \uC18C\uC124\uAD00", "\uB124\uCEF7\uB9CC\uD654\uB97C \uD55C \uD654\uC529 \uC774\uC5B4 \uADF8\uB9AC\uB294 \uB9B4\uB808\uC774 \uC18C\uC124\uAD00\uC774\uC5D0\uC694. \uB05D\uC758 \uC774\uC824\uC774 \uCD5C\uC2E0 \uD654, \uC67C\uCABD \uBCBD \uD544\uB984\uC774 \uC9C0\uB09C \uD654\uC608\uC694. \uB204\uB974\uBA74 \uCC98\uC74C\uBD80\uD130 \uB118\uACA8 \uBCF4\uACE0 \uB2E4\uC74C \uD654\uB97C \uC774\uC5B4 \uADF8\uB824\uC694.", { tint: "#D9B48A", planks: ["#D9B48A", "#CDA57A"], ...R2 });
-    F("runway", 44, 17, 5, 21, R2);
-    F("wallsign", 41, 14, 11, 1, { text: "\uB9B4\uB808\uC774 \uB9CC\uD654 \uC18C\uC124\uAD00", size: 4, ...R2 });
-    F("showframe", 46, 15, 1, 1, { src: "relay", slot: 0, big: true, ...R2 });
-    F("showwall", 41, 17, 1, 16, { src: "relay", slots: [4, 3, 2, 1], style: "film", face: "e", ...R2 });
-    F("relayscroll", 51, 17, 1, 16, { text: "\uC55E\uC0AC\uB78C\uC758 \uB9C8\uC9C0\uB9C9 \uCEF7\uC744 \uBCF4\uACE0, \uB2E4\uC74C \uB124 \uCEF7\uC744 \uC774\uC5B4 \uADF8\uB824\uC694. \uC774 \uC774\uC57C\uAE30\uB294 \uB05D\uB098\uC9C0 \uC54A\uC544\uC694.", face: "w", ...R2 });
-    for (const y of [21, 27]) {
-      F("bench", 42, y, 2, 1, R2);
-      F("bench", 49, y, 2, 1, R2);
+    R(40, 13, 13, 26, "", { raw: true, wall: 2761784, doors: [{ s: "w", from: 20, len: 4 }] });
+    Z(41, 14, 11, 24, "\uB9B4\uB808\uC774 \uB9CC\uD654 \uC0C1\uC601\uAD00", "\uB124\uCEF7\uB9CC\uD654\uB97C \uD55C \uD654\uC529 \uC774\uC5B4 \uADF8\uB9AC\uB294 \uB9B4\uB808\uC774 \uB9CC\uD654 \uC0C1\uC601\uAD00\uC774\uC5D0\uC694. \uC2A4\uD06C\uB9B0\uC5D0\uC11C 1\uD654\uBD80\uD130 \uCD5C\uC2E0 \uD654\uAE4C\uC9C0 \uC774\uC5B4\uC11C \uACC4\uC18D \uC0C1\uC601\uD574\uC694. \uC2A4\uD06C\uB9B0\uC744 \uB204\uB974\uBA74 \uC9C0\uAE08 \uB098\uC624\uB294 \uD654\uB97C \uD06C\uAC8C \uBCF4\uACE0, \uB2E4\uC74C \uD654\uB97C \uC774\uC5B4 \uADF8\uB824\uC694.", { tint: "#2B2540", ...R2 });
+    F("cinemascreen", 41, 14, 11, 2, { src: "relay", slot: 29, ...R2 });
+    F("runway", 45, 17, 3, 21, { color: 7217715, dash: 16767354, ...R2 });
+    for (const y of [19, 22, 25, 28]) {
+      F("cinemarow", 41, y, 4, 1, R2);
+      F("cinemarow", 48, y, 4, 1, R2);
     }
-    F("bench", 49, 33, 2, 1, R2);
-    Z(28, 27, 10, 12, "\uC624\uB298\uC758 \uD2B9\uC885", "\uD558\uB8E8\uB4E4 \uC778\uAE30 \uB9CC\uD654\uB97C \uC2E0\uBB38\uC73C\uB85C \uC5EE\uC740 \uAC00\uD310\uB300\uC608\uC694. \uC55E\uC5D0\uC11C F\uB97C \uB204\uB974\uBA74 \uC624\uB298\uC758 \uD2B9\uC885\uC744 \uD3BC\uCCD0 \uBD10\uC694. \uC11C\uCABD\uC740 \uD034\uC988 \uC544\uCF00\uC774\uB4DC, \uB3D9\uCABD \uBB38\uC740 \uB9B4\uB808\uC774 \uB9CC\uD654 \uC18C\uC124\uAD00\uC774\uC5D0\uC694.", { tint: "#F8F6FF", npc: false, ...R2 });
-    F("bench", 29, 29, 2, 1, R2);
-    F("bench", 35, 29, 2, 1, R2);
+    F("projector", 46, 36, 1, 1, { to: 15, ...R2 });
+    F("showwall", 51, 31, 1, 7, { src: "relay", slots: [3, 2, 1], style: "film", face: "w", ...R2 });
+    F("cinemamarquee", 39, 33, 1, 4, { face: "w", ...R2 });
+    F("cinemaposter", 39, 31, 1, 1, { face: "w", src: "relay", slot: 0, ...R2 });
+    F("cinemaposter", 39, 38, 1, 1, { face: "w", ...R2 });
+    F("runway", 37, 33, 3, 4, { color: 10365759, dash: 16767354, ...R2 });
+    Z(28, 27, 10, 12, "\uC624\uB298\uC758 \uD2B9\uC885", "\uD558\uB8E8\uB4E4 \uC778\uAE30 \uB9CC\uD654\uB97C \uC2E0\uBB38\uC73C\uB85C \uC5EE\uC740 \uAC00\uD310\uB300\uC608\uC694. \uC55E\uC5D0\uC11C F\uB97C \uB204\uB974\uBA74 \uC624\uB298\uC758 \uD2B9\uC885\uC744 \uD3BC\uCCD0 \uBD10\uC694. \uC11C\uCABD\uC740 \uD034\uC988 \uC544\uCF00\uC774\uB4DC, \uB3D9\uCABD \uBB38\uC740 \uB9B4\uB808\uC774 \uB9CC\uD654 \uC0C1\uC601\uAD00\uC774\uC5D0\uC694.", { tint: "#F8F6FF", npc: false, ...R2 });
+    F("bench", 29, 29, 2, 1, { face: "s", ...R2 });
+    F("bench", 35, 29, 2, 1, { face: "s", ...R2 });
     F("scoopstand", 30, 33, 6, 3, { face: "n", ...R2 });
     F("plant", 28, 37, 1, 1, R2);
     F("plant", 37, 37, 1, 1, R2);
@@ -633,7 +641,7 @@ function furnCells(fl, o, set) {
   if (walkThrough(o)) return;
   for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) set(x, y);
 }
-var WALK_THROUGH = /* @__PURE__ */ new Set(["hbmat", "runway", "neonsign", "marquee", "floaters", "wallsign", "poster", "walldeco", "linelight", "bleacher", "arcbleacher", "flight", "brickdeck", "pebbles", "redsteps", "mirrorball", "trampoline", "ballpit"]);
+var WALK_THROUGH = /* @__PURE__ */ new Set(["hbmat", "runway", "cinemamarquee", "neonsign", "marquee", "floaters", "wallsign", "poster", "walldeco", "linelight", "bleacher", "arcbleacher", "flight", "brickdeck", "pebbles", "redsteps", "mirrorball", "trampoline", "ballpit"]);
 var ELEV_SPAWN = [32.5, 15.5];
 for (const fl of Object.values(FLOORS)) {
   const g = new Uint8Array(W * H);

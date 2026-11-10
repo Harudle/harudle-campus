@@ -1,6 +1,7 @@
 import { useEffect, useId, useState, type FormEvent } from 'react'
-import { loadNickname } from '../data/nickname'
+import { useCampusLogin } from '../data/campusLogin'
 import type { UserQuiz, UserQuizBoard } from '../data/userQuizzes'
+import { LoginGate } from './LoginGate'
 import { QuizConfetti } from './QuizConfetti'
 import { RemoveControls } from './RemoveControls'
 import { useModalDialog } from './useModalDialog'
@@ -14,7 +15,8 @@ function Game({ quiz, board, onClose, titleId }: {
   titleId: string
 }) {
   const [answer, setAnswer] = useState('')
-  const [nickname, setNickname] = useState(() => loadNickname() ?? '')
+  // 문제 풀기는 하루들에 로그인해야 한다. 맞히면 하루들 닉네임이 맞힌 사람에 오른다
+  const login = useCampusLogin(true)
   const [sending, setSending] = useState(false)
   const [solved, setSolved] = useState(false)
   const [wrongCount, setWrongCount] = useState(0)
@@ -37,7 +39,7 @@ function Game({ quiz, board, onClose, titleId }: {
     }
     setSending(true)
     setNotice(null)
-    const result = await board.answer(quiz.id, answer.trim(), nickname.trim())
+    const result = await board.answer(quiz.id, answer.trim())
     setSending(false)
     if (result.status === 'correct') {
       setSolved(true)
@@ -46,8 +48,8 @@ function Game({ quiz, board, onClose, titleId }: {
       setWrongCount((count) => count + 1)
     } else if (result.status === 'rate_limited') {
       setNotice('시도가 너무 많아요. 잠시 후 다시 해 보세요.')
-    } else if (result.status === 'bad_nickname') {
-      setNotice('닉네임은 12자까지이고 링크는 쓸 수 없어요.')
+    } else if (result.status === 'login_required') {
+      setNotice('하루들에 로그인해야 풀 수 있어요.')
     } else {
       setNotice('채점하지 못했어요. 잠시 후 다시 시도해 주세요.')
     }
@@ -77,7 +79,8 @@ function Game({ quiz, board, onClose, titleId }: {
               </button>
             ))}
 
-          {!solved && (
+          {!solved && login.status !== 'in' && <LoginGate login={login} reason="노래·드라마 맞추기는 하루들에 로그인하면 풀 수 있어요." />}
+          {!solved && login.status === 'in' && (
             <form className="flex flex-col gap-2" onSubmit={submit}>
               <label className="font-display text-haru-800" htmlFor={`${titleId}-answer`}>
                 정답
@@ -94,18 +97,7 @@ function Game({ quiz, board, onClose, titleId }: {
                 }}
                 className="w-full rounded-xl border-2 border-ink bg-white px-3 py-2 text-base focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-haru-600"
               />
-              <label className="font-display text-haru-800" htmlFor={`${titleId}-nickname`}>
-                맞히면 표시될 닉네임
-              </label>
-              <input
-                id={`${titleId}-nickname`}
-                value={nickname}
-                maxLength={12}
-                autoComplete="off"
-                placeholder="익명의 도전자"
-                onChange={(event) => setNickname(event.target.value)}
-                className="w-full rounded-xl border-2 border-ink bg-white px-3 py-2 text-base focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-haru-600"
-              />
+              <p className="text-xs text-haru-800">맞히면 하루들 {login.nickname}(으)로 맞힌 사람에 올라요.</p>
               <button
                 type="submit"
                 disabled={sending}
@@ -145,10 +137,11 @@ function Game({ quiz, board, onClose, titleId }: {
           </section>
 
           <RemoveControls
-            needsPassword={quiz.hasPassword}
-            canRemove={quiz.hasPassword || board.hasLegacyToken(quiz.id)}
+            needsPassword={false}
+            canRemove={quiz.mine}
+            confirmText="이 문제를 내릴까요? 내리면 되돌릴 수 없어요."
             removeLabel="문제 내리기"
-            onRemove={(password) => board.remove(quiz.id, password)}
+            onRemove={() => board.remove(quiz.id)}
             onReport={() => board.report(quiz.id)}
             onRemoved={onClose}
           />

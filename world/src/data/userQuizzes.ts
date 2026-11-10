@@ -7,8 +7,8 @@ export type UserQuiz = {
   room: ArcadeRoomId
   hint: string
   createdAt: string
-  /** 비밀번호 도입 전에 등록한 문제는 false다. */
-  hasPassword: boolean
+  /** 지금 로그인한 사람이 건 문제(내리기 버튼을 보인다) */
+  mine: boolean
   imageUrl: string
   shareUrl: string
   author: string
@@ -19,42 +19,30 @@ export type UserQuiz = {
 
 export type RegisterResult =
   | { ok: true; quiz: UserQuiz }
-  | { ok: false; code: 'bad_link' | 'bad_answer' | 'bad_hint' | 'bad_password' | 'duplicate' | 'not_found' | 'rate_limited' | 'unavailable' | 'failed' }
+  | { ok: false; code: 'bad_link' | 'bad_answer' | 'bad_hint' | 'login_required' | 'not_author' | 'duplicate' | 'not_found' | 'rate_limited' | 'unavailable' | 'failed' }
 
-export type RemoveResult = 'ok' | 'wrong_password' | 'rate_limited' | 'failed'
+export type RemoveResult = 'ok' | 'wrong_password' | 'login_required' | 'not_owner' | 'rate_limited' | 'failed'
 
 export type AnswerResult =
   | { status: 'correct'; solverCount: number; solvers: string[] }
   | { status: 'wrong' }
-  | { status: 'rate_limited' | 'bad_nickname' | 'failed' }
+  | { status: 'rate_limited' | 'login_required' | 'failed' }
 
 const TIMEOUT_MS = 10_000
 const REFRESH_MS = 30_000
-// 비밀번호 도입 전에 등록한 문제를 내릴 때만 쓴다.
-const TOKENS_KEY = 'harudle-world.quiz-tokens'
-const REGISTER_CODES = ['bad_link', 'bad_answer', 'bad_hint', 'bad_password', 'duplicate', 'not_found', 'rate_limited', 'unavailable'] as const
-
-function loadTokens(): Record<string, string> {
-  try {
-    const stored = JSON.parse(window.localStorage.getItem(TOKENS_KEY) ?? '{}')
-    return stored && typeof stored === 'object' ? stored : {}
-  } catch {
-    return {}
-  }
-}
+const REGISTER_CODES = ['bad_link', 'bad_answer', 'bad_hint', 'login_required', 'not_author', 'duplicate', 'not_found', 'rate_limited', 'unavailable'] as const
 
 export async function registerQuiz(
   room: ArcadeRoomId,
   shareUrl: string,
   answer: string,
   hint: string,
-  password: string,
 ): Promise<RegisterResult> {
   try {
     const response = await fetch(worldApiUrl('/quizzes'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ room, shareUrl, answer, hint, password }),
+      body: JSON.stringify({ room, shareUrl, answer, hint }),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     })
     const data = await response.json().catch(() => null)
@@ -71,7 +59,6 @@ export async function registerQuiz(
 /** 지금 방의 사용자 문제. 다른 사람이 맞히거나 등록한 것도 보이도록 주기적으로 다시 받는다. */
 export function useUserQuizzes(room: ArcadeRoomId | null) {
   const [items, setItems] = useState<UserQuiz[]>([])
-  const [tokens, setTokens] = useState(loadTokens)
 
   const reload = useCallback(async () => {
     if (!room) return
@@ -83,7 +70,6 @@ export function useUserQuizzes(room: ArcadeRoomId | null) {
       if (!response.ok) return
       const data = await response.json()
       setItems(data.items)
-      setTokens(loadTokens())
     } catch {
       // 받지 못하면 기본 문제만 있는 방으로 둔다.
     }
@@ -97,17 +83,18 @@ export function useUserQuizzes(room: ArcadeRoomId | null) {
     return () => clearInterval(timer)
   }, [reload, room])
 
-  const answer = useCallback(async (id: number, value: string, nickname: string): Promise<AnswerResult> => {
+  /** 로그인해야 푼다. 맞히면 하루들 닉네임이 맞힌 사람에 오른다 */
+  const answer = useCallback(async (id: number, value: string): Promise<AnswerResult> => {
     try {
       const response = await fetch(worldApiUrl(`/quizzes/${id}/answer`), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ answer: value, nickname }),
+        body: JSON.stringify({ answer: value }),
         signal: AbortSignal.timeout(TIMEOUT_MS),
       })
       const data = await response.json().catch(() => null)
       if (response.status === 429) return { status: 'rate_limited' }
-      if (data?.code === 'bad_nickname') return { status: 'bad_nickname' }
+      if (response.status === 401) return { status: 'login_required' }
       if (!response.ok) return { status: 'failed' }
       if (!data.correct) return { status: 'wrong' }
       setItems((current) =>
@@ -119,27 +106,20 @@ export function useUserQuizzes(room: ArcadeRoomId | null) {
     }
   }, [])
 
-  /** 비밀번호를 확인해 문제를 내린다. 비밀번호가 없는 이전 문제는 등록한 브라우저의 토큰을 쓴다. */
-  const remove = useCallback(
-    async (id: number, password: string): Promise<RemoveResult> => {
-      try {
-        const response = await fetch(worldApiUrl(`/quizzes/${id}/remove`), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password, token: tokens[id] }),
-          signal: AbortSignal.timeout(TIMEOUT_MS),
-        })
-        if (response.status === 403) return 'wrong_password'
-        if (response.status === 429) return 'rate_limited'
-        if (!response.ok && response.status !== 404) return 'failed'
-      } catch {
-        return 'failed'
-      }
-      setItems((current) => current.filter((quiz) => quiz.id !== id))
-      return 'ok'
-    },
-    [tokens],
-  )
+  /** 내가 건 문제만 내린다(서버가 로그인 쿠키로 확인한다) */
+  const remove = useCallback(async (id: number): Promise<RemoveResult> => {
+    try {
+      const response = await fetch(worldApiUrl(`/quizzes/${id}/remove`), { method: 'POST', signal: AbortSignal.timeout(TIMEOUT_MS) })
+      if (response.status === 401) return 'login_required'
+      if (response.status === 403) return 'not_owner'
+      if (response.status === 429) return 'rate_limited'
+      if (!response.ok && response.status !== 404) return 'failed'
+    } catch {
+      return 'failed'
+    }
+    setItems((current) => current.filter((quiz) => quiz.id !== id))
+    return 'ok'
+  }, [])
 
   const report = useCallback(async (id: number) => {
     try {
@@ -150,9 +130,7 @@ export function useUserQuizzes(room: ArcadeRoomId | null) {
     }
   }, [])
 
-  const hasLegacyToken = useCallback((id: number) => Boolean(tokens[id]), [tokens])
-
-  return { items, reload, answer, remove, report, hasLegacyToken }
+  return { items, reload, answer, remove, report }
 }
 
 export type UserQuizBoard = ReturnType<typeof useUserQuizzes>

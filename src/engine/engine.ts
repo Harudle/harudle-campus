@@ -11,7 +11,7 @@ import { createShopUi } from "./shop";
 import { avatarPreview } from "../scene/avatarPreviewStore";
 import { createEnvironment } from "./environment";
 import { openWorldWindow } from "../worldFloor";
-import { loadShowcase, type ShowItem } from "../worldShowcase";
+import { loadRelayReel, loadShowcase, type ReelEpisode, type ShowItem } from "../worldShowcase";
 import { drawFrame as drawEaselFrame, drawPaper as drawEaselPaper } from "../../world/src/scene/gallery/easelDrawing";
 import { createCityscape } from "./cityscape";
 import { mountMediaControls } from "../media/controller";
@@ -170,6 +170,12 @@ const brickMat = (len, tall = true) => toon(0xFFFFFF, { map: brickTex(len, tall)
 const board = (parent, w, h, tex, x, y, z, ry = 0) => {
   const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide }));
   m.position.set(x, y, z); m.rotation.y = ry; parent.add(m); return m;
+};
+// 앞뒤 어느 쪽에서 봐도 글씨가 바로 읽히는 판(DoubleSide 판은 뒤에서 보면 글씨가 뒤집힌다): 앞면 판 + 뒤로 돌린 같은 그림 판. 앞면 판을 돌려준다
+const board2 = (parent, w, h, mat, x, y, z) => {
+  const geo = new THREE.PlaneGeometry(w, h), front = new THREE.Mesh(geo, mat), back = new THREE.Mesh(geo, mat);
+  front.position.set(x, y, z); back.position.set(x, y, z - .01); back.rotation.y = Math.PI;
+  front.userData.noMerge = back.userData.noMerge = true; front.userData.twin = back; back.userData.of = front; parent.add(front, back); return front;   // 눌렀을 때 뒷면도 앞면으로 친다
 };
 
 /* ════════ 13층 스타트랙 객석 뒤 창문 두 칸(이스터에그): 창가 테이블 띠 남쪽, 창 앞이 트인 두 칸 ════════
@@ -366,12 +372,66 @@ function paintShow(slot) {
   if (!item) { text(showcase ? SHOW_EMPTY[slot.src] ?? "작가를 기다려요" : "불러오는 중…", h / 2, 40, "#8F8BA0"); slot.tex.needsUpdate = true; return; }
   g.fillStyle = "#FFF8DC"; g.fillRect(0, h - SHOW_BAND, w, SHOW_BAND); g.fillStyle = "#111118"; g.fillRect(0, h - SHOW_BAND - 3, w, 3);
   text(item.caption, h - SHOW_BAND / 2, 34);
+  if (item.cheers) { paintCheerNotes(g, item.cheers.notes, w, h - SHOW_BAND - 3); slot.tex.needsUpdate = true; return; }
   if (!item.image) { text(item.caption.startsWith("+") ? "+" : "✎", (h - SHOW_BAND) / 2, 160, "#B9A6EC"); slot.tex.needsUpdate = true; return; }
   text("그림 불러오는 중…", (h - SHOW_BAND) / 2, 34, "#8F8BA0"); slot.tex.needsUpdate = true;
   slot.url = item.image;
   showImage(item.image).then((img) => { if (slot.url !== item.image) return; g.fillStyle = "#FFFFFF"; g.fillRect(0, 0, w, h - SHOW_BAND - 3); const side = h - SHOW_BAND - 3; g.drawImage(img, (w - side) / 2, 0, side, side); slot.tex.needsUpdate = true; }).catch(() => {});
 }
 
+// 작가 방명록 판: 최근 응원을 파스텔 쪽지로 붙인다(조금씩 기울여 압정으로). 응원이 없으면 첫 응원을 부탁하는 판
+const NOTE_COLORS = ["#FFF1A8", "#FFD9E2", "#D5EFE3"];
+function paintCheerNotes(g, notes, w, h) {
+  g.fillStyle = "#FBF6EA"; g.fillRect(0, 0, w, h);
+  if (!notes.length) {
+    g.fillStyle = "#B9A6EC"; g.font = `700 150px ${HAND}`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("✎", w / 2, h * .38);
+    g.fillStyle = "#8F8BA0"; g.font = `700 40px ${HAND}`; g.fillText("첫 응원을 남겨 주세요", w / 2, h * .72, w - 40); return;
+  }
+  const nh = (h - 24) / notes.length - 12;
+  notes.forEach((note, i) => {
+    const y = 18 + i * (nh + 12), x = 30, nw = w - 60;
+    g.save(); g.translate(x + nw / 2, y + nh / 2); g.rotate((i % 2 ? 1 : -1) * .025);
+    g.fillStyle = "rgba(43,33,64,.12)"; g.fillRect(-nw / 2 + 5, -nh / 2 + 6, nw, nh);   // 그림자
+    g.fillStyle = NOTE_COLORS[i % NOTE_COLORS.length]; g.fillRect(-nw / 2, -nh / 2, nw, nh);
+    g.fillStyle = "#F15B5B"; g.beginPath(); g.arc(0, -nh / 2 + 10, 8, 0, Math.PI * 2); g.fill();   // 압정
+    g.fillStyle = "#2B2140"; g.textAlign = "left"; g.textBaseline = "top"; g.font = `700 30px ${HAND}`;
+    // 쪽지 안에 들어가는 만큼 줄을 나누고, 넘치면 마지막 줄 끝을 …로 줄인다
+    const lines = [], maxW = nw - 36, maxLines = Math.max(1, Math.floor((nh - 66) / 34));
+    let line = "";
+    for (const ch of note.message.replace(/\s+/g, " ")) { if (g.measureText(line + ch).width > maxW) { lines.push(line); line = ch; } else line += ch; }
+    if (line) lines.push(line);
+    if (lines.length > maxLines) { lines.length = maxLines; let last = lines[maxLines - 1]; while (last && g.measureText(last + "…").width > maxW) last = last.slice(0, -1); lines[maxLines - 1] = last + "…"; }
+    lines.forEach((t, k) => g.fillText(t, -nw / 2 + 18, -nh / 2 + 24 + k * 34));
+    g.fillStyle = "#7355DA"; g.font = `700 26px ${HAND}`; g.textAlign = "right"; g.textBaseline = "bottom"; g.fillText(`— ${note.nickname}`, nw / 2 - 16, nh / 2 - 10, nw - 40);
+    g.restore();
+  });
+}
+// 릴레이 상영관 스크린: 지금 상영 중인 화(slot)를 검은 화면 가운데에 맞춰 그리고, 아래에 화 번호·그린 사람·순서를 쓴다
+const CINEMA_W = 1024, CINEMA_H = 576, CINEMA_EVERY = 7000;
+function paintCinema(sl) {
+  const g = sl.cv.getContext("2d"), w = CINEMA_W, h = CINEMA_H, list = showcase?.[sl.src] ?? [], item = showItem(sl), n = list.length;
+  const caption = (t, sub) => {
+    g.fillStyle = "rgba(0,0,0,.6)"; g.fillRect(0, h - 64, w, 64);
+    g.fillStyle = "#FFFFFF"; g.font = `700 32px ${HAND}`; g.textAlign = "left"; g.textBaseline = "middle"; g.fillText(t, 28, h - 32, w * .6);
+    g.fillStyle = "#FFD97A"; g.textAlign = "right"; g.fillText(sub, w - 28, h - 32, w * .35);
+  };
+  g.fillStyle = "#0C0A12"; g.fillRect(0, 0, w, h);
+  if (!item) { g.fillStyle = "#8F8BA0"; g.font = `700 44px ${HAND}`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(showcase ? "곧 상영해요" : "필름 감는 중…", w / 2, h / 2); sl.tex.needsUpdate = true; return; }
+  const sub = item.image ? `▶ 상영 중 ${n - sl.slot} / ${n}` : "누르면 이어 그려요";
+  if (!item.image) { g.fillStyle = "#FFD97A"; g.font = `700 64px ${HAND}`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(item.caption, w / 2, h / 2 - 20, w - 80); g.fillStyle = "#B9A6EC"; g.font = `700 30px ${HAND}`; g.fillText("앞사람의 마지막 컷을 보고, 다음 네 컷을 이어 그려요", w / 2, h / 2 + 50, w - 80); caption("릴레이 만화", sub); sl.tex.needsUpdate = true; return; }
+  caption(item.caption, sub); sl.tex.needsUpdate = true;
+  sl.url = item.image;
+  showImage(item.image).then((img) => {
+    if (sl.url !== item.image) return;
+    const fit = Math.min(w / img.width, (h - 64) / img.height), iw = img.width * fit, ih = img.height * fit;
+    g.fillStyle = "#0C0A12"; g.fillRect(0, 0, w, h - 64); g.drawImage(img, (w - iw) / 2, (h - 64 - ih) / 2, iw, ih); sl.tex.needsUpdate = true;
+  }).catch(() => {});
+}
+// 상영: 목록은 최신 화가 앞이라, 맨 뒤(1화)에서 앞(최신 화)으로 넘기고 끝나면 1화로 돌아간다. 14층에 있을 때만 돌린다
+window.setInterval(() => {
+  if (me.f !== 14 || document.hidden) return;
+  for (const sl of showSlots) if (sl.cinema) { const n = showcase?.[sl.src]?.length ?? 0; if (n < 2) continue; sl.slot = sl.slot <= 0 ? n - 1 : sl.slot - 1; paintShow(sl); }
+}, CINEMA_EVERY);
 function plateSlot(parent, index, w, x, y, z) {
   const cv = document.createElement("canvas"); cv.width = 512; cv.height = 96;
   const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
@@ -379,7 +439,7 @@ function plateSlot(parent, index, w, x, y, z) {
   const plate = { cv, tex, slot: index }; showPlates.push(plate); paintPlate(plate);
 }
 function paintPlate(plate) {
-  const g = plate.cv.getContext("2d"), name = showcase?.plate?.[plate.slot]?.caption ?? `작가 전시실 ${plate.slot + 1}`;
+  const g = plate.cv.getContext("2d"), name = showcase?.plate?.[plate.slot]?.caption ?? `작가 작품 ${plate.slot + 1}`;
   g.fillStyle = "#7355DA"; g.fillRect(0, 0, 512, 96); g.fillStyle = "#FFFFFF"; g.font = `700 48px ${HAND}`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(name, 256, 50, 480);
   plate.tex.needsUpdate = true;
 }
@@ -705,7 +765,7 @@ const coverMat = (k) => coverMats[k] || (coverMats[k] = new THREE.MeshBasicMater
   for (const wd of t.split(" ")) { const nx = cur ? cur + " " + wd : wd; if (g.measureText(nx).width > cw - 32 && cur) { lines.push(cur); cur = wd; } else cur = nx; } lines.push(cur);
   lines.forEach((l, i) => g.fillText(l, 16, 22 + i * 34)); g.fillRect(16, 26 + lines.length * 34, 40, 4);
 }) }));
-// 남쪽을 보게 만든 14층 월드 벽(showwall·relayscroll)을 face e/w면 돌려 세운다: 칸 가운데에 돌린 묶음을 두고 그 안에서는 길이·두께를 바꿔 쓴다
+// 남쪽을 보게 만든 14층 월드 벽(showwall·상영관 입구)을 face e/w면 돌려 세운다: 칸 가운데에 돌린 묶음을 두고 그 안에서는 길이·두께를 바꿔 쓴다
 function facing(G, o, x, z, w, d) {
   if (o.face !== "e" && o.face !== "w") return [G, x, z, w, d];
   const P = new THREE.Group(); P.position.set(x, 0, z); P.rotation.y = o.face === "e" ? Math.PI / 2 : -Math.PI / 2; G.add(P);
@@ -1177,6 +1237,7 @@ function buildFurn(G, o, fl) {
         box(G, w - .14, .06, d * .62, 0xFFFFFF, x, .2, z, { line: .008 });
         const cush = solidMesh(new RoundedBoxGeometry(w - .24, .1, d * .56, 3, .045), c, { line: .012 }); cush.position.set(x, .3, z); G.add(cush);
         for (let i = 1; i < Math.round(w / .5); i++) box(G, .02, .012, d * .5, 0xFFFFFF, x - (w - .24) / 2 + i * (w - .24) / Math.round(w / .5), .35, z, { line: 0, cast: false });   // 방석 바느질 선
+        if (SEAT_SINK) for (let i = 0; i < o.w; i++) SEAT_SINK.push({ x: o.x + i + .5, y: o.y + .5, yaw: o.face === "s" ? 0 : Math.PI, h: .34, desk: null });   // 칸마다 한 자리, 등받이 없는 방석이라 face 쪽(기본 북쪽)을 보고 앉는다
         break; }
       box(G, w - .1, .3, d * .6, C.wood, x, 0, z); for (const s of [-1, 1]) box(G, .06, .3, d * .5, C.woodD, x + s * (w / 2 - .2), 0, z, { line: 0 }); ball(G, .12, 0xFFD43B, x - .3, .4, z, { line: .008 }); break;
     case "beanbag": { // 누울 수 있는 큰 빈백: 납작한 몸통 + 등받이 쪽 볼록
@@ -1383,6 +1444,55 @@ function buildFurn(G, o, fl) {
       box(g2, .96, 1.1, .07, SHOW_FRAME[o.src] ?? 0xFFFFFF, 0, .5, -.05, { line: .012 });
       showSlot(g2, o.src, o.slot, .86, 0, 1.05, -.012, o.big ? 2.8 : 2);
       break; }
+    case "cinemascreen": { // 릴레이 상영관 큰 스크린(남쪽을 본다): 양옆 붉은 막, 아래 무대, 위 간판. 화면은 1화부터 최신 화까지 차례로 계속 상영한다(cinemaTick)
+      const sw = Math.min(w - 1.2, 5.4), sh = sw * CINEMA_H / CINEMA_W, by = .55, bz = z - d / 2 + .25;
+      box(G, sw + 2.4, .35, 1, 0x3A3150, x, 0, bz + .3, { line: .01 });   // 무대
+      box(G, sw + .3, sh + .3, .1, 0x15121F, x, by - .15, bz, { line: .012 });   // 검은 테
+      for (const k of [-1, 1]) { const cur = box(G, .9, sh + .9, .3, 0x9E2B3F, x + k * (sw / 2 + .6), .35, bz + .1, { line: .012 }); cur.userData.noMerge = true; for (let i = 0; i < 4; i++) box(G, .04, sh + .9, .02, 0x7A1F30, x + k * (sw / 2 + .6) - .33 + i * .22, .35, bz + .26, { line: 0, cast: false }); }   // 주름진 붉은 막
+      const cv = document.createElement("canvas"); cv.width = CINEMA_W; cv.height = CINEMA_H;
+      const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(sw, sh), new THREE.MeshBasicMaterial({ map: tex, toneMapped: false })); m.position.set(x, by + sh / 2, bz + .06); m.userData.noMerge = true; G.add(m);
+      const slot = { src: o.src, slot: 0, x: undefined, y: undefined, reach: o.reach ?? 6, mesh: m, cv, tex, url: null, cinema: true, paint: paintCinema };
+      m.userData.show = slot; showSlots.push(slot); paintShow(slot);
+      board(G, Math.min(sw, 4), .5, signTex(o.sign ?? "릴레이 만화 상영관", { bg: "#2A2438", fg: "#FFD97A", size: 64 }), x, by + sh + .45, bz + .02);
+      break; }
+    case "cinemarow": { // 상영관 좌석 한 줄(북쪽 스크린을 본다): 붉은 방석·등받이, 자리 사이 팔걸이. 칸마다 한 자리
+      for (let i = 0; i < o.w; i++) {
+        const sx = wx(o.x + i + .5);
+        box(G, .5, .3, .5, 0x8E2436, sx, 0, z - .05, { line: .008 });   // 방석
+        box(G, .5, .55, .12, 0xA8304A, sx, .3, z + .22, { line: .008 });   // 등받이(남쪽)
+        if (SEAT_SINK) SEAT_SINK.push({ x: o.x + i + .5, y: o.y + .45, yaw: Math.PI, h: .3, desk: null, cinema: true });   // cinema: 앉으면 영화(startMovie)가 시작된다
+      }
+      for (let i = 0; i <= o.w; i++) box(G, .07, .46, .5, 0x2A2438, wx(o.x + i), 0, z - .02, { line: .006 });   // 팔걸이
+      break; }
+    case "cinemamarquee": { // 상영관 입구 위 전구 간판(face w면 서쪽 광장을 본다): 붉은 판에 이름, 아래 "지금 상영 중" 띠. 밟고 지나간다(문 위에 뜬다)
+      const [P, sx, sz, sw, sd] = facing(G, o, x, z, w, d), mw = Math.min(sw + .6, 5.2), mh = mw / 5, my = 2.55, mz = sz + sd / 2 - .1;
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(mw, mh), new THREE.MeshBasicMaterial({ map: marqueeTex(o.text ?? "릴레이 만화 상영관", "#9E2B3F"), transparent: true, toneMapped: false })); m.position.set(sx, my, mz); m.userData.noMerge = true; P.add(m);
+      const n = Math.round(mw / .28); for (let i = 0; i <= n; i++) for (const k of [-1, 1]) { const b2 = new THREE.Mesh(new THREE.SphereGeometry(.045, 8, 6), new THREE.MeshBasicMaterial({ color: i % 2 ? 0xFFD97A : 0xFFFFFF, toneMapped: false })); b2.position.set(sx - mw / 2 + .2 + i * (mw - .4) / n, my + k * (mh / 2 + .04), mz + .02); b2.userData.noMerge = true; P.add(b2); }
+      const band = new THREE.Mesh(new THREE.PlaneGeometry(2.6, .36), new THREE.MeshBasicMaterial({ map: signTex("▶ 지금 상영 중", { bg: "#15121F", fg: "#FFD97A", size: 64 }), toneMapped: false })); band.position.set(sx, my - mh / 2 - .32, mz); band.userData.noMerge = true; P.add(band);
+      break; }
+    case "cinemaposter": { // 상영관 입구 옆 포스터 라이트박스(face w면 서쪽을 본다): src가 있으면 그 화(최신 화)를, 없으면 안내 글을 건다
+      const [P, sx, sz, , sd] = facing(G, o, x, z, w, d), pz = sz + sd / 2 - .2, pw = .9, ph = pw * SHOW_H / SHOW_W;
+      for (const k of [-1, 1]) box(P, .06, .3, .06, 0x15121F, sx + k * .4, 0, pz - .02, { line: .006 });
+      box(P, pw + .16, ph + .16, .1, 0x15121F, sx, .3, pz - .06, { line: .012 });
+      if (o.src) showSlot(P, o.src, o.slot ?? 0, pw, sx, .38 + ph / 2, pz + .002);
+      else board(P, pw, ph, canvasTex(SHOW_W, SHOW_H, (g, cw, ch) => {
+        g.fillStyle = "#1E1830"; g.fillRect(0, 0, cw, ch); g.textAlign = "center"; g.textBaseline = "middle";
+        g.fillStyle = "#FFD97A"; g.font = `800 64px ${HAND}`; g.fillText("릴레이 만화", cw / 2, ch * .2); g.fillText("상영관", cw / 2, ch * .32);
+        g.fillStyle = "#FFFFFF"; g.font = `700 38px ${HAND}`; ["좌석에 앉으면", "1화부터 끝까지", "이어서 상영해요"].forEach((t, i) => g.fillText(t, cw / 2, ch * (.52 + i * .1)));
+        g.fillStyle = "#B9A6EC"; g.font = `700 30px ${HAND}`; g.fillText("다음 화는 당신이 이어 그려요", cw / 2, ch * .88, cw - 40);
+      }), sx, .38 + ph / 2, pz + .002);
+      board(P, pw + .1, .26, signTex(o.src ? "NOW SHOWING" : "안내", { bg: "#9E2B3F", fg: "#FFFFFF", size: 60 }), sx, .38 + ph + .24, pz);
+      break; }
+    case "projector": { // 상영관 뒤쪽 영사기(북쪽 스크린을 본다): 받침대 위 상자와 렌즈, 스크린까지 퍼지는 흐린 빛줄기
+      const ly = 2.15, lz = z - .35;
+      box(G, .12, ly - .25, .12, 0x2A2438, x, 0, z, { line: .006 }); box(G, .7, .45, .8, 0x3A3150, x, ly - .25, z, { line: .01 });
+      for (const k of [-1, 1]) cyl(G, .2, .2, .08, 0x15121F, x + k * .2, ly + .3, z, { line: .006 });   // 필름 릴
+      cyl(G, .1, .1, .2, 0xFFE9A8, x, ly - .02, lz, { line: .004 });
+      const len = (o.y + .5 - (o.to ?? o.y - 20)) * S, r = o.spread ?? 2.4;
+      const beam = new THREE.Mesh(new THREE.CylinderGeometry(.08, r, len, 4, 1, true), new THREE.MeshBasicMaterial({ color: 0xFFF2C4, transparent: true, opacity: .07, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }));
+      beam.rotation.x = Math.PI / 2; beam.rotation.y = Math.PI / 4; beam.position.set(x, ly - .1, lz - len / 2); beam.userData.noMerge = true; G.add(beam);
+      break; }
     case "showwall": { const [P, sx, sz, sw, sd] = facing(G, o, x, z, w, d); // face e/w면 서쪽/동쪽 가장자리에 세워 옆을 본다. 14층 하루들 월드 전시 벽(남쪽을 본다): 흰 벽에 색 액자를 slots 순서로 왼쪽부터 건다. style film은 검은 필름 띠(구멍 줄), big이면 큰 액자 하나
       const film = o.style === "film", ww = sw - .2, wh = o.big ? 2.2 : 1.7, n = o.slots.length, fw = o.big ? 1.45 : .86, cy = o.big ? 1.12 : .92;
       box(P, ww, wh, .16, film ? 0x2B2140 : o.wallColor ?? 0xFFFFFF, sx, 0, sz - sd / 2 + .12, { line: .012 });
@@ -1398,9 +1508,10 @@ function buildFurn(G, o, fl) {
     case "marquee": { // 퀴즈 아케이드 전구 간판(남쪽을 본다): 벽 위에 띄우거나 o.posts면 두 기둥 위 아치. 판 색 o.color, 기둥 o.post
       const mw = Math.min(w - .2, o.size ?? 3.6), mh = mw / 5, my = o.y0 ?? 2.3, mz = z - d / 2 + (o.posts ? .16 : .3);
       if (o.posts) for (const k of [-1, 1]) { cyl(G, .1, .12, my, o.post ?? 0xFFFFFF, x + k * (mw / 2 + .12), 0, mz, { line: .008 }); ball(G, .16, 0xFFD97A, x + k * (mw / 2 + .12), my + .1, mz, { line: .008 }); }
-      const tex = marqueeTex(o.text, o.color ?? "#FF9EB5"); const m = new THREE.Mesh(new THREE.PlaneGeometry(mw, mh), new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide, toneMapped: false }));
-      m.position.set(x, my, mz); m.userData.noMerge = true; G.add(m);
-      const n = Math.round(mw / .28); for (let i = 0; i <= n; i++) for (const k of [-1, 1]) { const b2 = new THREE.Mesh(new THREE.SphereGeometry(.04, 8, 6), new THREE.MeshBasicMaterial({ color: i % 2 ? 0xFFF3B0 : 0xFFFFFF, toneMapped: false })); b2.position.set(x - mw / 2 + .2 + i * (mw - .4) / n, my + k * (mh / 2 + .03), mz + .02); b2.userData.noMerge = true; G.add(b2); }
+      const tex = marqueeTex(o.text, o.color ?? "#FF9EB5"), mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, toneMapped: false });
+      // 기둥 위 아치는 입구 바깥(북쪽)에서도 보이므로 뒷면에도 바로 읽히는 판과 전구를 단다. 벽에 붙인 간판은 앞면만
+      if (o.posts) board2(G, mw, mh, mat, x, my, mz); else { mat.side = THREE.DoubleSide; const m = new THREE.Mesh(new THREE.PlaneGeometry(mw, mh), mat); m.position.set(x, my, mz); m.userData.noMerge = true; G.add(m); }
+      const n = Math.round(mw / .28); for (let i = 0; i <= n; i++) for (const k of [-1, 1]) for (const f of o.posts ? [1, -1] : [1]) { const b2 = new THREE.Mesh(new THREE.SphereGeometry(.04, 8, 6), new THREE.MeshBasicMaterial({ color: i % 2 ? 0xFFF3B0 : 0xFFFFFF, toneMapped: false })); b2.position.set(x - mw / 2 + .2 + i * (mw - .4) / n, my + k * (mh / 2 + .03), mz + f * .02 - (f < 0 ? .01 : 0)); b2.userData.noMerge = true; G.add(b2); }
       break; }
     case "claw": { // 퀴즈 아케이드 인형 뽑기 기계(남쪽을 본다): 파스텔 몸통, 유리 상자 안에 동글동글 인형, 위에 집게
       const c = o.color ?? 0xFFB3C7;
@@ -1435,13 +1546,6 @@ function buildFurn(G, o, fl) {
     case "wallsign": // 벽 위쪽 글씨판(남쪽을 본다): 릴레이 소설관 이름
       board(G, Math.min(w - .2, o.size ?? 3.4), Math.min(w - .2, o.size ?? 3.4) / 8, signTex(o.text, { bg: o.bg ?? "#F6E7D2", fg: o.fg ?? "#5B3FC4", size: 72, w: 1024, h: 128 }), x, o.y0 ?? WALL - .45, z - d / 2 + .1);
       break;
-    case "relayscroll": { // 릴레이 소설관 두루마리(face w면 동쪽 벽에서 서쪽을 본다): 줄 친 종이에 안내 글, 양 끝 나무 막대
-      const [P, sx, sz, sw, sd] = facing(G, o, x, z, w, d), len = sw - .4, back = sz - sd / 2 + .08;
-      const tex = canvasTex(2048, 96, (g, cw, ch) => { g.fillStyle = "#FFFBF2"; g.fillRect(0, 0, cw, ch); g.strokeStyle = "#D9CCF5"; g.lineWidth = 3; for (let yy = ch * .2; yy < ch; yy += ch * .2) { g.beginPath(); g.moveTo(0, yy); g.lineTo(cw, yy); g.stroke(); }
-        g.fillStyle = "#5B3FC4"; g.font = `700 30px ${HAND}`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(o.text, cw / 2, ch / 2, cw - 40); });
-      board(P, len, .5, tex, sx, 1.3, back + .02);
-      for (const ex of [-1, 1]) cyl(P, .06, .06, .7, 0xB9855A, sx + ex * len / 2, .95, back + .06);
-      break; }
     case "drawingeasel": { // 14층 메인 전시실 함께 그리는 네컷 이젤(남쪽을 본다): 월드 이젤처럼 나무 세 다리, 판에는 지금 그림. 바닥에 붓
       const g2 = new THREE.Group(); g2.position.set(x, 0, z); G.add(g2);
       for (const sx of [-1, 1]) { const leg = box(g2, .07, 2.1, .07, C.woodD, sx * .55, 0, 0, { line: .006 }); leg.rotation.z = -sx * .12; }
@@ -1462,16 +1566,16 @@ function buildFurn(G, o, fl) {
       const tag = board(g2, .9, .26, signTex("지난 그림 스케치북", { bg: "#FFFFFF", fg: "#7355DA", size: 52 }), 0, 1.35, 0); tag.userData.noMerge = true;
       fixedSlot(tag, { view: "sketchbook", image: null, caption: "", action: "스케치북 넘겨 보기" }, 2);
       break; }
-    case "albumstand": { // 작가의 방 앨범북 받침대(남쪽을 본다): 벽에 다 못 거는 그 작가 만화를 앨범으로 모두 넘겨 본다. 표지 글은 내용이 오면 그린다
+    case "albumstand": { // 작가 작품 앨범북 받침대(남쪽을 본다): 벽에 다 못 거는 그 작가 만화를 앨범으로 모두 넘겨 본다. 표지 글은 내용이 오면 그린다
       const g2 = new THREE.Group(); g2.position.set(x, 0, z); G.add(g2);
       cyl(g2, .06, .08, .85, C.woodD, 0, 0, 0, { line: .006 }); box(g2, .8, .05, .56, C.wood, 0, .85, 0, { line: .008 });
-      const book = new THREE.Group(); book.position.set(0, .92, 0); book.rotation.x = -.35; g2.add(book);
+      const book = new THREE.Group(); book.position.set(0, .92, 0); book.rotation.x = .35; g2.add(book);   // 뒤(북쪽)를 들어 펼친 면이 앞에 선 사람 쪽을 본다
       box(book, .74, .05, .5, ZONE_FRAMES[o.slot] ?? 0x7355DA, 0, -.02, 0, { line: .008 });   // 표지(방 색)
       for (const k of [-1, 1]) { box(book, .34, .04, .46, 0xFFFBF2, k * .18, .02, 0, { line: .004 }); box(book, .26, .01, .26, 0xFFFFFF, k * .18, .06, -.02, { line: .002 }); }   // 펼친 두 쪽에 그림 자리
       box(book, .02, .06, .48, 0x2B2140, 0, .02, 0, { line: 0 });
       const cv = document.createElement("canvas"); cv.width = 512; cv.height = 150;
       const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
-      const tag = board(g2, 1.1, 1.1 * 150 / 512, tex, 0, 1.5, 0); tag.userData.noMerge = true;
+      const tag = board2(g2, 1.1, 1.1 * 150 / 512, new THREE.MeshBasicMaterial({ map: tex }), 0, 1.5, 0);   // 사방이 트여 뒤에서도 보이므로 앞뒤 모두 바로 읽힌다
       const slot = { src: "album", slot: o.slot, x: undefined, y: undefined, reach: 2, mesh: tag, cv, tex,
         paint: (sl) => { const g = sl.cv.getContext("2d"), it = showItem(sl); g.fillStyle = "#7355DA"; g.fillRect(0, 0, 512, 150); g.strokeStyle = "#2B2140"; g.lineWidth = 8; g.strokeRect(4, 4, 504, 142);
           g.fillStyle = "#FFFFFF"; g.textAlign = "center"; g.textBaseline = "middle"; g.font = `700 54px ${HAND}`; g.fillText("📖 앨범북", 256, 52, 480);
@@ -1479,8 +1583,8 @@ function buildFurn(G, o, fl) {
       tag.userData.show = slot; showSlots.push(slot); paintShow(slot);
       break; }
     case "runway": { // 14층 전시관 보라 카펫(밟고 지나간다): 하루들 월드 메인 전시실처럼 가운데 흰 점선
-      box(G, w - .3, .02, d, 0xB9A6EC, x, 0, z, { line: .008, cast: false });
-      for (const sx of [-1, 1]) for (let i = 0; i < Math.floor(d / .7); i++) box(G, .08, .025, .36, 0xFFFFFF, x + sx * (w / 2 - .55), 0, z - d / 2 + .35 + i * .7, { line: 0, cast: false });
+      box(G, w - .3, .02, d, o.color ?? 0xB9A6EC, x, 0, z, { line: .008, cast: false });   // color·dash: 상영관 통로처럼 다른 색 카펫
+      for (const sx of [-1, 1]) for (let i = 0; i < Math.floor(d / .7); i++) box(G, .08, .025, .36, o.dash ?? 0xFFFFFF, x + sx * (w / 2 - .55), 0, z - d / 2 + .35 + i * .7, { line: 0, cast: false });
       break; }
     case "phonestand": { // 14층 큰 하루들 휴대폰(남쪽을 본다, 월드처럼 살짝 돌려 세움): 월드 HarudlePhone 모양을 0.6배로. 보라 받침대, 검은 몸통, 카메라 구멍, 옆 버튼,
       // 화면에는 하루들 피드, 오른쪽에 "크게 열기" 받침대, 위에 "하루들 직접 써 보기" 말풍선. 화면이나 받침대를 누르거나 앞에서 F → 하루들 크게 열기
@@ -2520,6 +2624,7 @@ const MOVE = { KeyW: "w", KeyA: "a", KeyS: "s", KeyD: "d", ArrowUp: "arrowup", A
 const SKILL_KEY = { Digit1: "draw", Digit2: "wave", Digit3: "heart", Numpad1: "draw", Numpad2: "wave", Numpad3: "heart", KeyZ: "dance" };   // Z: 춤(한 번 누르면 계속, 다시 누르면 멈춤)
 addEventListener("keydown", (e) => {
   if (inWorld) return;   // 14층 하루들 월드가 떠 있으면 캠퍼스 키는 쉰다
+  if (movie.el && !movie.el.hidden && (e.code === "Escape" || e.code === "KeyF")) { e.preventDefault(); standUp(); return; }   // 영화 보는 중: Esc·F로 일어난다(걷는 키도 일어난다)
   if (relockOnKey && e.code !== "Escape" && (e.target as HTMLElement).tagName !== "INPUT") { relockOnKey = false; if (inside() && !locked() && !uiOpen()) lockMouse(); }   // Esc로 설정창을 닫은 뒤 첫 키에서 다시 둘러보기
   if (!easelEd.hidden) { // 그림판이 열려 있으면 게임 키는 쉰다
     if (e.code === "Escape") { e.preventDefault(); closeEasel(false); }
@@ -2704,11 +2809,21 @@ function boothHit(cx, cy) {   // 커서가 보일 때 바로가기·이젤·14�
   if (!ray.intersectObjects(boards, false)[0]) return false;
   clickAt(cx, cy); return true;
 }
+// F로 쓰는 물건(엘리베이터 버튼·냉장고·특종 가판대·하루들 부스)을 누르면 그 앞까지 걸어가 도착해서 F와 똑같이 쓴다
+const USE_KINDS = new Set(["elev", "fridge", "scoopstand", "brushcup", "painteasel", "linkkiosk", "instaboard", "wbpost", "wbwall"]);
+function useGoal(px, py) {
+  const call = floor.calls.find((k) => inRect({ x: k.x - 1.2, y: k.y - .3, w: k.w + 1.4, h: k.h + .6 }, px, py));   // 엘리베이터 문이나 그 앞 버튼 칸
+  if (call) return { use: true, x: call.x + call.w / 2, y: call.y + call.h / 2 };
+  const o = floor.furn.find((f) => USE_KINDS.has(f.kind) && inRect({ x: f.x - .3, y: f.y - .3, w: f.w + .6, h: f.h + .6 }, px, py));
+  if (!o) return null;
+  if (o.kind === "fridge") { const fr = FRIDGES.find((k) => k.o === o); if (fr) { const [x, y] = fridgeFront(fr); return { use: true, x, y }; } }
+  return { use: true, x: o.x + o.w / 2, y: o.y + o.h / 2 };
+}
 function clickAt(cx, cy) {
   stopFollow();
   ndc.set(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
   if (me.f === 12 && linkBoards.length) { const lh = ray.intersectObjects(linkBoards, false)[0]; if (lh) { if (lh.object.userData.gift) openGifts(); else openLink(lh.object.userData.link); return; } }   // 바로가기 장치·선물 입간판을 눌렀다
-  if (me.f === 14 && showSlots.length) { const sh = ray.intersectObjects(showSlots.map((sl) => sl.mesh), false)[0]; if (sh) { openItem(showItem(sh.object.userData.show)); return; } }   // 14층 액자를 눌렀다
+  if (me.f === 14 && showSlots.length) { const sh = ray.intersectObjects(showSlots.flatMap((sl) => sl.mesh.userData.twin ? [sl.mesh, sl.mesh.userData.twin] : [sl.mesh]), false)[0]; if (sh) { openItem(showItem((sh.object.userData.of ?? sh.object).userData.show)); return; } }   // 14층 액자를 눌렀다
   if (me.f === 12 && ezBoards.length) { const eh = ray.intersectObjects(ezBoards, false)[0]; if (eh && eh.object.userData.wb) { if (nearWb(4)) { openEasel("wb"); return; } } else if (eh && nearFurn("painteasel", 3.2)) { tryEasel(); return; } }   // 이젤·화이트보드를 눌렀다   // 이젤을 눌렀다
   const hit = ray.intersectObjects(NPCS.filter((n) => n.f === me.f && n.doll.root.visible).map((n) => n.doll.root), true).find((h) => h.object !== (h.object.parent as any)?.userData?.blob && !(h.object as any).isPoints);
   let npcIdx = -1; for (let q: THREE.Object3D | null = hit ? hit.object : null; q; q = q.parent) if (q.userData.npc !== undefined) { npcIdx = q.userData.npc; break; }
@@ -2720,7 +2835,7 @@ function clickAt(cx, cy) {
     const px = tX(pt.point.x), py = tY(pt.point.z);
     const bag = floor.furn.find((o) => o.kind === "beanbag" && !o.taken && inRect({ x: o.x - .3, y: o.y - .3, w: o.w + .6, h: o.h + .6 }, px, py));
     let seat = null, bd = .75; for (const st of floor.seats || []) { if (st.taken) continue; const d = Math.hypot(st.x - px, st.y - py); if (d < bd) { bd = d; seat = st; } }
-    const goal = bag ? { bag, ...bagSpot(bag) } : seat ? { seat, x: seat.x, y: seat.y } : null;
+    const goal = bag ? { bag, ...bagSpot(bag) } : seat ? { seat, x: seat.x, y: seat.y } : useGoal(px, py);
     if (goal) {
       if (me.lie || me.seat) standUp();
       const [fx, fy] = nearestFree(floor, goal.x, goal.y); me.goal = goal;
@@ -2762,10 +2877,55 @@ function withJosa(word, a, b) {
 }
 function nearNPC() { let best = null, bd = 1.9; for (const n of NPCS) { if (n.f !== me.f) continue; const d = Math.hypot(n.x - me.x, n.y - me.y); if (d < bd) { bd = d; best = n; } } return best; }
 function nearSeat() { if (me.lie || me.seat) return null; let best = null, bd = 1.0; for (const st of floor.seats || []) { if (st.taken) continue; const d = Math.hypot(st.x - me.x, st.y - me.y); if (d < bd) { bd = d; best = st; } } return best; }
-function sitDown(st) { me.seat = st; st.taken = "me"; me.x = st.x; me.y = st.y; showToast("의자에 앉았어요", "앉은 채로 1번을 누르면 네 컷을 그려요. 움직이면 일어나요.", 2600); me.h = st.yaw; me.path = null; if (me.act) endAct(me); sendPresence(true); }
+function sitDown(st) { me.seat = st; st.taken = "me"; me.x = st.x; me.y = st.y; if (st.cinema) startMovie(); else showToast("의자에 앉았어요", "앉은 채로 1번을 누르면 네 컷을 그려요. 움직이면 일어나요.", 2600); me.h = st.yaw; me.path = null; if (me.act) endAct(me); sendPresence(true); }
+// 상영관 영화: 좌석에 앉으면 화면이 어두워지고 지금까지 올라온 릴레이 만화를 1화부터 끝까지 차례로 크게 보여 준다. 일어나면 끝난다
+const MOVIE_EVERY = 7000, MOVIE_INTRO = 2600, MOVIE_END = 6000;   // 한 화 · 첫 자막 · 끝 자막(그 뒤 1화부터 다시) 보여 주는 시간
+const movie = { el: null as HTMLElement | null, reel: [] as ReelEpisode[], at: -1, timer: 0, token: 0 };
+function movieEl() {
+  if (movie.el) return movie.el;
+  const el = document.createElement("div"); el.id = "movie"; el.hidden = true;
+  el.innerHTML = `<div class="movie-stage"><div class="movie-card"></div><img class="movie-shot" alt=""></div>
+    <div class="movie-bar"><span class="movie-cap"></span><span class="movie-count"></span></div>
+    <div class="movie-progress"><i></i></div>
+    <div class="movie-ctrl"><span class="movie-auto">자동 상영 중 · 일어나면 끝나요</span><button type="button" data-k="stop">그만 보기</button></div>`;
+  el.addEventListener("click", (e) => { const k = (e.target as HTMLElement).closest("button")?.dataset.k; if (k === "stop") standUp(); else if (k === "draw") { standUp(); openShow("relay-new"); } });
+  document.body.append(el); movie.el = el; return el;
+}
+function movieCard(html) { const el = movieEl(); el.querySelector<HTMLElement>(".movie-card").innerHTML = html; el.classList.add("card"); el.querySelector<HTMLImageElement>(".movie-shot").removeAttribute("src"); }
+// 진행 막대: 지금 화(또는 자막)가 끝날 때까지 ms 동안 0에서 끝까지 찬다. 다 차면 알아서 다음으로 넘어간다
+function movieBar(ms) { const bar = movieEl().querySelector<HTMLElement>(".movie-progress i"); bar.style.transition = "none"; bar.style.width = "0%"; void bar.offsetWidth; bar.style.transition = `width ${ms}ms linear`; bar.style.width = "100%"; }
+function showReel(i) {
+  const el = movieEl(), n = movie.reel.length; clearTimeout(movie.timer); movie.at = i;
+  if (i >= n) { // 끝 자막: 잠시 뒤 1화부터 다시 상영한다
+    movieCard(`<b>끝</b><p>${n}화까지 이어진 이야기, 다음 화는 당신이 그려 주세요</p><p class="movie-again">잠시 뒤 1화부터 다시 상영해요</p><div class="movie-end"><button type="button" data-k="draw">다음 화 이어 그리기</button></div>`);
+    el.querySelector<HTMLElement>(".movie-cap").textContent = "상영 끝"; el.querySelector<HTMLElement>(".movie-count").textContent = `${n} / ${n}`;
+    movieBar(MOVIE_END); movie.timer = window.setTimeout(() => showReel(0), MOVIE_END); return;
+  }
+  const ep = movie.reel[i], img = el.querySelector<HTMLImageElement>(".movie-shot");
+  el.classList.remove("card"); img.classList.remove("in");
+  el.querySelector<HTMLElement>(".movie-cap").textContent = `${ep.number}화 · ${ep.author}`; el.querySelector<HTMLElement>(".movie-count").textContent = `${i + 1} / ${n}`;
+  if (ep.image) { const tk = ++movie.token; showImage(ep.image).then((im) => { if (tk !== movie.token) return; img.src = im.src; requestAnimationFrame(() => img.classList.add("in")); }).catch(() => {}); }
+  const next = movie.reel[i + 1]?.image; if (next) showImage(next).catch(() => {});   // 다음 화를 미리 받아 둔다
+  movieBar(MOVIE_EVERY); movie.timer = window.setTimeout(() => showReel(i + 1), MOVIE_EVERY);
+}
+function startMovie() {
+  const el = movieEl(); el.hidden = false; movie.reel = []; movie.at = -1; const tk = ++movie.token;
+  movieCard(`<b>릴레이 만화 상영관</b><p>필름을 감는 중이에요…</p>`);
+  el.querySelector<HTMLElement>(".movie-cap").textContent = "곧 상영해요"; el.querySelector<HTMLElement>(".movie-count").textContent = "";
+  movieBar(MOVIE_INTRO);
+  loadRelayReel().then((reel) => {
+    if (tk !== movie.token || el.hidden) return; movie.reel = reel;
+    if (!reel.length) { movieCard(`<b>아직 상영할 화가 없어요</b><p>1화를 그려 주세요</p><div class="movie-end"><button type="button" data-k="draw">1화 그리기</button></div>`); return; }
+    reel.slice(0, 2).forEach((ep) => ep.image && showImage(ep.image).catch(() => {}));
+    movieCard(`<b>릴레이 만화 상영관</b><p>1화부터 ${reel.length}화까지 이어서 상영해요</p>`);
+    movie.timer = window.setTimeout(() => showReel(0), MOVIE_INTRO);
+  }).catch(() => { if (tk === movie.token) movieCard(`<b>필름이 끊겼어요</b><p>잠시 뒤에 다시 앉아 주세요</p>`); });
+}
+function stopMovie() { if (!movie.el || movie.el.hidden) return; clearTimeout(movie.timer); movie.token++; movie.el.hidden = true; }
 function nearBag() { if (me.lie || me.seat) return null; let best = null, bd = 1.9; for (const o of floor.furn) { if (o.kind !== "beanbag" || o.taken) continue; const s = bagSpot(o), d = Math.hypot(s.x - me.x, s.y - me.y); if (d < bd) { bd = d; best = o; } } return best; }
 function lieDown(o) { const s = bagSpot(o); me.lie = s; me.x = s.x; me.y = s.y; me.path = null; if (me.act) endAct(me); o.taken = "me"; sendPresence(true); showToast("빈백에 누웠어요", "움직이거나 F를 누르면 일어나요.", 2600); }
 function standUp() {
+  stopMovie();
   if (me.act?.name === "laptop" || me.act?.name === "read") endAct(me);   // 일어나면 노트북·책을 덮는다
   if (me.seat) { me.seat.taken = false; [me.x, me.y] = nearestFree(floor, me.x + Math.sin(me.seat.yaw) * .5, me.y + Math.cos(me.seat.yaw) * .5); me.seat = null; sendPresence(true); return; }
   if (!me.lie) return; for (const o of floor.furn) if (o.taken === "me") o.taken = false; [me.x, me.y] = nearestFree(floor, me.x + Math.sin(me.lie.yaw) * 1.2, me.y + Math.cos(me.lie.yaw) * 1.2); me.lie = null; sendPresence(true);
@@ -2840,9 +3000,9 @@ function openShow(view) {
 function refreshShowcase() {
   if (showcaseLoading) return; showcaseLoading = true;
   const counts: Record<string, number> = {};
-  for (const o of FLOORS[14].furn) for (const i of o.kind === "showframe" ? [o.slot] : o.kind === "showwall" ? o.slots : []) counts[o.src] = Math.max(counts[o.src] ?? 0, i + 1);
+  for (const o of FLOORS[14].furn) for (const i of o.kind === "showframe" || o.kind === "cinemascreen" ? [o.slot] : o.kind === "showwall" ? o.slots : []) counts[o.src] = Math.max(counts[o.src] ?? 0, i + 1);   // 상영관 스크린은 slot까지(최근 몇 화를 돌릴지)
   refreshEasel();
-  loadShowcase(counts).then((next) => { showcase = next; showcaseAt = performance.now(); showSlots.forEach(paintShow); showPlates.forEach(paintPlate); paintPhone(); }).finally(() => { showcaseLoading = false; });
+  loadShowcase(counts).then((next) => { showcase = next; showcaseAt = performance.now(); for (const sl of showSlots) if (sl.cinema) sl.slot = Math.max(0, (next[sl.src]?.length ?? 1) - 1); showSlots.forEach(paintShow); showPlates.forEach(paintPlate); paintPhone(); }).finally(() => { showcaseLoading = false; });
 }
 const SHOWCASE_EVERY = 10 * 60 * 1000;
 // 14층에 있는 동안 이젤 그림을 가끔 새로 받는다(다른 사람이 그린 것)
@@ -3178,7 +3338,10 @@ const mockPeers = MOCK ? ([
   ["mock-6", "새로운 에뮤", 11, 20, 8, { walk: 1 }],
   ["mock-7", "초록", 14, 24, 32, { walk: 1, gn: 1 }],
   ["mock-8", "용감한 쿠키", 14, 38, 30, { l: 1 }],
-] as [string, string, number, number, number, any][]).map(([peer, name, f, x, y, o]) => { const [fx, fy] = nearestFree(FLOORS[f], x + .5, y + .5); return { peer, name, kind: "viewer", walk: !!o.walk, home: [fx, fy], presence: { f, x: fx, y: fy, u: 0, h: 0, m: 0, r: 0, jc: 0, ac: o.ac || 0, an: o.an || null, as: 0, st: o.st || 0, l: o.l || 0, ly: 0, lp: o.lp || 0, dn: o.dn || 0, gn: o.gn || 0, br: o.br || 0, bc: o.bc || null, fc: 0, hc: 0 } }; }) : [];
+] as [string, string, number, number, number, any][]).map(([peer, name, f, x, y, o]) => {
+  // 누운 가짜 크루는 그 층에서 가장 가까운 빈백에 눕힌다(층 배치가 바뀌어 빈백이 없는 자리에 서서 자는 일이 없게). 빈백이 없으면 서 있는다
+  if (o.l) { const bag = FLOORS[f].furn.filter((b) => b.kind === "beanbag").map(bagSpot).sort((a, b) => Math.hypot(a.x - x, a.y - y) - Math.hypot(b.x - x, b.y - y))[0]; if (bag) { x = bag.x - .5; y = bag.y - .5; o = { ...o, ly: bag.yaw }; } else o = { ...o, l: 0 }; }
+  const [fx, fy] = o.l ? [x + .5, y + .5] : nearestFree(FLOORS[f], x + .5, y + .5); return { peer, name, kind: "viewer", walk: !!o.walk, home: [fx, fy], presence: { f, x: fx, y: fy, u: 0, h: 0, m: 0, r: 0, jc: 0, ac: o.ac || 0, an: o.an || null, as: 0, st: o.st || 0, l: o.l || 0, ly: o.ly || 0, lp: o.lp || 0, dn: o.dn || 0, gn: o.gn || 0, br: o.br || 0, bc: o.bc || null, fc: 0, hc: 0 } }; }) : [];
 if (MOCK) { // 걷는 가짜 크루는 집 근처를 천천히 돌아다닌다
   peerList = [...mockPeers];
   const tgt = new Map();
@@ -3558,6 +3721,7 @@ function step(dt, t) {
     const gl = me.goal; me.goal = null;
     if (gl.bag && !gl.bag.taken && Math.hypot(gl.x - me.x, gl.y - me.y) < 2.2) lieDown(gl.bag);
     else if (gl.seat && !gl.seat.taken && Math.hypot(gl.x - me.x, gl.y - me.y) < 1.4) sitDown(gl.seat);
+    else if (gl.use && !actBtn.hidden) interact();   // 누른 물건 앞에 닿았다: F를 누른 것처럼
   }
   const sp = (running() ? 7.3 : 3.2) * amag * duelMove.speed, len = Math.hypot(vx, vy) || 1; vx = vx / len * sp * dt; vy = vy / len * sp * dt;
   // 13층 스타트랙 뒤 깨진 창: 창 쪽(서쪽)으로 걷거나 뛰어 나가면 건물 밖 허공이다

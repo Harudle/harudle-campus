@@ -10,12 +10,15 @@ export type RelayEpisode = {
   imageUrl: string
   shareUrl: string
   author: string
+  /** 지금 로그인한 사람이 올린 화(내리기 버튼을 보인다) */
+  mine?: boolean
 }
 
 export type RegisterEpisodeResult =
   | 'ok'
   | 'bad_link'
-  | 'bad_password'
+  | 'login_required'
+  | 'not_author'
   | 'duplicate'
   | 'not_found'
   | 'rate_limited'
@@ -24,9 +27,10 @@ export type RegisterEpisodeResult =
 
 const TIMEOUT_MS = 10_000
 const REFRESH_MS = 30_000
-const REGISTER_CODES: RegisterEpisodeResult[] = ['bad_link', 'bad_password', 'duplicate', 'not_found', 'rate_limited', 'unavailable']
+const REGISTER_CODES: RegisterEpisodeResult[] = ['bad_link', 'login_required', 'not_author', 'duplicate', 'not_found', 'rate_limited', 'unavailable']
 
-export async function registerEpisode(fields: { shareUrl: string; password: string }): Promise<RegisterEpisodeResult> {
+/** 하루들에 로그인한 작가가 자기 글을 올린다(비밀번호 없음, 로그인 쿠키로 본인을 확인한다) */
+export async function registerEpisode(fields: { shareUrl: string }): Promise<RegisterEpisodeResult> {
   try {
     const response = await fetch(worldApiUrl('/relay'), {
       method: 'POST',
@@ -64,15 +68,12 @@ export function useRelayEpisodes() {
   }, [reload])
 
   const remove = useCallback(
-    async (id: number, password: string): Promise<RemoveResult> => {
+    async (id: number): Promise<RemoveResult> => {
       try {
-        const response = await fetch(worldApiUrl(`/relay/${id}/remove`), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password }),
-          signal: AbortSignal.timeout(TIMEOUT_MS),
-        })
-        if (response.status === 403) return 'wrong_password'
+        // 로그인한 사람이 올린 화만 내린다(서버가 로그인 쿠키로 확인한다)
+        const response = await fetch(worldApiUrl(`/relay/${id}/remove`), { method: 'POST', signal: AbortSignal.timeout(TIMEOUT_MS) })
+        if (response.status === 401) return 'login_required'
+        if (response.status === 403) return 'not_owner'
         if (response.status === 429) return 'rate_limited'
         if (!response.ok && response.status !== 404) return 'failed'
       } catch {

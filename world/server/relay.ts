@@ -3,13 +3,13 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { dirname } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { createLimiter, readBody } from './cheers.ts'
-import { createFeedFetcher, hashPassword, isValidPassword, parseFeedId, verifyPassword, type FeedInfo } from './feedPosts.ts'
+import { createFeedFetcher, parseFeedId, type FeedInfo } from './feedPosts.ts'
 
 const LIST_SIZE = 100
 const HIDE_AT_REPORTS = 3
 const MINUTE_MS = 60_000
 const HOUR_MS = 60 * MINUTE_MS
-const REGISTERS_PER_WINDOW = 5
+const REGISTERS_PER_WINDOW = 10
 const REGISTER_WINDOW_MS = 10 * MINUTE_MS
 const REGISTERS_PER_HOUR_TOTAL = 200
 const REPORTS_PER_HOUR = 20
@@ -21,15 +21,17 @@ export type RelayOptions = {
   isOriginAllowed: (origin: string | undefined) => boolean
   trustProxy?: boolean
   harudleBaseUrl?: string
+  /** 요청의 하루들 로그인 사용자. 올리기·내리기는 로그인한 작가 본인만 한다 */
+  userOf?: (request: IncomingMessage) => Promise<{ id: string } | null>
 }
 
-type EpisodeRow = { id: number; feed_id: string; created_at: string }
+type EpisodeRow = { id: number; feed_id: string; created_at: string; owner_id: string | null }
 
 /**
  * 릴레이 만화 에피소드. 하루들 피드 글을 공유 링크로 받아 올라온 순서대로 이어 붙인다.
- * 로그인이 없어서 올릴 때 정한 비밀번호로만 내릴 수 있고, 신고가 쌓이면 가린다.
+ * 하루들에 로그인한 작가가 자기 글만 올리고, 올린 사람(예전 비밀번호 화는 그 글의 작가)만 내린다. 신고가 쌓이면 가린다.
  */
-export function createRelayHandler({ databasePath, isOriginAllowed, trustProxy = false, harudleBaseUrl }: RelayOptions) {
+export function createRelayHandler({ databasePath, isOriginAllowed, trustProxy = false, harudleBaseUrl, userOf = async () => null }: RelayOptions) {
   mkdirSync(dirname(databasePath), { recursive: true })
   const database = new DatabaseSync(databasePath)
   database.exec(`
@@ -49,11 +51,14 @@ export function createRelayHandler({ databasePath, isOriginAllowed, trustProxy =
   for (const name of ['title', 'ending']) {
     if (columns.some((column) => column.name === name)) database.exec(`ALTER TABLE relay_episodes DROP COLUMN ${name}`)
   }
-  const list = database.prepare('SELECT id, feed_id, created_at FROM relay_episodes WHERE hidden = 0 ORDER BY id LIMIT ?')
+  // 올린 사람(하루들 계정 ID). 비밀번호로 올리던 예전 화는 비어 있고, 그 글의 작가가 주인이다
+  if (!columns.some((column) => column.name === 'owner_id')) database.exec('ALTER TABLE relay_episodes ADD COLUMN owner_id TEXT')
+  const list = database.prepare('SELECT id, feed_id, created_at, owner_id FROM relay_episodes WHERE hidden = 0 ORDER BY id LIMIT ?')
   const findFeed = database.prepare('SELECT id FROM relay_episodes WHERE feed_id = ?')
-  const findCredentials = database.prepare('SELECT password_hash, password_salt FROM relay_episodes WHERE id = ?')
+  const findOwner = database.prepare('SELECT feed_id, owner_id FROM relay_episodes WHERE id = ?')
+  // 비밀번호 칸은 예전 표와 맞추려고 남겨 두고 빈 값을 넣는다
   const insert = database.prepare(
-    'INSERT INTO relay_episodes (feed_id, created_at, password_hash, password_salt) VALUES (?, ?, ?, ?)',
+    "INSERT INTO relay_episodes (feed_id, created_at, password_hash, password_salt, owner_id) VALUES (?, ?, x'', x'', ?)",
   )
   const remove = database.prepare('DELETE FROM relay_episodes WHERE id = ?')
   const addReport = database.prepare(
@@ -62,6 +67,16 @@ export function createRelayHandler({ databasePath, isOriginAllowed, trustProxy =
 
   const limit = createLimiter()
   const reportedBy = new Set<string>()
+  // 올리기 제한은 실제로 올라간 화만 센다. 링크를 잘못 넣어 실패한 시도까지 세면, 한 사람이 몇 번 고쳐 넣다가 다음 화를 못 올린다
+  const registered = new Map<string, number[]>()
+  const recentRegisters = (key: string, windowMs: number) => {
+    const now = Date.now()
+    const times = (registered.get(key) ?? []).filter((at) => now - at < windowMs)
+    if (times.length) registered.set(key, times)
+    else registered.delete(key)
+    return times.length
+  }
+  const noteRegister = (key: string) => registered.set(key, [...(registered.get(key) ?? []), Date.now()])
   const fetchFeed = createFeedFetcher(harudleBaseUrl)
 
   const clientKey = (request: IncomingMessage) => {
@@ -70,13 +85,17 @@ export function createRelayHandler({ databasePath, isOriginAllowed, trustProxy =
     return value?.split(',').pop()?.trim() || request.socket.remoteAddress || 'unknown'
   }
 
-  const toEpisode = (row: EpisodeRow, feed: FeedInfo, number: number) => ({
+  const ownedBy = (row: { owner_id: string | null }, feed: FeedInfo | null, userId: string | undefined) =>
+    Boolean(userId) && (row.owner_id ? row.owner_id === userId : feed?.authorId === userId)
+  const toEpisode = (row: EpisodeRow, feed: FeedInfo, number: number, userId: string | undefined) => ({
     id: row.id,
     number,
     createdAt: row.created_at,
     imageUrl: feed.imageUrl,
     shareUrl: feed.shareUrl,
     author: feed.author,
+    /** 지금 로그인한 사람이 올린 화면 true(내리기 버튼을 보인다) */
+    mine: ownedBy(row, feed, userId),
   })
 
   const handle = (request: IncomingMessage, response: ServerResponse) => {
@@ -129,11 +148,11 @@ export function createRelayHandler({ databasePath, isOriginAllowed, trustProxy =
 
     if (request.method === 'GET' && id === null) {
       const rows = list.all(LIST_SIZE) as EpisodeRow[]
-      Promise.all(rows.map(async (row) => ({ row, result: await fetchFeed(row.feed_id) })))
-        .then((results) => {
+      Promise.all([userOf(request).catch(() => null), Promise.all(rows.map(async (row) => ({ row, result: await fetchFeed(row.feed_id) })))])
+        .then(([user, results]) => {
           // 하루들에서 지워졌거나 지금 이미지를 받을 수 없는 글은 빼고 번호를 매긴다.
           const visible = results.flatMap(({ row, result }) => (result.status === 'ok' ? [{ row, feed: result.feed }] : []))
-          respond(200, { items: visible.map(({ row, feed }, index) => toEpisode(row, feed, index + 1)) })
+          respond(200, { items: visible.map(({ row, feed }, index) => toEpisode(row, feed, index + 1, user?.id)) })
         })
         .catch(fail)
       return true
@@ -148,36 +167,39 @@ export function createRelayHandler({ databasePath, isOriginAllowed, trustProxy =
     const register = async () => {
       const body = await readJson()
       if (!body) return respond(400, { code: 'invalid' })
+      const user = await userOf(request)
+      if (!user) return respond(401, { code: 'login_required' })
       const feedId = parseFeedId(body.shareUrl)
       if (!feedId) return respond(400, { code: 'bad_link' })
-      if (!isValidPassword(body.password)) return respond(400, { code: 'bad_password' })
       if (findFeed.get(feedId)) return respond(409, { code: 'duplicate' })
-      if (
-        !limit(`register:${clientKey(request)}`, REGISTERS_PER_WINDOW, REGISTER_WINDOW_MS) ||
-        !limit('register:all', REGISTERS_PER_HOUR_TOTAL, HOUR_MS)
-      ) {
+      const key = user.id
+      if (recentRegisters(key, REGISTER_WINDOW_MS) >= REGISTERS_PER_WINDOW || recentRegisters('all', HOUR_MS) >= REGISTERS_PER_HOUR_TOTAL) {
         return respond(429, { code: 'rate_limited' })
       }
 
       const result = await fetchFeed(feedId)
       if (result.status === 'missing') return respond(404, { code: 'not_found' })
       if (result.status === 'unavailable') return respond(503, { code: 'unavailable' })
-      const { hash, salt } = await hashPassword(body.password)
+      // 내가 그린 만화만 올린다: 하루들 글의 작가와 로그인한 사람이 같아야 한다
+      if (result.feed.authorId !== user.id) return respond(403, { code: 'not_author' })
       // 기다리는 사이 같은 글이 먼저 올라왔을 수 있다.
       if (findFeed.get(feedId)) return respond(409, { code: 'duplicate' })
-      insert.run(feedId, new Date().toISOString(), hash, salt)
+      insert.run(feedId, new Date().toISOString(), user.id)
+      noteRegister(key)
+      noteRegister('all')
       respond(201, { ok: true })
     }
 
-    const removeWithPassword = async (episodeId: number) => {
-      const body = await readJson()
-      if (!body) return respond(400, { code: 'invalid' })
-      if (!limit(`remove:${clientKey(request)}:${episodeId}`, REMOVE_TRIES_PER_WINDOW, REMOVE_WINDOW_MS)) {
+    const removeMine = async (episodeId: number) => {
+      const user = await userOf(request)
+      if (!user) return respond(401, { code: 'login_required' })
+      if (!limit(`remove:${user.id}:${episodeId}`, REMOVE_TRIES_PER_WINDOW, REMOVE_WINDOW_MS)) {
         return respond(429, { code: 'rate_limited' })
       }
-      const row = findCredentials.get(episodeId) as { password_hash: Uint8Array; password_salt: Uint8Array } | undefined
+      const row = findOwner.get(episodeId) as { feed_id: string; owner_id: string | null } | undefined
       if (!row) return respond(404, { code: 'not_found' })
-      if (!(await verifyPassword(body.password, row.password_salt, row.password_hash))) return respond(403, { code: 'wrong_password' })
+      const feed = row.owner_id ? null : await fetchFeed(row.feed_id)
+      if (!ownedBy(row, feed?.status === 'ok' ? feed.feed : null, user.id)) return respond(403, { code: 'not_owner' })
       remove.run(episodeId)
       respond(204)
     }
@@ -196,7 +218,7 @@ export function createRelayHandler({ databasePath, isOriginAllowed, trustProxy =
 
     try {
       if (request.method === 'POST' && id === null) register().catch(fail)
-      else if (request.method === 'POST' && id !== null && action === 'remove') removeWithPassword(id).catch(fail)
+      else if (request.method === 'POST' && id !== null && action === 'remove') removeMine(id).catch(fail)
       else if (request.method === 'POST' && id !== null && action === 'report') report(id)
       else respond(405, { code: 'invalid' })
     } catch {

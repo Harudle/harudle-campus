@@ -136,7 +136,7 @@ const server = http.createServer(async (req, res) => {
 // Node 22.13 이상(node:sqlite)이 필요하다. 켜지 못해도 캠퍼스는 그대로 돌고, 14층은 연결 안 됨으로 보인다
 try {
   const { startWorld } = await import("./dist-server/world.mjs");
-  world = startWorld(server, { dataDir: WORLD_DATA_DIR, allowedOrigins: WORLD_ORIGINS, trustProxy: process.env.NODE_ENV === "production" });
+  world = startWorld(server, { dataDir: WORLD_DATA_DIR, allowedOrigins: WORLD_ORIGINS, trustProxy: process.env.NODE_ENV === "production", userOf: (req) => auth.userFromRequest(req) });   // 릴레이 만화는 하루들 로그인한 작가 본인만 올리고 내린다
   console.log("[world] 14층 하루들 월드 켜짐");
 } catch (e) { console.error(`[world] 14층 하루들 월드를 켜지 못했어요 (Node ${process.version})`, e.message); }
 
