@@ -2705,14 +2705,14 @@ const TOUR = [
     kb: "왼쪽 위 ⚙️(또는 Esc) 설정창의 <b>조작법</b> 탭에서 언제든 다시 볼 수 있어요. 채팅과 같이 있는 크루는 오른쪽 💬 👥 버튼으로 열어요.", touch: "왼쪽 조이스틱으로 걷고, 오른쪽 버튼으로 점프·표현·채팅을 해요. 화면을 끌면 둘러봐요. 설정과 조작법은 왼쪽 위 ⚙️에서 봐요." },
 ];
 // 연동할 수 있고 아직 안 했으면 맨 끝에 한 장 더: 연동하면 캐릭터가 저장된다
-const TOUR_LINK = { title: "하루들 연동하면 저장돼요", link: true,
+const TOUR_LINK = { title: "하루들 서비스에 가입되어 있나요?", link: true,
   art: `<div class="tart tart-link"><svg viewBox="0 0 170 96" aria-hidden="true"><circle cx="40" cy="36" r="15" fill="#FFE3C8" stroke="#111118" stroke-width="2.5"/><path d="M22 80c0-14 8-22 18-22s18 8 18 22z" fill="#B9A6EC" stroke="#111118" stroke-width="2.5" stroke-linejoin="round"/><path d="M27 36a13 13 0 0 1 26 0" fill="none" stroke="#111118" stroke-width="3"/><rect x="21" y="33" width="8" height="11" rx="3" fill="#7B5BD6" stroke="#111118" stroke-width="2"/><rect x="51" y="33" width="8" height="11" rx="3" fill="#7B5BD6" stroke="#111118" stroke-width="2"/><path d="M72 52h24m-7-7 7 7-7 7" fill="none" stroke="#111118" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M114 72h34a13 13 0 0 0 1-26 17 17 0 0 0-32-5 14 14 0 0 0-3 31z" fill="#fff" stroke="#111118" stroke-width="2.5" stroke-linejoin="round"/><path d="M123 57l7 7 12-13" fill="none" stroke="#7B5BD6" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>`,
-  kb: "꾸민 캐릭터와 받은 아이템이 계정에 남아서 다른 기기에서도 그대로예요.", touch: "꾸민 캐릭터와 받은 아이템이 계정에 남아서 다른 기기에서도 그대로예요." };
+  kb: "하루들 서비스와 연동하면 캐릭터 외형이 저장돼요! 앞으로는 캠퍼스 안에서 쓸 수 있는 재화 같은 혜택도 받을 수 있어요.", touch: "하루들 서비스와 연동하면 캐릭터 외형이 저장돼요! 앞으로는 캠퍼스 안에서 쓸 수 있는 재화 같은 혜택도 받을 수 있어요." };
 const tourSteps = () => (account.enabled && !account.user ? [...TOUR, TOUR_LINK] : TOUR);
 let tourAt = 0;
 function showTourStep(i, fresh = true) {
   const steps = tourSteps(); tourAt = clamp(i, 0, steps.length - 1); const st = steps[tourAt], last = tourAt === steps.length - 1;
-  tourStep.innerHTML = `<p class="tcount">${tourAt + 1} / ${steps.length}</p>${st.art}<h4 id="tourTitle">${st.title}</h4><p class="tdesc kb-only">${st.kb}</p><p class="tdesc touch-only">${st.touch}</p>${"link" in st ? `<button type="button" class="btn lav tlink" data-tour-link="1">하루들 연동하기</button>` : ""}`;
+  tourStep.innerHTML = `<p class="tcount">${tourAt + 1} / ${steps.length}</p>${st.art}<h4 id="tourTitle">${st.title}</h4><p class="tdesc kb-only">${st.kb}</p><p class="tdesc touch-only">${st.touch}</p>${"link" in st ? `<button type="button" class="btn lav tlink" data-tour-link="1">하루들 서비스와 연동하기</button>` : ""}`;
   tourDots.innerHTML = steps.map((_, k) => `<i${k === tourAt ? ` class="on"` : ""}></i>`).join("");
   tourPrev.hidden = tourAt === 0; tourNext.textContent = last ? "시작하기" : "다음";
   if (fresh) { tourStep.classList.remove("in"); void tourStep.offsetWidth; tourStep.classList.add("in"); tourNext.focus(); }   // 장이 넘어갈 때 살짝 올라온다
