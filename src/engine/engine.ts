@@ -2450,7 +2450,7 @@ let myAv = (() => { try { return avDecode(LS.get("ww.avatar")) || { ...DEFAULT_A
 const lookOf = (i) => ({ hair: HAIRS[i % HAIRS.length], acc: ACC[Math.floor(i / HAIRS.length) % ACC.length], prop: "bag" });
 const me = { jumps: 0, out: null as null | { z: number; vx: number; vy: number; vz: number; flip: number; dead: boolean }, prop: null, goal: null, lie: null, seat: null, f: 12, x: ELEV_SPAWN[0], y: ELEV_SPAWN[1], h: Math.PI / 2, follow: null as string | null, followAt: 0, rideAt: 0, brush: false, brushMesh: null, fc: 0, fh: 0, fk: 0, kickAt: -9, hc: 0, hd: 0, up: 0, jz: 0, jv: 0, jc: 0, ac: 0, an: null, as: 0, act: null, board: null, runHold: false, runToggle: false, moving: false, say: "", sayAt: 0, path: null };
 let floor = FLOORS[12];   // 처음 들어오면 12층 엘리베이터 앞
-let myGear: GearState | null = null;   // 컷 상점에서 사서 쓰고 있는 것(서버가 알려 준 값만)
+let myGear: GearState | null = null, shownGear: GearState | null = null;   // 컷 상점에서 사서 쓰고 있는 것(서버가 알려 준 값만) · 지금 그려진 것
 let meDoll = makeChar(myAv); scene.add(meDoll.root);
 Object.defineProperty(me, "doll", { get: () => meDoll });
 const running = () => me.runHold || me.runToggle;
@@ -2874,7 +2874,7 @@ document.getElementById("tourSkip").onclick = closeTour;
 // 걷기만 하고 달려 본 적이 없으면 한 번 알려 준다
 let walkFor = 0, runTipShown = false;
 const actBtn = document.getElementById("act"); actBtn.onclick = interact;
-function setMyAv(c) { myAv = { ...c }; LS.set("ww.avatar", avEncode(myAv)); saveCharacter(); const vis = meDoll.root.visible; dropDoll(meDoll); meDoll = makeChar(myAv, myGear); meDoll.root.visible = vis; scene.add(meDoll.root); sendPresence(true); renderAvPanel(); }
+function setMyAv(c) { myAv = { ...c }; LS.set("ww.avatar", avEncode(myAv)); saveCharacter(); const vis = meDoll.root.visible; dropDoll(meDoll); meDoll = makeChar(myAv, shownGear); meDoll.root.visible = vis; scene.add(meDoll.root); sendPresence(true); renderAvPanel(); }
 // 캐릭터 꾸미기 (하루들 월드의 AvatarCustomizer와 같은 항목)
 const avPanel = document.getElementById("avPanel"); let avColorPart = "headColor", avCamBack = null;
 // 잠긴 장식도 눌러서 미리보기에서만 껴 볼 수 있다(저장·전송은 안 함). 다른 걸 고르거나 창을 닫으면 원래대로
@@ -3019,13 +3019,22 @@ async function loadWallet(toastAfter: number) {
   } catch { }
 }
 /* 컷 상점: 산 펫 · 장식(gear)은 서버가 정한다. 내 것은 /api/shop 응답으로, 다른 크루 것은 접속자 목록의 g로 받는다 */
-function setMyGear(g: unknown) {
-  const next = readGear(g); if (gearKey(next) === gearKey(myGear)) return;
-  const petChanged = (next?.pet || "") !== (myGear?.pet || ""); myGear = next;
-  const vis = meDoll.root.visible; dropDoll(meDoll); meDoll = makeChar(myAv, myGear); meDoll.root.visible = vis; scene.add(meDoll.root);
-  if (petChanged) { dropDoll(dog.doll); dog.doll = makePet(petOfSku(myGear?.pet) ?? "doodle"); scene.add(dog.doll.root); }
+// shownGear: 지금 내 캐릭터에 그려진 것. 보통은 myGear와 같고, 상점에서 "입어 보기"를 누르면 몇 초 동안만 다르다(내 화면에서만)
+function showGear(next: GearState | null) {
+  if (gearKey(next) === gearKey(shownGear)) return;
+  const petChanged = (next?.pet || "") !== (shownGear?.pet || ""); shownGear = next;
+  const vis = meDoll.root.visible; dropDoll(meDoll); meDoll = makeChar(myAv, shownGear); meDoll.root.visible = vis; scene.add(meDoll.root);
+  if (petChanged) { dropDoll(dog.doll); dog.doll = makePet(petOfSku(shownGear?.pet) ?? "doodle"); scene.add(dog.doll.root); }
 }
-const shopUi = createShopUi({ showToast, requireLogin, showCuts, setGear: setMyGear, onOpen: () => { if (locked()) document.exitPointerLock(); gifts.hidden = true; }, onClose: () => syncCursor() });
+let gearTryTimer = 0;
+function setMyGear(g: unknown) { myGear = readGear(g); clearTimeout(gearTryTimer); showGear(myGear); }
+function tryGear(slot: string, sku: string) { clearTimeout(gearTryTimer); showGear(readGear({ ...(myGear || {}), [slot]: sku })); gearTryTimer = window.setTimeout(() => showGear(myGear), 8000); }
+// 컷이 모자랄 때: 하루들의 네컷만화 만들기 화면을 새 탭으로 열고(연동한 크루는 대개 로그인돼 있다. 아니면 하루들이 알아서 로그인 · 체험으로 보낸다), 돌아오면(창에 다시 초점) 바로 정산해서 방금 올린 네컷만화의 컷을 받는다
+function openHarudle() { if (locked()) document.exitPointerLock(); window.open("https://www.harudle.com/diary-write", "_blank", "noopener"); showToast("네컷만화 만들기를 새 탭으로 열었어요", "네컷만화를 피드에 올리고 돌아오면 컷이 들어와요.", 5200); }
+let lastSettleAt = 0;
+function resettle() { if (!account.user || Date.now() - lastSettleAt < 20_000) return; lastSettleAt = Date.now(); void loadWallet(300).then(() => shopUi.load()); }
+addEventListener("focus", () => { if (shopUi.takeWentOut()) { lastSettleAt = 0; resettle(); } else if (Date.now() - lastSettleAt > 10 * 60_000) resettle(); });   // 오래 떠 있다 돌아와도 한 번
+const shopUi = createShopUi({ showToast, requireLogin, showCuts, setGear: setMyGear, preview: tryGear, openHarudle, onOpen: () => { if (locked()) document.exitPointerLock(); gifts.hidden = true; }, onClose: () => syncCursor() });
 walletChip.onclick = () => { if (shopUi.isAvailable()) shopUi.open(); else showToast(`내 컷 ${cuts.toLocaleString("ko-KR")}컷`, "하루들 피드에 네컷만화를 올린 날마다 하루 한 번 받아요.", 4200); };
 async function loadAccount() {
   const q = new URLSearchParams(location.search), result = q.get("login");
@@ -3035,7 +3044,7 @@ async function loadAccount() {
     if (r.ok) { const d = await r.json(); account.enabled = !!d.enabled; account.user = d.loggedIn && d.user ? d.user : null; }
   } catch { }
   applyAccount();
-  if (account.user) { void loadCharacter(); void loadWallet(result ? 5400 : 1500).then(() => shopUi.load()); } else void shopUi.load();   // 게스트도 상점은 구경한다
+  if (account.user) { void loadCharacter(); lastSettleAt = Date.now(); void loadWallet(result ? 5400 : 1500).then(() => shopUi.load()); } else void shopUi.load();   // 게스트도 상점은 구경한다
   if (result === "ok" && account.user) setTimeout(() => showToast("하루들과 연동했어요", `${account.user.nickname}(으)로 들어왔어요.`, 4200), 600);
   else if (result) setTimeout(() => showToast("하루들과 연동하지 못했어요", "다시 시도해 주세요. 하루들 앱 안에서 열었다면 브라우저에서 열어 주세요.", 5200), 600);
 }

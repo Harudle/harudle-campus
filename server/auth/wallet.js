@@ -8,7 +8,7 @@
 //   CAMPUS_WALLET=on 이고 로그인 연동이 켜져 있을 때만 동작한다. 꺼져 있으면 /api/me/wallet은 404다.
 const WINDOW_MS = 7 * 864e5;      // 최근 7일 안에 올린 것만 본다(오래 안 들어오면 그 전 날짜는 못 받는다)
 const MAX_PAGES = 8;              // 50개씩 최대 400개
-const SCAN_TTL_MS = 60_000;       // 하루들 피드는 1분에 한 번만 다시 읽는다
+const SCAN_TTL_MS = 20_000;       // 하루들 피드는 20초에 한 번만 다시 읽는다(올리고 돌아오면 금방 받게)
 const SETTLE_GAP_MS = 15_000;     // 한 사람의 정산 요청 간격
 const FUTURE_SKEW_MS = 5 * 60_000;
 const KST_MS = 9 * 3600e3;
