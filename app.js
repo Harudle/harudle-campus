@@ -12,7 +12,7 @@ import { extname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import { createWeatherService } from "./weather.js";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomInt } from "node:crypto";
 import { roomKeyAt } from "./dist-check/world.mjs";
 import { createMediaService, mediaArea, canShareInRoom } from "./server/media/index.js";
 import { createSwitchCoordinator } from "./server/media/switch-coordinator.js";
@@ -22,6 +22,7 @@ import { createMediaAdmission, mediaClientAddress } from "./server/media/admissi
 import { createAuth } from "./server/auth/index.js";
 import { createStartrack } from "./server/startrack.js";
 import { canControlStartrack } from "./src/startrack/shared.mjs";
+import { CHAT_CMDS, rollText, pickText } from "./src/chat/shared.mjs";
 
 const PORT = Number(process.env.PORT || 80);
 const BIND_HOST = process.env.CAMPUS_BIND_HOST || undefined;
@@ -203,7 +204,7 @@ function sanitize(p) {
   return {
     f: [11, 12, 13, 14].includes(p.f) ? p.f : 11, x: num(p.x, 0, 56), y: num(p.y, 0, 40), u: num(p.u, 0, 2), h: num(p.h, -7, 7),
     m: p.m ? 1 : 0, r: p.r ? 1 : 0, look: Math.floor(num(p.look, 0, 99)), jc: Math.floor(num(p.jc, 0, 1e9)), ac: Math.floor(num(p.ac, 0, 1e9)),
-    br: p.br ? 1 : 0, bc: typeof p.bc === "string" && /^#[0-9a-f]{6}$/i.test(p.bc) ? p.bc : null, l: p.l ? 1 : 0, ly: num(p.ly, -7, 7), st: p.st ? 1 : 0, av: typeof p.av === "string" && /^[0-9a-z]{7}([0-9A-F]{6}){6}[0-9a-z]?$/.test(p.av) ? p.av : null, an: ["draw", "wave", "heart", "laptop", "coffee", "dance", "gun"].includes(p.an) ? p.an : null, lp: p.lp ? 1 : 0, gn: p.gn ? 1 : 0, fk: p.fk ? 1 : 0, hc: Math.floor(num(p.hc, 0, 1e9)), hd: num(p.hd, -50, 50), dn: p.dn ? 1 : 0, fc: Math.floor(num(p.fc, 0, 1e9)), fh: num(p.fh, -50, 50), as: Math.floor(num(p.as, 0, 1e7)), rm: roomKeyAt([11, 12, 13, 14].includes(p.f) ? p.f : 11, num(p.x, 0, 56), num(p.y, 0, 40)),
+    br: p.br ? 1 : 0, bc: typeof p.bc === "string" && /^#[0-9a-f]{6}$/i.test(p.bc) ? p.bc : null, l: p.l ? 1 : 0, ly: num(p.ly, -7, 7), st: p.st ? 1 : 0, av: typeof p.av === "string" && /^[0-9a-z]{7}([0-9A-F]{6}){6}[0-9a-z]?$/.test(p.av) ? p.av : null, an: ["draw", "wave", "heart", "laptop", "coffee", "dance", "gun"].includes(p.an) ? p.an : null, lp: p.lp ? 1 : 0, gn: p.gn ? 1 : 0, fk: p.fk ? 1 : 0, hc: Math.floor(num(p.hc, 0, 1e9)), hd: num(p.hd, -50, 50), dn: Math.floor(num(p.dn, 0, 10)), fc: Math.floor(num(p.fc, 0, 1e9)), fh: num(p.fh, -50, 50), as: Math.floor(num(p.as, 0, 1e7)), vc: [0, 1, 2].includes(p.vc) ? p.vc : 0, rm: roomKeyAt([11, 12, 13, 14].includes(p.f) ? p.f : 11, num(p.x, 0, 56), num(p.y, 0, 40)),
   };
 }
 /* ───────── 하루들 부스 공유 이젤: 획(stroke)을 모아 두고 모두에게 나눈다 ─────────
@@ -254,8 +255,10 @@ const dmKey = dmKeyOf;
 function chatMessage(pid, m) {
   const me = peers.get(pid); if (!me || !me.uid) return;
   const now = Date.now(); me.chatT = (me.chatT || []).filter((x) => now - x < 5000); if (me.chatT.length >= 6) return void me.ws.send(JSON.stringify({ t: "chat", k: "sys", text: "조금 천천히 보내 주세요" })); me.chatT.push(now);
-  const text = clean(m.text, 200).trim(); if (!text) return;
-  const p = me.presence || { f: 11, x: 0, y: 0 }, msg = { id: (++chatSeq).toString(36), k: m.k, text, at: now, from: { u: me.uid, peer: pid, name: me.name, f: p.f } };
+  // 채팅 명령어: me(행동)는 글 그대로, 주사위 · 뽑기는 보낸 글을 범위 · 후보로만 쓰고 결과는 서버가 굴린다
+  const cmd = CHAT_CMDS.includes(m.cmd) ? m.cmd : null, raw = clean(m.text, 200).trim();
+  const text = cmd === "roll" ? rollText(raw, randomInt) : cmd === "pick" ? pickText(raw, randomInt) : raw; if (!text) return;
+  const p = me.presence || { f: 11, x: 0, y: 0 }, msg = { id: (++chatSeq).toString(36), k: m.k, text, at: now, from: { u: me.uid, peer: pid, name: me.name, f: p.f }, ...(cmd ? { cmd } : {}) };
   const sendTo = (pp) => { if (pp.ws.readyState === 1) pp.ws.send(JSON.stringify({ t: "chat", ...msg })); };
   if (m.k === "all") { chatAll.push(msg); if (chatAll.length > 200) chatAll.splice(0, chatAll.length - 200); chatDirty = true; for (const pp of peers.values()) sendTo(pp); }
   else if (m.k === "near") {

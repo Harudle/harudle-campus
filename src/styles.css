@@ -24,6 +24,11 @@ body{background:var(--ground);color:var(--ink);font-family:var(--body);overflow:
 .name-tag{font-family:var(--hand);font-weight:700;font-size:14px;background:rgba(255,255,255,.92);border-radius:8px;padding:0 6px}
 .name-tag.me{background:var(--brand);color:var(--brand-strong);border:1.5px solid var(--ink)}
 .name-tag.peer{background:#E6F3EB}
+/* 상대 이름표 왼쪽 바깥에 붙는 음성 상태 배지(presence vc): 0 음성 연결 안 함 · 1 마이크 꺼짐 · 2 마이크 켜짐 */
+.name-tag[data-vc]::before{content:"";position:absolute;right:calc(100% + 4px);top:50%;transform:translateY(-50%);width:24px;height:24px;border-radius:50%;background:#fff center/15px no-repeat;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.name-tag[data-vc="0"]::before{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23D33A4A' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M21 14h-1.343'/%3E%3Cpath d='M9.128 3.47A9 9 0 0 1 21 12v3.343'/%3E%3Cpath d='m2 2 20 20'/%3E%3Cpath d='M20.414 20.414A2 2 0 0 1 19 21h-1a2 2 0 0 1-2-2v-3'/%3E%3Cpath d='M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 2.636-6.364'/%3E%3C/svg%3E")}
+.name-tag[data-vc="1"]::before{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23D33A4A' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 19v3'/%3E%3Cpath d='M15 9.34V5a3 3 0 0 0-5.68-1.33'/%3E%3Cpath d='M16.95 16.95A7 7 0 0 1 5 12v-2'/%3E%3Cpath d='M18.89 13.23A7.12 7.12 0 0 0 19 12v-2'/%3E%3Cpath d='m2 2 20 20'/%3E%3Cpath d='M9 9v3a3 3 0 0 0 5.12 2.12'/%3E%3C/svg%3E")}
+.name-tag[data-vc="2"]::before{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231F9D55' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 19v3'/%3E%3Cpath d='M19 10v2a7 7 0 0 1-14 0v-2'/%3E%3Crect x='9' y='2' width='6' height='13' rx='3'/%3E%3C/svg%3E")}
 .bub{font-family:var(--hand);font-size:20px;background:var(--paper);border:2px solid var(--ink);border-radius:16px 16px 16px 5px;padding:4px 13px;max-width:280px;overflow:hidden;text-overflow:ellipsis}
 .bub.hint{background:var(--brand-weak);font-size:15px;padding:2px 10px;border-radius:14px 14px 14px 4px}
 .zzz{font-family:var(--hand);font-weight:700;color:#fff;-webkit-text-stroke:1.5px var(--ink);paint-order:stroke fill;pointer-events:none}
@@ -116,6 +121,11 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--brand);outline-
 .dbtn .off{display:none}
 #micToggle.muted{color:#E5484D}   /* 음성은 연결됐는데 마이크가 꺼져 있으면 빨간 빗금 */
 #micToggle.muted .off,#micToggle:disabled .off{display:inline}
+/* 말하는 중: 마이크 버튼 둘레에 초록 테두리가 은은하게 번진다(소리가 클수록 조금 더 진하고 넓게) */
+#micToggle::after{content:"";position:absolute;inset:-4px;border:2.5px solid #20B486;border-radius:17px 18px 16px 18px;box-shadow:0 0 10px rgba(32,180,134,.45);opacity:0;transform:scale(.94);transition:opacity .18s,transform .1s;pointer-events:none}
+#micToggle.talking::after{opacity:calc(.55 + var(--lv,0) * .45);transform:scale(calc(1 + var(--lv,0) * .07))}
+#micToggle.talking svg{stroke:#128A63}
+@media (prefers-reduced-motion:reduce){#micToggle::after{transition:none}#micToggle.talking::after{transform:none}}
 @media (max-width:1270px){body:not(.touch) .dbtn{min-width:0;padding:7px}body:not(.touch) .dbtn b{display:none}}   /* 화면이 좁아 채팅 카드 · 사이드와 닿으면 아이콘만(사이드바를 접고 펴도 그대로) */
 #camBtns{right:max(12px,env(safe-area-inset-right,0px));flex-direction:column;top:50%;transform:translateY(-50%)}
 body:not(.touch) #camBtns{display:none}   /* 데스크톱은 V(시점) · Q/E(돌리기) · 마우스로. 버튼은 모바일에만 */
@@ -292,6 +302,12 @@ body.touch.chatting #topRight,body.touch.peopleOpen #topRight{display:none}
 .mtabs button{flex:1;font:inherit;font-size:16px;padding:5px 0;border:0;border-radius:9px;background:none;color:var(--muted);cursor:pointer}
 .mtabs button[aria-selected="true"]{background:var(--brand);color:var(--brand-strong);font-weight:700;box-shadow:0 0 0 1.5px var(--ink)}
 .mview[hidden]{display:none}
+/* 설정 › 음성: 마이크 고르기 · 소리 막대 */
+.mvoice{display:grid;gap:10px}
+.mvoice select{font:inherit;font-size:15px;padding:8px 10px;border:2px solid var(--ink);border-radius:10px;background:var(--paper);color:var(--ink);width:100%;min-width:0}
+.vmeter{height:14px;border:2px solid var(--ink);border-radius:999px;background:var(--paper-2);overflow:hidden}
+.vmeter i{display:block;height:100%;width:calc(var(--lv,0) * 100%);background:#20B486;border-radius:inherit;transition:width .06s linear}
+.vnote{margin:0;font-size:13px;line-height:1.4;color:var(--muted)}
 .modal .mhint{margin:10px 0 0;font-size:12px;opacity:.65;text-align:center}
 .modal .plabel{display:grid;gap:6px;font-size:14px}
 .modal .plabel input{font:inherit;font-size:16px;padding:8px 10px;border:2px solid var(--ink);border-radius:10px}
@@ -411,6 +427,19 @@ body:not(.touch) #topRight{display:none}   /* 이름은 Esc → 프로필 수정
 #chatLog .mine .who{color:#7B5BD6}
 #chatLog .sys{color:#9A97A8;font-size:12px;text-align:center}
 #chatLog .empty{color:#9A97A8;font-size:12.5px;text-align:center;margin:auto;padding:12px 0}
+/* 채팅 명령어: /me는 이름 옆에 이어 쓴 행동, /주사위 · /뽑기는 서버가 굴린 결과 */
+#chatLog .act .who{display:inline;margin-right:5px}
+#chatLog .act .do{color:#6A4FC0}
+#chatLog .act.me .do{font-style:italic}
+#chatLog .act.roll .do,#chatLog .act.pick .do{font-weight:700}
+/* 입력창 위 명령어 목록("/"를 치면 뜬다) */
+#cmdHints{list-style:none;margin:0;padding:6px;flex:0 1 auto;max-height:min(220px,32vh);overflow:auto;border-top:1px solid rgba(17,17,24,.06);scrollbar-width:thin}
+#cmdHints[hidden]{display:none}
+#cmdHints li{display:flex;align-items:baseline;gap:6px;padding:6px 8px;border-radius:8px;font:500 12.5px var(--pf);color:#6B6880;cursor:pointer}
+#cmdHints li[aria-selected="true"],#cmdHints li:hover{background:rgba(123,91,214,.1)}
+#cmdHints b{font:700 13px var(--pf);color:#1B1A22}
+#cmdHints i{font-style:normal;color:#7B5BD6}
+#cmdHints span{margin-left:auto;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #chat #sayForm{display:flex;flex:0 0 auto;gap:6px;padding:10px 12px 12px;border-top:1px solid rgba(17,17,24,.06)}
 #chat #sayInput{flex:1;min-width:0;height:38px;font:500 13.5px var(--pf);border:1px solid rgba(17,17,24,.12);border-radius:10px;padding:0 12px;background:rgba(255,255,255,.85);outline:none}
 #chat #sayInput:focus{border-color:#7B5BD6;box-shadow:0 0 0 3px rgba(123,91,214,.16)}
@@ -449,6 +478,41 @@ body.sideTucked:not(.touch) #zoneToast{left:50%}
 #sideShow em{font-style:normal;font-weight:800}
 body.sideTucked:not(.touch) #sideShow{display:flex}
 #side.tucked #sideTab{display:none}
+/* 근처 · 채팅 · 음성이 닿는 크루: 목록 맨 위 묶음(초록)과, 사이드바를 접었을 때 · 모바일에서 오른쪽 위에 뜨는 근처 카드 */
+#plistBody .pgrp{padding:10px 8px 4px;font:700 11px var(--pf);color:#8A8799}
+#plistBody .pgrp:hover{background:none}
+#plistBody .pgrp.near{color:#128A63;display:flex;align-items:center;gap:6px}
+#plistBody .pgrp.near::before{content:"";width:7px;height:7px;border-radius:50%;background:#20B486;box-shadow:0 0 0 3px rgba(32,180,134,.16)}
+#plistBody .pgrp b{font-weight:800}
+#plistBody li.near{background:rgba(32,180,134,.07)}
+#plistBody li.near .av{box-shadow:0 0 0 2px #fff,0 0 0 4px rgba(32,180,134,.55)}
+/* 음성 상태: 음성에 들어온 크루만 헤드셋 · 마이크. 켜짐 초록 · 마이크 꺼짐 빨간 빗금(연결 안 한 크루는 아이콘 없음) */
+.vbadge{display:inline-flex;align-items:center;gap:1px;flex:0 0 auto}
+.vbadge .vi{width:15px;height:15px;fill:none;stroke:#BDBAC8;stroke-width:2.1;stroke-linecap:round;stroke-linejoin:round}
+.vbadge .vi.on{stroke:#20B486}
+.vbadge .vi.mute{stroke:#E5484D}
+/* 말하는 크루: 얼굴 둘레가 초록으로 숨 쉬듯 번지고 이름도 초록(내 마이크 버튼과 같은 빛) */
+#nearList li.talking,#plistBody li.near.talking{background:rgba(32,180,134,.13)}
+#nearList li.talking .av,#plistBody li.near.talking .av{animation:talkGlow 1.1s ease-in-out infinite;box-shadow:0 0 0 2px #fff,0 0 0 4px #20B486,0 0 10px 3px rgba(32,180,134,.4)}
+#nearList li.talking .nm,#plistBody li.near.talking .nm{color:#128A63;font-weight:700}
+@keyframes talkGlow{50%{box-shadow:0 0 0 2px #fff,0 0 0 4.5px #20B486,0 0 16px 6px rgba(32,180,134,.3)}}
+@media (prefers-reduced-motion:reduce){#nearList li.talking .av,#plistBody li.near.talking .av{animation:none}}
+#nearCard{position:fixed;z-index:6;top:calc(56px + env(safe-area-inset-top,0px));right:12px;width:190px;padding:8px 6px 6px;border:1px solid rgba(17,17,24,.08);border-radius:14px;background:rgba(255,255,255,.88);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);box-shadow:0 6px 18px rgba(40,24,90,.12);font-family:"Pretendard","Apple SD Gothic Neo",sans-serif;color:#1B1A22;cursor:pointer;display:none}
+body.sideTucked:not(.touch) #nearCard:not([hidden]),body.touch #nearCard:not([hidden]){display:block}
+body.touch.peopleOpen #nearCard,body.touch.chatting #nearCard{display:none!important}
+body.startrack-screen-visible #nearCard{z-index:3}
+#nearCard .nhead{margin:0 0 4px;padding:0 6px;display:flex;flex-wrap:wrap;align-items:center;gap:2px 6px;font:700 12px "Pretendard","Apple SD Gothic Neo",sans-serif}
+#nearCard .nhead .dot{width:7px;height:7px;border-radius:50%;background:#20B486;box-shadow:0 0 0 3px rgba(32,180,134,.16)}
+#nearCard .nhead em{font-style:normal;font-weight:800;color:#128A63}
+#nearCard .nhead span{flex-basis:100%;padding-left:13px;font-weight:500;font-size:11px;color:#8A8799}
+#nearList{list-style:none;margin:0;padding:0;display:grid;gap:1px}
+#nearList li{display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:9px}
+#nearCard:hover #nearList li:not(.more){background:rgba(32,180,134,.06)}
+#nearList .av{flex:0 0 24px;height:24px;border-radius:50%;display:grid;place-items:center;font:700 11px "Pretendard",sans-serif;box-shadow:0 0 0 2px #fff,0 0 0 3.5px rgba(32,180,134,.55)}
+#nearList .nm{flex:1;min-width:0;font:600 12.5px "Pretendard",sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#nearList .more{font:600 11.5px "Pretendard",sans-serif;color:#8A8799;padding-left:38px}
+body.touch #nearCard{width:150px}
+@media (max-width:640px){body.touch #nearCard{top:calc(140px + env(safe-area-inset-top,0px))}}
 
 /* 14층 하루들 월드 창(src/worldFloor.ts): 바탕이 비어 있어 14층이 뒤에 비쳐 보인다 */
 #worldWindow{position:fixed;inset:0;z-index:100}

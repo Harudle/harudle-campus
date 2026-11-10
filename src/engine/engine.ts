@@ -12,6 +12,9 @@ import { loadShowcase, type ShowItem } from "../worldShowcase";
 import { drawFrame as drawEaselFrame, drawPaper as drawEaselPaper } from "../../world/src/scene/gallery/easelDrawing";
 import { createCityscape } from "./cityscape";
 import { mountMediaControls } from "../media/controller";
+import { runCommand, mountCommandHints, type CommandHost } from "../chat/commands";
+import { CHAT_CMDS, rollText, pickText } from "../chat/shared.mjs";
+import { canHear } from "../media/policy.mjs";
 import { mountStartrack } from "../startrack/controller";
 import { canControlStartrack, startrackScreenSize } from "../startrack/shared.mjs";
 import { screenProjection } from "../startrack/screen";
@@ -2317,12 +2320,12 @@ function jump() { // 땅에서 한 번, 공중에서 한 번 더(더블 점프)
   // 14층: 뛰어들 수 있는 그림(꽃게 게임 만화) 앞에서 점프하면 월드처럼 그림 속으로 뛰어들어 게임을 시작한다
   const sl = nearShow(); if (sl && showItem(sl)?.dive && !inWorld) { spawnFx(starTex, meDoll.root.position, 8, .9, .4); setTimeout(() => { if (me.f === 14 && !inWorld) openShow("crab"); }, 380); }
 }
-function useSkill(name) { if (!SKILLS[name]) return;
+function useSkill(name, style?: number) { if (!SKILLS[name]) return;   // style: 채팅 /춤으로 고른 춤 번호(없으면 Z처럼 켜고 끈다)
   if (name === "read") { // 책은 앉거나 빈백에 누워서만. 한 번 더 누르면 덮는다
     if (me.act?.name === "read") { endAct(me); sendPresence(true); return; }
     if (!me.seat && !me.lie) { showToast("앉아서 읽어요", "의자나 빈백 앞에서 F로 앉거나 누운 다음 인벤토리(Tab)에서 책을 골라요.", 2600); return; }
     me.path = null; startAct(me, "read"); me.ac++; me.an = "read"; me.as = me.act.seed; sendPresence(true); showToast("책을 펼쳤어요", "인벤토리에서 책을 다시 고르거나 일어나면 덮어요.", 2000); return;
-  } if (name === "dance" && me.act?.name === "dance") { endAct(me); sendPresence(true); return; } if (me.lie) standUp(); me.path = null; startAct(me, name, name === "dance" ? nextDance() : undefined); if (name === "dance") showToast(DANCES[me.act.style], "Z를 다시 누르거나 움직이면 멈춰요.", 1600); me.ac++; me.an = name; me.as = me.act.seed; sendPresence(true); }
+  } if (name === "dance" && me.act?.name === "dance" && style === undefined) { endAct(me); sendPresence(true); return; } if (me.lie) standUp(); me.path = null; startAct(me, name, name === "dance" ? (style === undefined ? nextDance() : (lastDance = style)) : undefined); if (name === "dance") showToast(DANCES[me.act.style], "Z를 다시 누르거나 움직이면 멈춰요.", 1600); me.ac++; me.an = name; me.as = me.act.seed; sendPresence(true); }
 const dog = { x: ELEV_SPAWN[0] - 1, y: ELEV_SPAWN[1] + 1, moving: false, h: 0, doll: makeDog() }; scene.add(dog.doll.root);
 const peers = new Map();
 const setPos = (d, f, x, y) => d.root.position.set(wx(x), floorY(f) + heightAt(FLOORS[f], x, y), wz(y));
@@ -2369,6 +2372,7 @@ addEventListener("keydown", (e) => {
     return;
   }
   if ((e.target as HTMLElement).tagName === "INPUT") return;
+  if ((e.target as HTMLElement).tagName === "SELECT" && e.code !== "Escape") return;   // 설정 › 음성 마이크 고르기: 화살표는 목록이 받는다
   const c = e.code;
   if (!tour.hidden) { // 안내 중: ←→로 넘기고 Enter·Space·F로 다음, Esc로 건너뛰기
     e.preventDefault();
@@ -2875,8 +2879,37 @@ profileName.addEventListener("keydown", (e) => { if (e.code === "Escape") { e.pr
 const sayInput = $<HTMLInputElement>("sayInput");
 function openChat() { keys.clear(); me.runHold = false; sayInput.focus(); if (locked()) document.exitPointerLock(); }   // 채팅창에 들어가면 커서를 꺼낸다(나오면 closeChat이 다시 고정)
 function closeChat() { sayInput.blur(); lockMouse(); }
-document.getElementById("sayForm").addEventListener("submit", (e) => { e.preventDefault(); const v = sayInput.value.trim(); if (v) { sendChat(v); sayInput.value = ""; } closeChat(); });
-sayInput.addEventListener("keydown", (e) => { if (e.code === "Escape") { e.preventDefault(); sayInput.value = ""; holdLock = true; closeChat(); holdLock = false; menuQuietUntil = performance.now() + 800; relockOnKey = true; } else if (e.code === "Tab") { e.preventDefault(); setChatTab(CHAT_TABS[(CHAT_TABS.indexOf(chatTab) + (e.shiftKey ? 2 : 1)) % 3]); } });   // Esc: 채팅만 닫고 설정창은 안 띄운다(고정은 다음 키에서) · 입력 중 Tab: 근처 → 전체 → 개인
+// "/"로 시작하면 명령어(src/chat/commands.ts). 명령어가 이어 쓸 글(keepChat)을 남기면 채팅창을 닫지 않는다
+let keepChat: string | null = null;
+const cmdHints = mountCommandHints(sayInput);
+const clickIf = (id) => { const b = document.getElementById(id) as HTMLButtonElement | null; if (!b || b.disabled || b.closest("[hidden]")) return false; b.click(); return true; };
+const placeOf = (s) => { let best = null; for (const z of FLOORS[s.f]?.zones || []) if (z.name && inRect(z, s.x, s.y) && (!best || z.w * z.h < best.w * best.h)) best = z; return best?.name || ""; };
+const cmdHost: CommandHost = {
+  say: (text, k = chatTab, to = dmTo, cmd) => { if (k !== chatTab) setChatTab(k); sendChat(text, k, to, cmd); },
+  note: (text) => chatNet({ k: "sys", text }),
+  setTab: (k) => { setChatTab(k); keepChat = ""; },
+  peers: () => { const here = { f: me.f, x: me.x, y: me.y, rm: roomKeyAt(me.f, me.x, me.y) }; return peerList.filter((p) => p.presence && FLOORS[p.presence.f]).map((p) => ({ id: p.peer, u: p.u, name: p.name || "크루", f: p.presence.f, place: placeOf(p.presence), near: canHear(here, p.presence) })); },
+  skill: (name) => useSkill(name),
+  item: (id) => useItem(id),
+  dance: (style) => useSkill("dance", style),
+  dances: DANCES,
+  firework: () => fireFirework(),
+  floor: (f) => (f === me.f ? chatNet({ k: "sys", text: `이미 ${f}F예요` }) : goFloor(f, ELEV_SPAWN)),
+  follow: (id) => startFollow(id),
+  stopFollow: () => (me.follow ? stopFollow() : chatNet({ k: "sys", text: "따라가는 중이 아니에요" })),
+  dm: (u, name) => { dmTo = u; dmToName = name; setChatTab("dm"); keepChat = ""; },
+  voice: () => clickIf("voiceToggle"),
+  mic: () => clickIf("micToggle"),
+  open: (w) => { if (w === "profile") openProfile(); else if (w === "look") openAvPanel(); else if (w === "inv") { if (inv.hidden) toggleInv(); } else if (w === "tour") openTour(); else openMenu(w === "menu" ? "main" : w); },
+  prefill: (text) => { keepChat = text; },
+};
+document.getElementById("sayForm").addEventListener("submit", (e) => {
+  e.preventDefault(); const v = sayInput.value.trim(); cmdHints.hide();
+  if (v) { sayInput.value = ""; if (!runCommand(v, cmdHost)) sendChat(v); }
+  if (keepChat !== null) { sayInput.value = keepChat; keepChat = null; cmdHints.update(); return; }
+  closeChat();
+});
+sayInput.addEventListener("keydown", (e) => { if (cmdHints.key(e)) return; if (e.code === "Escape") { e.preventDefault(); sayInput.value = ""; holdLock = true; closeChat(); holdLock = false; menuQuietUntil = performance.now() + 800; relockOnKey = true; } else if (e.code === "Tab") { e.preventDefault(); setChatTab(CHAT_TABS[(CHAT_TABS.indexOf(chatTab) + (e.shiftKey ? 2 : 1)) % 3]); } });   // Esc: 채팅만 닫고 설정창은 안 띄운다(고정은 다음 키에서) · 입력 중 Tab: 근처 → 전체 → 개인
 let curZone = null, toastTimer = 0; const toast = document.getElementById("zoneToast");
 function showToast(h, p, ms = 3800) { toast.querySelector("h2").textContent = h; toast.querySelector("p").textContent = p; toast.style.opacity = "1"; clearTimeout(toastTimer); toastTimer = window.setTimeout(() => (toast.style.opacity = "0"), ms); }
 function checkZone() {
@@ -2913,7 +2946,7 @@ let requestMeeting: (operation: string, data?: Record<string, unknown>) => Promi
 let acknowledgeMediaSwitch: (revision: number) => void = () => {};
 let notifyMediaLeft: () => void = () => {};
 let notifyDailyReady: () => void = () => {};
-const media = mountMediaControls({ requestJoin: (area) => requestMediaJoin(area), requestRenew: () => requestMediaRenew(), requestCloudflare: (operation, data) => requestCloudflareMedia(operation, data), requestMeeting: (operation, data) => requestMeeting(operation, data), notifyDailyReady: () => notifyDailyReady(), notifyLeft: () => notifyMediaLeft(), acknowledgeSwitch: (revision) => acknowledgeMediaSwitch(revision), meetingChanged: () => renderChat() });
+const media = mountMediaControls({ speakingChanged: (peers) => { talkingPeers = peers; renderPlist(); }, requestJoin: (area) => requestMediaJoin(area), requestRenew: () => requestMediaRenew(), requestCloudflare: (operation, data) => requestCloudflareMedia(operation, data), requestMeeting: (operation, data) => requestMeeting(operation, data), notifyDailyReady: () => notifyDailyReady(), notifyLeft: () => notifyMediaLeft(), acknowledgeSwitch: (revision) => acknowledgeMediaSwitch(revision), meetingChanged: () => renderChat(), voiceChanged: (v) => { myVoice = v; queueMicrotask(() => sendPresence(true)); } });
 media.setAvailable(STANDALONE);
 const startrack = mountStartrack((message) => { if (!netUp) return false; sendPresence(true); netSend(message); return true; }, () => screenProjection(camera));
 function updateMediaWorld() { const x = Math.round(me.x * 100) / 100, y = Math.round(me.y * 100) / 100; const position = { f: me.f, x, y, rm: roomKeyAt(me.f, x, y) }; media.updateWorld(position, peerList); startrack.updateWorld(position); }
@@ -2941,12 +2974,12 @@ if (MOCK) { // 걷는 가짜 크루는 집 근처를 천천히 돌아다닌다
   }, 100);
 }
 const online = document.getElementById("online");
-let wasMoving = false;
+let wasMoving = false, myVoice = 0;   // 음성 상태(vc): 0 미연결 · 1 마이크 꺼짐 · 2 마이크 켜짐 → 남들 화면의 내 이름표 아이콘
 // 다른 탭으로 가면 그림이 멈춰 멈춤 신호를 못 보낸다: 숨기 전에 보낸다
 document.addEventListener("visibilitychange", () => { if (document.hidden && me.moving) { me.moving = false; wasMoving = false; sendPresence(true); } });
 function sendPresence(force) {
   if (!room) return; const now = performance.now(); if (!force && now - lastSent < 90) return; lastSent = now;
-  room.presence({ f: me.f, x: Math.round(me.x * 100) / 100, y: Math.round(me.y * 100) / 100, u: Math.round(me.up * 100) / 100, h: Math.round(me.h * 100) / 100, lp: me.act?.name === "laptop" ? 1 : 0, rd: me.act?.name === "read" ? 1 : 0, gn: me.act?.name === "gun" ? 1 : 0, br: me.brush ? 1 : 0, bc: ezPen.c, fk: me.fk, hc: me.hc, hd: Math.round(me.hd * 100) / 100, fc: me.fc, fh: Math.round(me.fh * 100) / 100, dn: me.act?.name === "dance" ? me.act.style + 1 : 0, m: me.moving ? 1 : 0, r: running() ? 1 : 0, l: me.lie ? 1 : 0, st: me.seat ? 1 : 0, ly: me.lie ? Math.round(me.lie.yaw * 100) / 100 : 0, jc: me.jc, ac: me.ac, an: me.an, as: me.as, look: 0, av: avEncode(myAv), rm: roomKey() }).catch(() => { });
+  room.presence({ f: me.f, x: Math.round(me.x * 100) / 100, y: Math.round(me.y * 100) / 100, u: Math.round(me.up * 100) / 100, h: Math.round(me.h * 100) / 100, lp: me.act?.name === "laptop" ? 1 : 0, rd: me.act?.name === "read" ? 1 : 0, gn: me.act?.name === "gun" ? 1 : 0, br: me.brush ? 1 : 0, bc: ezPen.c, fk: me.fk, hc: me.hc, hd: Math.round(me.hd * 100) / 100, fc: me.fc, fh: Math.round(me.fh * 100) / 100, dn: me.act?.name === "dance" ? me.act.style + 1 : 0, m: me.moving ? 1 : 0, r: running() ? 1 : 0, l: me.lie ? 1 : 0, st: me.seat ? 1 : 0, ly: me.lie ? Math.round(me.lie.yaw * 100) / 100 : 0, jc: me.jc, ac: me.ac, an: me.an, as: me.as, look: 0, av: avEncode(myAv), rm: roomKey(), vc: myVoice }).catch(() => { });
   updateMediaWorld();
 }
 // EC2에서는 직접 만든 WebSocket 서버가 room 역할을 한다
@@ -3091,6 +3124,8 @@ function syncPeers(dt, t) {
     const walking = (v.walking = !!s.m && t - (v.movedAt ?? -9) < .5);
     holdBrush(v, !!s.br && vis, typeof s.bc === "string" && /^#[0-9a-f]{6}$/i.test(s.bc) ? s.bc : undefined); applyWobble(v); v.doll.update(dt, t, walking, typeof s.h === "number" ? s.h : null, 0, false, tickAct(v, dt), v.jz > .01, walking && !!s.r);
     v.tag.textContent = p.name || (p.by && names[p.by]) || "크루";
+    const vc = s.vc === 0 || s.vc === 1 || s.vc === 2 ? String(s.vc) : null;   // 이름표 앞 음성 아이콘(예전 버전이라 안 보내면 없음)
+    if ((v.tag.dataset.vc ?? null) !== vc) { if (vc) v.tag.dataset.vc = vc; else delete v.tag.dataset.vc; v.tag.title = vc ? ["음성 연결 안 함", "마이크 꺼짐", "마이크 켜짐"][+vc] : ""; }
     const rp = v.doll.root.position;
     if (vis) project(v.tag, rp.x, rp.y - .05, rp.z, true); else v.tag.style.display = "none";
     const say = v.chatSay && Date.now() - v.chatAt < 6000 ? v.chatSay : "";   // 받은 근처·전체 채팅만 말풍선으로
@@ -3125,11 +3160,14 @@ function chatNet(m) {
   if (!mine && m.k === "dm" && !dmTo) { dmTo = m.from.u; dmToName = m.from.name; }
   renderChat();
 }
-function sendChat(text) {
-  if (chatTab === "dm" && !dmTo) { chatLogs.dm.push({ k: "sys", text: "받는 사람을 먼저 골라 주세요", at: Date.now() }); renderChat(); return; }
-  if (chatTab !== "dm") { me.say = text.slice(0, 40); me.sayAt = Date.now(); }   // 내 말풍선
-  netSend({ t: "chat", k: chatTab, text, to: chatTab === "dm" ? dmTo : undefined });
-  if (!netUp) chatNet({ id: "local" + Date.now(), k: chatTab, text, at: Date.now(), to: dmTo, from: { u: selfU(), name: myNameNow() || "나", f: me.f } });   // 서버 없이 볼 때
+// k · to: 명령어(/전체 · /귓)는 지금 탭이 아닌 곳으로도 보낸다. cmd: me(행동) · roll(주사위) · pick(뽑기) — 주사위 · 뽑기는 서버가 굴린다
+function sendChat(text, k = chatTab, to = dmTo, cmd?: string) {
+  if (k === "dm" && !to) { chatLogs.dm.push({ k: "sys", text: "받는 사람을 먼저 골라 주세요", at: Date.now() }); renderChat(); return; }
+  const roll = cmd === "roll" ? rollText : cmd === "pick" ? pickText : null, local = roll?.(text, (n) => Math.floor(Math.random() * n));
+  if (roll && !local) { chatNet({ k: "sys", text: cmd === "roll" ? "2~1000 사이 수를 써 주세요 (예: /주사위 20)" : "고를 것을 두 개 이상 써 주세요 (예: /뽑기 짜장 짬뽕)" }); return; }
+  if (k !== "dm" && !roll) { me.say = text.slice(0, 40); me.sayAt = Date.now(); }   // 내 말풍선
+  netSend({ t: "chat", k, text, to: k === "dm" ? to : undefined, cmd });
+  if (!netUp) chatNet({ id: "local" + Date.now(), k, text: local || text, cmd, at: Date.now(), to, from: { u: selfU(), name: myNameNow() || "나", f: me.f } });   // 서버 없이 볼 때
 }
 function setChatTab(t) { chatTab = t; unread[t] = 0; renderChat(); }
 function openDm(u, name) { dmTo = u; dmToName = name || "크루"; setChatTab("dm"); openChat(); }
@@ -3147,10 +3185,10 @@ function renderChat() {
     if (sel.innerHTML !== html2) sel.innerHTML = html2;
   }
   const rows = chatTab === "dm" ? chatLogs.dm.filter((m) => m.k === "sys" || (dmTo && (m.from?.u === dmTo && m.to === uid || m.from?.u === uid && m.to === dmTo))) : chatTab === "near" ? chatLogs.near.filter((m) => (m.scope || null) === media.meetingScope()) : chatLogs[chatTab];
-  const html = rows.length ? rows.map((m) => m.k === "sys" ? `<li class="sys">${esc(m.text)}</li>` : `<li class="${m.from?.u === uid ? "mine" : ""}"><span class="who" data-u="${esc(m.from?.u || "")}" data-n="${esc(m.from?.name || "")}">${esc(m.from?.name || "크루")}</span>${esc(m.text)}<span class="meta">${hhmm(m.at)}${m.k !== "dm" && m.from?.f ? ` · ${m.from.f}F` : ""}</span></li>`).join("")
+  const html = rows.length ? rows.map((m) => m.k === "sys" ? `<li class="sys">${esc(m.text)}</li>` : `<li class="${m.from?.u === uid ? "mine" : ""}${CHAT_CMDS.includes(m.cmd) ? ` act ${m.cmd}` : ""}"><span class="who" data-u="${esc(m.from?.u || "")}" data-n="${esc(m.from?.name || "")}">${esc(m.from?.name || "크루")}</span>${CHAT_CMDS.includes(m.cmd) ? `<span class="do">${esc(m.text)}</span>` : esc(m.text)}<span class="meta">${hhmm(m.at)}${m.k !== "dm" && m.from?.f ? ` · ${m.from.f}F` : ""}</span></li>`).join("")
     : `<li class="empty">${chatTab === "near" ? (media.meetingScope() ? "같은 회의 사람에게만 보여요" : media.meetingRequired() ? "회의를 선택하지 않은 이 방 사람에게 보여요" : roomKey() ? "이 방 사람끼리만 보여요" : canControlStartrack({ f: me.f, x: me.x, y: me.y, rm: roomKey() }) ? "스타트랙의 모든 객석에 보여요" : "6칸 안에 있는 크루에게 보여요") : chatTab === "all" ? "캠퍼스의 모두에게 보여요" : dmTo ? `${esc(dmToName)}님과의 대화예요` : "받는 사람을 고르거나 크루 목록에서 💬를 눌러요"}</li>`;
   const log = $("chatLog"); if (html !== chatKey) { const atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 30; chatKey = html; log.innerHTML = html; if (atEnd || true) log.scrollTop = log.scrollHeight; }
-  sayInput.placeholder = chatTab === "dm" ? (dmTo ? `${dmToName}님에게 · Tab 바꾸기` : "받는 사람을 골라요") : `${CHAT_LABEL[chatTab]}${chatTab === "near" && roomKey() ? "(이 방)" : ""}에 말하기 · Tab 바꾸기`;
+  sayInput.placeholder = chatTab === "dm" ? (dmTo ? `${dmToName}님에게` : "받는 사람을 골라요") : `${CHAT_LABEL[chatTab]}${chatTab === "near" && roomKey() ? "(이 방)" : ""}에 말하기 · / 명령어`;
 }
 $all<HTMLButtonElement>("#chat .ctabs button").forEach((b2) => (b2.onclick = () => setChatTab(b2.dataset.tab as any)));
 // 오른쪽 사이드: 같이 있는 크루. 손잡이(또는 \ 키)로 오른쪽으로 집어넣고, 접히면 오른쪽 위 인원 버튼으로 다시 편다
@@ -3165,7 +3203,7 @@ tuckSide(sideTucked);
 $("chatDmTo").addEventListener("change", () => { const sel = $<HTMLSelectElement>("chatDmTo"); dmTo = sel.value || null; dmToName = sel.selectedOptions[0]?.textContent || ""; renderChat(); });
 $("chatLog").addEventListener("click", (e) => { const w = (e.target as HTMLElement).closest(".who") as HTMLElement; if (w && w.dataset.u && w.dataset.u !== selfU()) openDm(w.dataset.u, w.dataset.n); });
 setInterval(() => { if (chatTab === "near") renderChat(); }, 1000);   // 방을 드나들면 안내 문구가 바뀐다
-/* ───── 같이 있는 크루 목록: 나 · 같은 층 · 다른 층 순, 이름 옆에 층, 따라가기 ───── */
+/* ───── 같이 있는 크루 목록: 나 · 근처(채팅 · 음성이 닿는 크루) · 같은 층 · 다른 층 순, 이름 옆에 층, 따라가기 ───── */
 const plistBody = document.getElementById("plistBody");
 function esc(v) { return String(v).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch])); }   // 함수 선언: 위쪽 채팅 코드가 먼저 불러도 된다
 const actIcon = (s2) => (s2.br ? "🖌️ 그리는 중" : s2.dn ? "💃 춤추는 중" : s2.lp ? "💻 코딩 중" : s2.rd ? "📖 책 읽는 중" : s2.gn ? "🎉 종이 총" : s2.l ? "💤 쉬는 중" : s2.st ? "🪑 앉아 있음" : s2.m ? "🚶 걷는 중" : "");
@@ -3174,15 +3212,42 @@ let plistKey = "";
 function renderPlist() {
   const q = ($<HTMLInputElement>("plistSearch").value || "").trim().toLowerCase();
   const all = peerList.filter((p) => p.presence && FLOORS[p.presence.f]).map((p) => ({ id: p.peer, name: p.name || "크루", s: p.presence }));
+  // 근처: 근처 채팅 · 음성과 같은 기준(같은 층 6칸 안, 방 안이면 같은 방)
+  const here = { f: me.f, x: me.x, y: me.y, rm: roomKeyAt(me.f, me.x, me.y) }, isNear = (r) => canHear(here, r.s);
   const rows = q ? all.filter((r) => r.name.toLowerCase().includes(q)) : all;
   rows.sort((a, b) => (b.s.f === me.f ? 1 : 0) - (a.s.f === me.f ? 1 : 0) || b.s.f - a.s.f || a.name.localeCompare(b.name, "ko"));
+  const near = rows.filter(isNear), far = rows.filter((r) => !isNear(r));
+  renderNear(all.filter(isNear));
   $("plistTitle").textContent = all.length ? `캠퍼스에 ${all.length + 1}명` : "아직 혼자 둘러보는 중이에요"; $("plistCnt").textContent = $("sideShowCnt").textContent = String(all.length + 1);   // 사이드바를 접어도 오른쪽 위에 접속 인원
   const ini = (n) => esc([...String(n).trim()][0] || "?");
-  const line = (id, name, f, col, icon, mine) => `<li class="${mine ? "mine" : f === me.f ? "same" : ""}"><span class="av" style="background:${col}">${ini(name)}</span><span class="who"><span class="nm">${esc(name)}${mine ? "<em>나</em>" : ""}</span><span class="sub"><span class="fl ${f === me.f ? "here" : ""}">${f}F</span>${icon ? `<span>${icon}</span>` : ""}</span></span>${mine ? "" : `${uidOf(id) ? `<button type="button" class="dm" data-id="${esc(id)}" title="개인 메시지">💬</button>` : ""}<button type="button" class="fw" data-id="${esc(id)}" aria-pressed="${me.follow === id}">${me.follow === id ? "따라가는 중" : "따라가기"}</button>`}</li>`;
+  const line = (id, name, f, col, icon, mine, near = false, vc = null) => `<li class="${mine ? "mine" : near ? `same near${talkingPeers.has(id) ? " talking" : ""}` : f === me.f ? "same" : ""}"><span class="av" style="background:${col}">${ini(name)}</span><span class="who"><span class="nm">${esc(name)}${mine ? "<em>나</em>" : ""}</span><span class="sub"><span class="fl ${f === me.f ? "here" : ""}">${f}F</span>${near ? voiceBadges(vc) : ""}${icon ? `<span>${icon}</span>` : ""}</span></span>${mine ? "" : `${uidOf(id) ? `<button type="button" class="dm" data-id="${esc(id)}" title="개인 메시지">💬</button>` : ""}<button type="button" class="fw" data-id="${esc(id)}" aria-pressed="${me.follow === id}">${me.follow === id ? "따라가는 중" : "따라가기"}</button>`}</li>`;
   const html = line("", myNameNow() || "나", me.f, myAv.headColor || "#B39DDB", actIcon({ br: me.brush, dn: me.act?.name === "dance", lp: me.act?.name === "laptop", rd: me.act?.name === "read", gn: me.act?.name === "gun", l: me.lie, st: me.seat }), true)
-    + (rows.length ? rows.map((r) => line(r.id, r.name, r.s.f, dotColor(r.s.av, r.id), actIcon(r.s), false)).join("") : `<li class="empty">다른 크루가 들어오면 여기에 보여요</li>`);
+    + (near.length ? `<li class="pgrp near">근처 · 채팅 · 음성이 닿는 크루 <b>${near.length}</b></li>` + near.map((r) => line(r.id, r.name, r.s.f, dotColor(r.s.av, r.id), actIcon(r.s), false, true, r.s.vc)).join("") : "")
+    + (far.length ? (near.length ? `<li class="pgrp">다른 크루</li>` : "") + far.map((r) => line(r.id, r.name, r.s.f, dotColor(r.s.av, r.id), actIcon(r.s), false)).join("") : near.length ? "" : `<li class="empty">다른 크루가 들어오면 여기에 보여요</li>`);
   if (html === plistKey) return; plistKey = html; plistBody.innerHTML = html;
 }
+// 크루의 음성 상태(vc): 음성에 들어온 크루만 헤드셋 · 마이크 아이콘 둘(오버워치처럼 연결 안 한 크루는 아무것도 안 그린다). 독 버튼과 같은 모양
+// talkingPeers: 지금 말하는 근처 크루(받은 목소리 크기로 내 브라우저가 잰다) → 근처 카드 · 목록에서 초록빛으로 빛나고 맨 위로
+const VC_TIP = ["", "음성 연결 · 마이크 꺼짐", "음성 연결 · 마이크 켜짐"];
+let talkingPeers = new Set<string>();
+function voiceBadges(vc) {
+  const v = vc === 1 || vc === 2 ? vc : 0;
+  if (!v) return "";
+  return `<span class="vbadge" title="${VC_TIP[v]}" aria-label="${VC_TIP[v]}"><svg class="vi on" viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 15v-3a7.5 7.5 0 0 1 15 0v3"/><rect x="3" y="13.5" width="4.5" height="7" rx="1.8"/><rect x="16.5" y="13.5" width="4.5" height="7" rx="1.8"/></svg>`
+    + `<svg class="vi ${v === 2 ? "on" : "mute"}" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2.5" width="6" height="11.5" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/>${v === 2 ? "" : `<path d="M4 3.5l16 17"/>`}</svg></span>`;
+}
+// 근처 카드: 사이드바를 접었거나 모바일일 때 오른쪽 위에 채팅 · 음성이 닿는 크루를 띄운다(게더처럼). 누르면 크루 목록을 연다
+let nearKey = "";
+function renderNear(list) {
+  const card = $("nearCard"), MAX = TOUCH ? 3 : 5;
+  const talk = (r) => (talkingPeers.has(r.id) ? 1 : 0);
+  list.sort((a, b) => talk(b) - talk(a) || (+b.s.vc || 0) - (+a.s.vc || 0) || a.name.localeCompare(b.name, "ko"));   // 말하는 크루 · 마이크 켠 크루 · 음성 연결한 크루부터
+  const html = list.slice(0, MAX).map((r) => `<li class="${talk(r) ? "talking" : ""}" title="${esc(r.name)}${talk(r) ? " · 말하는 중" : ""}"><span class="av" style="background:${dotColor(r.s.av, r.id)}">${esc([...r.name.trim()][0] || "?")}</span><span class="nm">${esc(r.name)}</span>${voiceBadges(r.s.vc)}</li>`).join("")
+    + (list.length > MAX ? `<li class="more">+${list.length - MAX}명</li>` : "");
+  if (html === nearKey) return; nearKey = html;
+  $("nearCnt").textContent = String(list.length); $("nearList").innerHTML = html; card.hidden = !list.length;
+}
+$("nearCard").addEventListener("click", () => (TOUCH ? peopleOpen(true) : tuckSide(false)));
 $("plistSearch").addEventListener("input", () => renderPlist());
 plistBody.addEventListener("click", (e) => { const dmb = (e.target as HTMLElement).closest("button.dm") as HTMLButtonElement; if (dmb) { const p = peerList.find((q) => q.peer === dmb.dataset.id); if (p?.u) { openDm(p.u, p.name); if (!menu.hidden) closeMenu(); } return; } const b = (e.target as HTMLElement).closest("button.fw") as HTMLButtonElement; if (!b) return; const id = b.dataset.id; if (me.follow === id) stopFollow(); else { startFollow(id); if (!menu.hidden) closeMenu(); } renderPlist(); });   // 설정창에서 눌렀으면 닫고 바로 게임으로
 setInterval(renderPlist, 400);
