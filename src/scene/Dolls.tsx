@@ -3,7 +3,8 @@ import { useRef, useSyncExternalStore } from 'react'
 import { createPortal, useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { Avatar, type AvatarPose } from '../harudle/Avatar'
-import { Doodle, Haru, Harudle, type WalkMotion } from '../harudle/Characters'
+import { Haru, Harudle, type WalkMotion } from '../harudle/Characters'
+import { Pet } from './Pets'
 import { dollStore, type Doll } from '../engine/dolls'
 
 /** 하루들 월드 캐릭터는 키가 약 1.64라서 캠퍼스(사람 키 ≈ 1.12)에 맞춰 줄인다 */
@@ -33,13 +34,13 @@ function DollView({ doll }: { doll: Doll }) {
     <group scale={scale}>
       <group ref={bob}>
         {doll.kind === 'dog' ? (
-          <Doodle motion={motion} />
+          <Pet kind={doll.pet} motion={motion} />
         ) : doll.kind === 'harudle' ? (
           <Harudle motion={motion} />
         ) : doll.kind === 'haru' ? (
           <Haru motion={motion} waving />
         ) : (
-          doll.config && <Avatar config={doll.config} motion={motion} pose={pose} />
+          doll.config && <Avatar config={doll.config} motion={motion} pose={pose} gear={doll.gear} />
         )}
       </group>
     </group>,

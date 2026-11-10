@@ -50,7 +50,7 @@ export function Skin({ color = SKIN, thickness = 1.8 }: { color?: string; thickn
 }
 
 /** 눈과 입. 머리 앞면(+z)에 붙이며 3.6초마다 눈을 깜빡인다. */
-function Face({ radius, smile = true }: { radius: number; smile?: boolean }) {
+export function Face({ radius, smile = true }: { radius: number; smile?: boolean }) {
   const eyes = useRef<THREE.Group>(null)
   useFrame(({ clock }) => {
     eyes.current?.scale.setY(clock.elapsedTime % 3.6 < 0.12 ? 0.15 : 1)
