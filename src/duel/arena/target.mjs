@@ -1,13 +1,23 @@
-// 과녁 사격장(23층): 임시 배치. 북쪽이 과녁이 지나가는 넓은 마당, 남쪽 사대에 두 선수, 그 뒤 관전석. 과녁 길은 과녁 종목을 만들 때 채운다
+// 과녁 사격장(23층): 북쪽 과녁 마당(레일 넷을 과녁이 오간다) · 가운데 사대(선수마다 칸막이로 나뉜 부스) · 남쪽 관전석
+// 종이 총은 위아래로 겨누지 못하고 약 13칸 가면 바닥에 떨어진다. 그래서 과녁 레일은 사대에서 4~12칸 사이에 둔다
 import { arena, ring, tint, N } from "./kit.mjs";
 
-export const TARGET_RANGE = { x: 17, y: 7, w: 22, h: 12 };   // 과녁이 다니는 곳
-export const TARGET_LINE = { x: 17, y: 21, w: 22, h: 4 };    // 사대: 선수가 서는 곳
+export const TARGET_RANGE = { x: 15, y: 9, w: 26, h: 10 };   // 과녁이 다니는 곳(뒷벽과 사대 사이)
+export const TARGET_X = [16, 40];                             // 과녁 가운데가 다니는 가로 범위(칸)
+export const TARGET_ROWS = [10.5, 12.75, 15, 17.25];          // 레일 가운데 줄(북쪽부터). 먼 줄일수록 맞히기 어렵다
+export const TARGET_RAIL = 19;                                 // 사대 앞 낮은 카운터 줄. 이보다 북쪽(과녁 마당)으로는 못 나간다
+// 선수 부스(카운터 줄 포함). 0번 서쪽 · 1번 동쪽, 가운데 칸막이(27~28열)로 나뉜다
+export const TARGET_BOOTHS = [{ x: 15, y: 19, w: 12, h: 4 }, { x: 29, y: 19, w: 12, h: 4 }];
 export const TARGET_ARENA = arena({
   f: 23, game: "target", info: "과녁 사격장",
-  rooms: [ring(16, 6, 24, 20, { wall: 0xE9D8B8 }), ring(16, 26, 24, 5)],   // 마당과 사대는 한 방(난간이 총알을 막으므로). 선수가 마당에 못 들어가게 하는 건 과녁 종목이 정한다
-  zones: [tint(17, 7, 22, 12, "과녁 마당", "#EAF3E2"), tint(17, 21, 22, 4, "사대", "#F6EEDC"), tint(17, 27, 22, 3, "관전석", "#ECEAF4")],
-  furn: [],
-  spawns: [[24.5, 22.5, N], [31.5, 22.5, N]],
-  watch: [[23.5, 28.5, N], [28, 28.5, N], [32.5, 28.5, N]],
+  rooms: [ring(14, 7, 28, 17, { wall: 0xE9D8B8 }), ring(14, 24, 28, 5)],   // 마당과 사대는 한 방(난간이 총알을 막으므로), 관전석은 뒤에 따로
+  zones: [tint(15, 8, 26, 11, "과녁 마당", "#EAF3E2"), tint(15, 20, 12, 3, "1번 사대", "#E3ECFA"), tint(29, 20, 12, 3, "2번 사대", "#FBE6E4"), tint(15, 25, 26, 3, "관전석", "#ECEAF4")],
+  furn: [
+    { kind: "tback", x: 15, y: 8, w: 26, h: 1 },                                         // 뒷벽(과녁판 · 점수판)
+    ...TARGET_ROWS.map((r, i) => ({ kind: "ttrack", x: 15, y: r - .5, w: 26, h: 1, walk: true, n: i })),   // 과녁 레일(밟고 지나감)
+    ...TARGET_BOOTHS.map((b, i) => ({ kind: "tcounter", x: b.x, y: TARGET_RAIL, w: b.w, h: 1, top: .45, seat: i })),   // 낮은 카운터: 총알은 위로 지나간다
+    { kind: "tdiv", x: 27, y: 19, w: 2, h: 4 },                                          // 부스 칸막이
+  ],
+  spawns: [[21, 21.5, N], [35, 21.5, N]],
+  watch: [[20, 26.5, N], [28, 26.5, N], [36, 26.5, N]],
 });

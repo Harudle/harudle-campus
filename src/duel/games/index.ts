@@ -2,5 +2,6 @@
 import type { DuelGame } from "../client";
 import { game as jump } from "./jump";
 import { game as box } from "./box";
+import { game as target } from "./target";
 
-export const GAMES: Record<string, DuelGame> = { jump, box };
+export const GAMES: Record<string, DuelGame> = { jump, target, box };
