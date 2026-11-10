@@ -537,7 +537,7 @@ export function Avatar({ config: look, motion, pose, gear }: AvatarProps) {
     const p = pose?.current
     if (head.current) head.current.visible = !p?.noHead
     const armsUp = !!p && (p.act === 'wave' || p.act === 'heart' || p.act === 'dance' || p.waving || p.air)
-    const busy = p?.act === 'laptop' || p?.act === 'coffee' || p?.act === 'gun' || p?.act === 'read'   // 노트북·커피를 쓰는 동안엔 원래 든 것을 내려놓는다
+    const busy = p?.act === 'laptop' || p?.act === 'coffee' || p?.act === 'gun' || p?.act === 'read' || !!p?.arms   // 노트북·커피를 쓰는 동안엔 원래 든 것을 내려놓는다(대결 팔 자세도: 복싱 글러브)
     // 1인칭(noHead)에선 그림판·옆에 든 소품을 생략한다: 눈앞을 통째로 가린다(특히 앉으면). 팔과 노트북·커피·총은 그대로
     const boardOn = !p?.noHead && (p?.act === 'draw' || (holdingBoard && !armsUp && !busy))
     if (boardSet.current) boardSet.current.visible = boardOn
