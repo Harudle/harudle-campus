@@ -94,7 +94,7 @@ export function createAuth(env = process.env, opts = {}) {
     try {
       const s = await store.getSession(key);
       if (s && !s.revokedAt && s.expiresAt > t) user = s.user;
-    } catch (e) { log.error?.("[auth] session lookup failed:", e.message); return hit?.user || null; }
+    } catch (e) { log.error?.("[auth] session lookup failed:", e.message); cache.delete(key); return null; }
     cache.set(key, { user, until: t + CACHE_MS }); if (cache.size > 5000) cache.clear();
     return user;
   }
