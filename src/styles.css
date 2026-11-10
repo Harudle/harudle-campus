@@ -547,6 +547,7 @@ body.touch .dcBtns kbd{display:none}
 .dhGame:empty{display:none}
 .dhWatch{pointer-events:auto;display:flex;align-items:center;gap:8px;background:#EFE7FB;border:2px solid var(--ink);border-radius:12px;padding:3px 4px 3px 10px;font-size:16px}
 .dhWatch[hidden]{display:none}.dhWatch .btn{font-size:15px;padding:2px 10px}
+.dhStop{background:var(--brand-weak);font-size:14px}   /* 신청한 사람에게만: 경기 끝내기 */
 #duelCount{position:fixed;z-index:16;left:50%;top:38%;transform:translate(-50%,-50%);font-family:var(--hand);font-weight:700;font-size:min(140px,28vw);line-height:1;color:var(--brand);-webkit-text-stroke:5px var(--ink);paint-order:stroke fill;pointer-events:none;text-shadow:4px 6px 0 rgba(17,17,24,.35)}
 #duelCount[hidden]{display:none}
 #duelCount.pop{animation:duelPop .5s ease-out}

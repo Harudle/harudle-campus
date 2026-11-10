@@ -2112,8 +2112,10 @@ function bakeCollision(fl, G) {
   stamp([fl.walls], (x, y) => fl.grid[y * W + x], (i) => { fine[i] = 1; hard[i] = 1; });   // 방 벽 + 벽 묶음에 그리는 기둥·짧은 벽
   for (const o of fl.furn) {
     if (o.kind === "void") { for (let j = o.y * FN; j < (o.y + o.h) * FN; j++) for (let i = o.x * FN; i < (o.x + o.w) * FN; i++) { fine[j * NW + i] = 1; hard[j * NW + i] = 1; } continue; }   // 뚫린 바닥은 통째로 막는다
-    const cells = new Set(); furnCells(fl, o, (x, y) => cells.add(y * W + x)); if (!cells.size && !SHAPE_ONLY.has(o.kind)) continue;
+    const cells = new Set<number>(); furnCells(fl, o, (x, y) => cells.add(y * W + x)); if (!cells.size && !SHAPE_ONLY.has(o.kind)) continue;
     const allow = SHAPE_ONLY.has(o.kind) ? (x, y) => inRect(o, x + .5, y + .5) : (x, y) => cells.has(y * W + x), h = topOf(o);
+    // 대결장 높은 기둥(top을 적은 발판)은 칸을 통째로: 윗면이 몸 높이 띠(COL_HI)보다 높으면 옆면만 찍혀 속이 비고, 가운데로 가면 아래로 빠졌다(낮은 것은 윗면이 찍혀 그대로 둔다)
+    if (o.top != null && h > COL_HI) { for (const c of cells) { const cx = c % W, cy = (c / W) | 0; for (let j = cy * FN; j < (cy + 1) * FN; j++) for (let i = cx * FN; i < (cx + 1) * FN; i++) { fine[j * NW + i] = 1; ftop[j * NW + i] = Math.max(ftop[j * NW + i], h); } } continue; }
     stamp(fl.furnRoots.get(o) || [], allow, (i) => { fine[i] = 1; if (h) ftop[i] = Math.max(ftop[i], h); else hard[i] = 1; });
   }
   for (let i = 0; i < NW * NH; i++) if (hard[i]) ftop[i] = 0;
@@ -2214,7 +2216,7 @@ function showFloors() {
 
 /* ════════════════ 8. 나 · 강아지 · 다른 크루 ════════════════ */
 let duelUi: DuelUi | null = null;   // 1:1 대결(src/duel/client.ts). 아래 cmdHost 앞에서 붙인다
-const duelMove = { lock: false, speed: 1, noFire: false };   // 대결 종목이 정하는 것: 걷기 · 점프 잠금, 걷기 빠르기, 종이 총 막기
+const duelMove = { lock: false, speed: 1, noFire: false, ghost: null as null | { x: number; y: number; w: number; h: number } };   // 대결 종목이 정하는 것: 걷기 · 점프 잠금, 걷기 빠르기, 종이 총 막기. ghost: 관전자가 막힘 없이 다니는 사각형
 const LS = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch { } } };
 
 /* ════════════════ 하루들 부스: 함께 그리는 이젤 · 붓 ════════════════
@@ -3561,7 +3563,7 @@ function step(dt, t) {
   // 13층 스타트랙 뒤 깨진 창: 창 쪽(서쪽)으로 걷거나 뛰어 나가면 건물 밖 허공이다
   if (vx < 0 && me.f === 13 && !me.lie && !me.seat && me.x + vx < 1.4 && openPane(me.y)) { jumpOut(vx / dt, vy / dt); return; }
   // 걷기: 발 높이(올라선 가구 + 점프)에서 갈 수 있는지 본다. 책상·화분 같은 건 점프해서 올라서고, 가장자리를 넘으면 떨어진다
-  const feet = me.up + me.jz, free = (x, y) => (me.lie || me.seat ? fits(floor, x, y) : canStand(floor, x, y, feet));
+  const feet = me.up + me.jz, free = (x, y) => (duelMove.ghost ? inRect(duelMove.ghost, x, y) : me.lie || me.seat ? fits(floor, x, y) : canStand(floor, x, y, feet));   // 관전자는 대결장 안이면 어디든
   // 끼임 방지: 몸이 벽·가구와 겹친 채 시작하면(예전 에스컬레이터 도착 자리) 어떤 방향으로도 못 움직였다 → 가장 가까운 빈 칸으로 옮긴다
   if (!me.lie && !me.seat && !free(me.x, me.y)) { [me.x, me.y] = nearestFree(floor, me.x, me.y); me.path = null; }
   if (vx && free(me.x + vx, me.y)) me.x += vx; if (vy && free(me.x, me.y + vy)) me.y += vy;

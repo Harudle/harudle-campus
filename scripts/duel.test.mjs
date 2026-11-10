@@ -215,3 +215,12 @@ test("받는 사람에게는 초대장만 가고 '대기 중' 상태는 보낸 �
   assert.equal(s.last("pa", "duel:invite-state").state, "pending");
 });
 
+test("신청한 사람만 /종료로 경기를 끝내고, 승패 없이 끝나 전적에 남지 않는다", () => {
+  const s = setup(); const m = startMatch(s); s.advance(DUEL.MOVE + DUEL.COUNTDOWN + 100);
+  s.duel.message("pb", { t: "duel:stop" }); assert.equal(s.last("pb", "duel:error").code, "not_host"); assert.equal(m.phase, "playing");
+  s.duel.message("pc", { t: "duel:stop" }); assert.equal(s.last("pc", "duel:error").code, "no_match");
+  s.duel.message("pa", { t: "duel:stop" }); assert.equal(m.phase, "result");
+  const end = s.last("pb", "duel:end"); assert.equal(end.reason, "stopped"); assert.equal(end.winner, null);
+  assert.equal(s.duel.records.users[UA], undefined, "전적에 남기지 않는다");
+});
+

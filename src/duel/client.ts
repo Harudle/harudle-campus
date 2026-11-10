@@ -74,7 +74,7 @@ export type DuelGame = { id: string; start(ctx: DuelCtx): DuelRun };
 export type DuelHost = {
   THREE: typeof THREE; scene: THREE.Scene; camera: THREE.PerspectiveCamera; touch: boolean
   me: any; elev: [number, number]
-  move: { lock: boolean; speed: number; noFire: boolean }
+  move: { lock: boolean; speed: number; noFire: boolean; ghost: null | { x: number; y: number; w: number; h: number } }
   send(m: any): void; online(): boolean; probeClock(): void
   floorGroup(f: number): THREE.Group; topAt(x: number, y: number): number
   goFloor(f: number, spot: number[], exact?: boolean): void
@@ -104,7 +104,7 @@ export function mountDuel(host: DuelHost) {
 
   /* ───── 화면: 초대장 · 보낸 신청 · 경기 틀 · 3·2·1 · 결과 · 종목 고르기 ───── */
   const inbox = el("div", "duelInbox"); inbox.id = "duelInbox"; inbox.setAttribute("aria-live", "polite");
-  const hud = el("section", "duelHud", `<div class="dhBar"><b class="dhName"></b><span class="dhP"><i class="s0"></i><em>vs</em><i class="s1"></i></span><span class="dhTime"></span></div><div class="dhGame"></div><div class="dhWatch" hidden>👀 관전 중 <button type="button" class="btn ghost">나가기</button></div>`);
+  const hud = el("section", "duelHud", `<div class="dhBar"><b class="dhName"></b><span class="dhP"><i class="s0"></i><em>vs</em><i class="s1"></i></span><span class="dhTime"></span></div><div class="dhGame"></div><div class="dhWatch" hidden>👀 관전 중 <button type="button" class="btn ghost">나가기</button></div><div class="dhWatch dhStop" hidden>신청한 사람은 경기를 끝낼 수 있어요 <button type="button" class="btn ghost">경기 끝내기</button></div>`);
   hud.id = "duelHud"; hud.hidden = true;
   const count = el("div", "duelCount"); count.id = "duelCount"; count.hidden = true; count.setAttribute("aria-live", "assertive");
   const card = el("section", "duelResult"); card.id = "duelResult"; card.hidden = true; card.setAttribute("role", "status");
@@ -113,6 +113,7 @@ export function mountDuel(host: DuelHost) {
   document.body.append(inbox, hud, count, card, pick);
   const gameHud = hud.querySelector<HTMLElement>(".dhGame"), watchBar = hud.querySelector<HTMLElement>(".dhWatch");
   watchBar.querySelector("button").onclick = () => host.send({ t: "duel:watch" });
+  const stopBar = hud.querySelector<HTMLElement>(".dhStop"); stopBar.querySelector("button").onclick = () => stopMatch();
 
   // 초대장: 마우스가 고정돼 있어도 Y · N으로 답한다
   function addInvite(m) {
@@ -194,11 +195,17 @@ export function mountDuel(host: DuelHost) {
     applyLock();
   }
   // 선수는 3·2·1 동안과 결과 동안 제자리. 경기 중 잠금은 종목이 정한다
-  const applyLock = () => { host.move.lock = !!match && match.seat !== null && match.phase !== "playing"; };
+  const applyLock = () => { host.move.lock = !!match && match.seat !== null && match.phase !== "playing"; host.move.ghost = match && match.seat === null ? roam(match.floor) : null; };
+  // 관전자가 막힘 없이 다니는 곳: 대결장 방(난간)들을 모두 감싼 사각형의 안쪽(벽 · 기둥에 끼지 않고 높은 곳은 그 위로 넘어간다)
+  function roam(f: number) {
+    const rs = FLOORS[f]?.rooms || []; if (!rs.length) return null;
+    const x0 = Math.min(...rs.map((r) => r.x)) + 1, y0 = Math.min(...rs.map((r) => r.y)) + 1, x1 = Math.max(...rs.map((r) => r.x + r.w)) - 1, y1 = Math.max(...rs.map((r) => r.y + r.h)) - 1;
+    return { x: x0 + .3, y: y0 + .3, w: x1 - x0 - .6, h: y1 - y0 - .6 };
+  }
   function stopRun() {
     if (run) try { run.stop(); } catch (e) { console.error("[duel] stop", e); }
     run = null; gameHud.replaceChildren(); hooks.fire.length = hooks.bullet.length = hooks.hit.length = 0;
-    host.move.lock = false; host.move.speed = 1; host.move.noFire = false;
+    host.move.lock = false; host.move.speed = 1; host.move.noFire = false; host.move.ghost = null;
     const a = host.actor("me"); if (a?.doll) a.doll.anim.arms = null;
     for (const p of match?.players || []) { const v = host.actor(p.peer); if (v?.doll) v.doll.anim.arms = null; }
   }
@@ -235,11 +242,12 @@ export function mountDuel(host: DuelHost) {
     const g = duelGame(m.game);
     hud.querySelector(".dhName").textContent = `${g.icon} ${g.name}`;
     m.players.forEach((p, i) => { const e = hud.querySelector(`.s${i}`); e.textContent = `${p.name}${m.seat === i ? " (나)" : ""}${p.away ? " · 연결 끊김" : ""}`; e.classList.toggle("me", m.seat === i); });
+    stopBar.hidden = !(m.seat === 0 && (m.phase === "countdown" || m.phase === "playing"));
     watchBar.hidden = m.seat !== null; watchBar.firstChild.textContent = `👀 관전 중${m.watchers > 1 ? ` · ${m.watchers}명` : ""} `;
   }
   function showEnd(e: DuelEnd) {
     end = e; const m = match; if (!m) return;
-    const title = e.seat === null ? "무승부" : m.seat === null ? `${m.players[e.seat].name} 승리` : e.seat === m.seat ? "승리!" : "패배";
+    const title = e.reason === "stopped" ? "경기 끝" : e.seat === null ? "무승부" : m.seat === null ? `${m.players[e.seat].name} 승리` : e.seat === m.seat ? "승리!" : "패배";
     let line = ""; if (run?.result) safe(() => { line = run.result(e) || ""; });
     card.className = `duelResult ${e.seat === null ? "draw" : m.seat === null ? "watch" : e.seat === m.seat ? "win" : "lose"}`;
     card.innerHTML = `<h3>${esc(title)}</h3><p class="drWhy">${esc(DUEL_REASON[e.reason] || e.reason)}${line ? ` · ${esc(line)}` : ""}</p><p class="drBack">곧 원래 자리로 돌아가요</p>`;
@@ -302,6 +310,12 @@ export function mountDuel(host: DuelHost) {
     const best = Object.entries(r.best || {}).filter(([k]) => k.startsWith("jump:")).map(([k, ms]) => `${JUMP_COURSES.find((c) => `jump:${c.id}` === k)?.name || k} ${fmtMs(ms as number)}`);
     return `${r.mine ? "내" : `${r.name}님`} 전적: ${r.w}승 ${r.l}패 ${r.d}무${best.length ? ` · 점프맵 최고 기록 ${best.join(" · ")}` : ""}`;
   }
+  // 신청한 사람(0번 자리)만 경기를 끝낸다. 승패 없이 끝나고 전적에 남기지 않는다
+  function stopMatch() {
+    if (!match || (match.phase !== "countdown" && match.phase !== "playing")) { host.note("진행 중인 경기가 없어요"); return; }
+    if (match.seat !== 0) { host.note(match.seat === null ? "관전 중이에요 · 나가려면 /관전" : "경기는 신청한 사람만 끝낼 수 있어요 · 지고 나가려면 /기권"); return; }
+    host.send({ t: "duel:stop" });
+  }
   function invite(p: CommandPeer, game: string) {
     if (!host.online()) { host.note("서버에 연결된 뒤에 신청할 수 있어요"); return; }
     if (match) { host.note(match.seat === null ? "관전을 그만둔 뒤에 신청해 주세요 (/관전)" : "경기가 끝난 뒤에 신청해 주세요"); return; }
@@ -340,11 +354,11 @@ export function mountDuel(host: DuelHost) {
     rm() { const a = this.ar(); return a ? `duel:${a}` : ""; },
     role: () => (match ? (match.seat === null ? 2 : 1) : 0),
     // 대결장에서는 같은 경기 방(ar) 사람만 보인다
-    hides: (s: any) => s.f === me.f && isArena(me.f) && s.ar !== (match?.ar ?? lastAr),
+    hides: (s: any) => s.f === me.f && isArena(me.f) && (s.ar !== (match?.ar ?? lastAr) || (match?.seat != null && s.dr === 2)),   // 다른 경기 방 · 선수 화면의 관전자
     fired(dir: number, lift: number) { if (hooks.fire.length) { const s = { x: me.x, y: me.y, dir, lift, at: now() }; for (const fn of hooks.fire) safe(() => fn(s)); } },
     bullet(w: any, pos: THREE.Vector3) { if (!hooks.bullet.length) return false; const b = bulletOf(w, pos); let hit = false; for (const fn of hooks.bullet) safe(() => { if (fn(b)) hit = true; }); return hit; },
     bulletHit(w: any, target: any, pos: THREE.Vector3) { if (!hooks.hit.length) return false; const b = bulletOf(w, pos, target); let eat = false; for (const fn of hooks.hit) safe(() => { if (fn(b)) eat = true; }); return eat; },
-    // 채팅 명령어(/대결 · /수락 · /거절 · /관전 · /기권 · /전적)
+    // 채팅 명령어(/대결 · /수락 · /거절 · /관전 · /종료 · /기권 · /전적)
     commands: {
       games: DUEL_GAMES,
       invite(p: CommandPeer, game?: string) { if (!game && !match) openPick(p); else invite(p, game); },
@@ -358,6 +372,7 @@ export function mountDuel(host: DuelHost) {
         if (!iv) { host.note(q ? `${name}님이 보낸 대결 신청이 없어요` : "받은 대결 신청이 없어요"); return; }
         answer(iv.id, ok);
       },
+      stop: () => stopMatch(),
       forfeit() { if (!match || match.seat === null || match.phase === "result") { host.note("진행 중인 경기가 없어요"); return; } host.send({ t: "duel:forfeit" }); },
       records(p: CommandPeer | null) { if (p && !p.u) { host.note(`${p.name}님의 전적은 볼 수 없어요`); return; } host.send({ t: "duel:records", ...(p ? { u: p.u, name: p.name } : {}) }); },
     },
