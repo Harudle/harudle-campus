@@ -2128,7 +2128,7 @@ function ezRedoOne() { const S = ezState(), id = S.redo.pop(), st = id && S.stro
 // 바로가기: harudle.com · 인스타그램. 누르거나(클릭·탭) 앞에서 F → 새 탭
 const linkBoards: THREE.Mesh[] = [];
 function openLink(url) { if (locked()) document.exitPointerLock(); window.open(url, "_blank", "noopener"); showToast("새 탭으로 열었어요", url.replace(/^https:\/\/(www\.)?/, "").replace(/\/$/, ""), 2000);
-  if (url.includes("instagram.com") && !unlocked("airpods")) { LS.set("ww.unlock.airpods", "1"); renderAvPanel(); setTimeout(() => showToast("🎧 에어팟이 풀렸어요!", "캐릭터 외형 수정 › 귀에서 골라 보세요.", 4200), 1200); }   // 하루들 부스 인스타그램 바로가기를 한 번 열면 해금
+  if (url.includes("instagram.com") && !unlocked("airpods")) { LS.set("ww.unlock.airpods", "1"); saveCharacter(); renderAvPanel(); setTimeout(() => showToast("🎧 에어팟이 풀렸어요!", "캐릭터 외형 수정 › 귀에서 골라 보세요.", 4200), 1200); }   // 하루들 부스 인스타그램 바로가기를 한 번 열면 해금
   else if (url.startsWith("https://www.harudle.com") && !unlocked("headset")) setTimeout(() => showToast("네컷만화를 피드에 올려 보세요", "올린 피드 링크를 캐릭터 외형 수정 › 귀 › 🔒 헤드셋에 붙여넣으면 헤드셋이 풀려요.", 5200), 1200);
 }
 // 잠긴 장식(LOCKED_OPTIONS): 이 브라우저에서 풀었는지. 푸는 방법은 장식마다 다르다
@@ -2205,6 +2205,11 @@ function renderGifts() {
       : it.acts.map(([k, l], i) => `<button type="button" class="btn${i ? " ghost" : ""}" data-gift-go="${k}">${l}</button>`).join("");
     return `<li class="${got ? "got" : ""}"><span class="gicon">${GIFT_ICON[it.v]}</span><div><b>${it.name}<em>${got ? "받았어요 ✓" : "🔒 잠김"}</em></b><p>${got ? "캐릭터 외형 수정 › 귀에서 언제든 바꿔 껴요." : it.how}</p><div class="gacts">${acts}</div></div></li>`;
   }).join("");
+  // 아래에 하루들 연동: 받은 아이템을 계정에 남기려면 연동하라고 알려 준다(연동을 못 쓰는 서버면 숨김)
+  const box = document.getElementById("giftLink"), u = account.user;
+  box.hidden = !account.enabled;
+  box.innerHTML = u ? `<b>🔗 하루들 ${esc(u.nickname)}(으)로 연동됨</b><p>꾸민 캐릭터와 받은 아이템이 하루들 계정에 저장되고 있어요.</p>`
+    : `<b>🔗 하루들 연동하기</b><p>${LINK_PERKS}</p><button type="button" class="btn lav" data-gift-go="link">하루들 연동하기</button>`;
 }
 function openGifts() { if (locked()) document.exitPointerLock(); renderGifts(); gifts.hidden = false; $("giftsClose").focus(); }
 function closeGifts() { gifts.hidden = true; syncCursor(); }
@@ -2214,6 +2219,7 @@ gifts.addEventListener("click", (e) => {
   const b = (e.target as HTMLElement).closest("button"); if (!b) return;
   if (b.dataset.giftWear) { setMyAv({ ...myAv, ear: b.dataset.giftWear }); renderGifts(); showToast("귀에 꼈어요", "캐릭터 외형 수정 › 귀에서 언제든 바꿔요.", 2200); }
   else if (b.dataset.giftGo === "site") openLink("https://www.harudle.com/");
+  else if (b.dataset.giftGo === "link") startHarudleLogin();
   else if (b.dataset.giftGo === "insta") { openLink("https://www.instagram.com/harudle.official/"); renderGifts(); }   // 인스타를 열면 바로 풀린다
   else if (b.dataset.giftGo === "paste") { gifts.hidden = true; avUnlock.open = true; openAvPanel(); const inp = document.getElementById("avFeedLink") as HTMLInputElement; inp?.scrollIntoView({ block: "center" }); inp?.focus(); }   // 캐릭터 꾸미기의 헤드셋 칸으로
 });
@@ -2702,7 +2708,8 @@ let tourAt = 0;
 tourDots.innerHTML = TOUR.map(() => "<i></i>").join("");
 function showTourStep(i) {
   tourAt = clamp(i, 0, TOUR.length - 1); const st = TOUR[tourAt];
-  tourStep.innerHTML = `<p class="tcount">${tourAt + 1} / ${TOUR.length}</p>${st.art}<h4 id="tourTitle">${st.title}</h4><p class="tdesc kb-only">${st.kb}</p><p class="tdesc touch-only">${st.touch}</p>`;
+  const linkCard = tourAt === TOUR.length - 1 && account.enabled && !account.user ? `<div class="linkcard"><p>${LINK_PERKS}</p><button type="button" class="btn lav" data-tour-link="1">하루들 연동하기</button></div>` : "";   // 마지막 장: 하루들 연동
+  tourStep.innerHTML = `<p class="tcount">${tourAt + 1} / ${TOUR.length}</p>${st.art}<h4 id="tourTitle">${st.title}</h4><p class="tdesc kb-only">${st.kb}</p><p class="tdesc touch-only">${st.touch}</p>${linkCard}`;
   tourStep.classList.remove("in"); void tourStep.offsetWidth; tourStep.classList.add("in");   // 장이 넘어갈 때 살짝 올라온다
   [...tourDots.children].forEach((d, k) => d.classList.toggle("on", k === tourAt));
   tourPrev.hidden = tourAt === 0; tourNext.textContent = tourAt === TOUR.length - 1 ? "시작하기" : "다음"; tourNext.focus();
@@ -2710,12 +2717,13 @@ function showTourStep(i) {
 function openTour() { tour.hidden = false; if (locked()) document.exitPointerLock(); showTourStep(0); }
 function closeTour() { tour.hidden = true; LS.set("ww.tour", "1"); syncCursor(); }
 tourNext.onclick = () => (tourAt === TOUR.length - 1 ? closeTour() : showTourStep(tourAt + 1));
+tourStep.addEventListener("click", (e) => { if ((e.target as HTMLElement).closest("[data-tour-link]")) { LS.set("ww.tour", "1"); startHarudleLogin(); } });   // 연동하고 돌아오면 안내는 다시 안 뜬다
 tourPrev.onclick = () => showTourStep(tourAt - 1);
 document.getElementById("tourSkip").onclick = closeTour;
 // 걷기만 하고 달려 본 적이 없으면 한 번 알려 준다
 let walkFor = 0, runTipShown = false;
 const actBtn = document.getElementById("act"); actBtn.onclick = interact;
-function setMyAv(c) { myAv = { ...c }; LS.set("ww.avatar", avEncode(myAv)); const vis = meDoll.root.visible; dropDoll(meDoll); meDoll = makeChar(myAv); meDoll.root.visible = vis; scene.add(meDoll.root); sendPresence(true); renderAvPanel(); }
+function setMyAv(c) { myAv = { ...c }; LS.set("ww.avatar", avEncode(myAv)); saveCharacter(); const vis = meDoll.root.visible; dropDoll(meDoll); meDoll = makeChar(myAv); meDoll.root.visible = vis; scene.add(meDoll.root); sendPresence(true); renderAvPanel(); }
 // 캐릭터 꾸미기 (하루들 월드의 AvatarCustomizer와 같은 항목)
 const avPanel = document.getElementById("avPanel"); let avColorPart = "headColor", avCamBack = null;
 // 잠긴 장식도 눌러서 미리보기에서만 껴 볼 수 있다(저장·전송은 안 함). 다른 걸 고르거나 창을 닫으면 원래대로
@@ -2792,11 +2800,41 @@ const loginAsk = $("loginAsk");
 function applyAccount() {
   const btn = $("menuLogin"), line = $("menuAccount"), u = account.user;
   btn.hidden = !account.enabled; btn.textContent = u ? "하루들 연동 끊기" : "하루들 연동하기";
+  btn.classList.toggle("lav", !u); btn.classList.toggle("ghost", !!u);   // 연동하기는 연보라, 끊기는 흰 버튼
   line.hidden = !u; line.textContent = u ? `하루들 ${u.nickname}(으)로 연동됨` : "";
   if (u) { myNameNow = () => u.nickname; myTag.textContent = u.nickname; const nb = $("nameBtn"); nb.textContent = `하루들: ${u.nickname}`; nb.title = "하루들 닉네임으로 보여요"; }
+  if (!tour.hidden && tourAt === TOUR.length - 1) showTourStep(tourAt);   // 연동 여부를 늦게 알았으면 열린 창을 다시 그린다
+  if (!gifts.hidden) renderGifts();
 }
-function startHarudleLogin() { location.href = "/auth/harudle/start"; }
+// 연동하면 무엇이 되는지(첫 안내 마지막 장 · 하루들 부스 선물 창)
+const LINK_PERKS = "연동하면 하루들 닉네임으로 들어오고, 꾸민 캐릭터와 받은 아이템(에어팟 · 헤드셋)이 하루들 계정에 저장돼요. 다른 기기에서 연동해도 그대로 이어져요.";
+// 지금 캐릭터를 같이 넘긴다: 처음 연동이면 서버가 이 모습으로 저장한다(이미 저장된 캐릭터가 있으면 그것을 쓴다)
+function startHarudleLogin() { const ul = UNLOCK_KEYS.filter(unlocked); location.href = `/auth/harudle/start?av=${avEncode(myAv)}${ul.length ? `&ul=${ul.join(",")}` : ""}`; }
+/* 연동한 크루의 캐릭터(외형 · 푼 장식)는 캠퍼스 DB에 있다. 들어오면 그것으로 바꾸고, 바꿀 때마다 다시 저장한다.
+   저장된 게 없으면(연동 때 저장을 못 했거나 이 기능 전에 연동한 크루) 이 브라우저의 캐릭터를 올린다 */
+const UNLOCK_KEYS = Object.values(LOCKED_OPTIONS).flat();
+const charNow = () => JSON.stringify({ av: avEncode(myAv), unlocks: UNLOCK_KEYS.filter(unlocked) });
+let charSynced: string | null = null, charTimer = 0;   // charSynced: 서버에 있는 캐릭터(받기 전에는 null이라 올리지 않는다)
+function saveCharacter(now = false): Promise<void> | undefined {
+  if (!account.user || charSynced === null) return;
+  clearTimeout(charTimer);
+  const push = () => { const body = charNow(); if (body === charSynced) return Promise.resolve(); charSynced = body;
+    return fetch("/api/me/character", { method: "PUT", credentials: "same-origin", keepalive: true, headers: { "content-type": "application/json" }, body }).then((r) => { if (!r.ok) charSynced = ""; }, () => { charSynced = ""; }); };   // 실패하면 다음 변경 때 다시 올린다
+  if (now) return push(); charTimer = window.setTimeout(push, 800);   // 꾸미기 창에서 연달아 고르면 마지막 것만
+}
+addEventListener("pagehide", () => saveCharacter(true));
+async function loadCharacter() {
+  let saved: { av: string; unlocks: string[] } | null;
+  try { const r = await fetch("/api/me/character", { credentials: "same-origin", cache: "no-store" }); if (!r.ok) return; saved = (await r.json()).character; } catch { return; }
+  if (saved) {
+    for (const v of saved.unlocks) if (UNLOCK_KEYS.includes(v)) LS.set(`ww.unlock.${v}`, "1");   // 푼 장식은 합친다(이 브라우저에서 푼 것도 남는다)
+    charSynced = JSON.stringify({ av: saved.av, unlocks: UNLOCK_KEYS.filter((v) => saved.unlocks.includes(v)) });
+    const av = avDecode(saved.av); if (av && saved.av !== avEncode(myAv)) setMyAv(av); else renderAvPanel();
+  } else charSynced = "";
+  saveCharacter(true);   // 저장된 게 없거나 이 브라우저에서 더 푼 장식이 있으면 올린다
+}
 async function harudleLogout() {
+  await saveCharacter(true);   // 방금 꾸민 것을 세션이 끝나기 전에 올린다
   try { const r = await fetch("/auth/logout", { method: "POST", credentials: "same-origin" }); if (!r.ok && r.status !== 204) throw new Error(String(r.status)); location.reload(); }
   catch { showToast("연동을 끊지 못했어요", "잠시 뒤에 다시 시도해 주세요.", 3200); }
 }
@@ -2820,6 +2858,7 @@ async function loadAccount() {
     if (r.ok) { const d = await r.json(); account.enabled = !!d.enabled; account.user = d.loggedIn && d.user ? d.user : null; }
   } catch { }
   applyAccount();
+  if (account.user) void loadCharacter();
   if (result === "ok" && account.user) setTimeout(() => showToast("하루들과 연동했어요", `${account.user.nickname}(으)로 들어왔어요.`, 4200), 600);
   else if (result) setTimeout(() => showToast("하루들과 연동하지 못했어요", "다시 시도해 주세요. 하루들 앱 안에서 열었다면 브라우저에서 열어 주세요.", 5200), 600);
 }
