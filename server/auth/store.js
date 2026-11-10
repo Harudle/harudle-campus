@@ -3,7 +3,7 @@
 //   - 메모리(로컬 확인·시험): CAMPUS_AUTH_STORE=memory. 운영(NODE_ENV=production)에서는 쓰지 않는다
 //     워커가 바뀌면 사라지므로 배포할 때마다 로그아웃된다
 // 세션은 sid 원본이 아니라 SHA-256 해시만 저장한다.
-// 하루들 연결 토큰은 한 번만 쓰도록 jti를 만료 시각까지 기억한다(하루들은 아무것도 저장하지 않는다).
+// 하루들 연결 토큰은 한 번만 쓰도록 jti를 시간 차이 허용까지 포함한 검증 종료 시각까지 기억한다(하루들은 아무것도 저장하지 않는다).
 
 export function createStoreFromEnv(env, { fetch } = {}) {
   if (env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) return createSupabaseStore({ url: env.SUPABASE_URL, key: env.SUPABASE_SERVICE_ROLE_KEY, fetch });
