@@ -1,3 +1,204 @@
+// src/duel/arena/kit.mjs
+var E = Math.PI / 2;
+var Wd = -Math.PI / 2;
+var N = Math.PI;
+var ring = (x, y, w, h, o = {}) => ({ x, y, w, h, name: "", ring: true, wall: 13227758, ...o });
+var tint = (x, y, w, h, name, color, o = {}) => ({ x, y, w, h, name, desc: "", npc: false, tint: color, ...o });
+function arena(def) {
+  return { rooms: [], furn: [], zones: [], watch: [], ...def, starts: def.starts?.length ? def.starts : [...def.watch || [], ...def.spawns || []].map(([x, y]) => [x, y]) };
+}
+
+// src/duel/arena/jump.mjs
+var JUMP_RUN = 7.3;
+var JUMP_BOUNCE = 8;
+var STRIP = 9;
+var X0 = 2;
+var DEFS = [
+  { id: "cloud", name: "\uAD6C\uB984 \uACC4\uB2E8", segs: [
+    [1, 2, 0.8, 2, 3],
+    [2, 2, 1.2, 1, 3],
+    [2, 2, 1.6, 3, 3],
+    [2, 3, 1.2, 2, 3],
+    [2, 3, 1.4, 0, 7, "cp"],
+    [2, 1, 1.8, 0, 2],
+    [2, 1, 2.2, 2, 2],
+    [2, 1, 2.6, 4, 2],
+    [2, 2, 2, 2, 3],
+    [2, 3, 2, 0, 7, "cp"],
+    [2, 2, 0.6, 2, 3, "t"],
+    [2, 3, 2.6, 0, 7, "end"]
+  ] },
+  { id: "stone", name: "\uC9D5\uAC80\uB2E4\uB9AC", segs: [
+    [1, 1, 0.7, 1, 2],
+    [2, 1, 0.9, 4, 2],
+    [2, 1, 1.1, 1, 2],
+    [2, 1, 1.3, 4, 2],
+    [2, 2, 1, 2, 3],
+    [2, 3, 1.2, 0, 7, "cp"],
+    [2, 1, 1.5, 0, 2],
+    [1, 1, 1.8, 3, 2],
+    [1, 1, 2.1, 5, 2],
+    [2, 1, 1.6, 2, 2],
+    [2, 1, 2, 0, 2],
+    [2, 3, 2, 0, 7, "cp"],
+    [2, 1, 2.4, 2, 3],
+    [2, 1, 2.8, 4, 3],
+    [2, 3, 2.8, 0, 7, "end"]
+  ] },
+  { id: "spring", name: "\uD1B5\uD1B5 \uD2B8\uB7A8\uD384\uB9B0", segs: [
+    [2, 2, 0.4, 2, 3, "t"],
+    [2, 3, 2, 2, 3],
+    [2, 2, 1.2, 1, 3],
+    [2, 3, 1.2, 0, 7, "cp"],
+    [2, 2, 0.6, 3, 3, "t"],
+    [2, 2, 2.6, 1, 3],
+    [2, 2, 0.8, 4, 3, "t"],
+    [2, 2, 3.2, 2, 3],
+    [2, 3, 3, 0, 7, "cp"],
+    [2, 2, 2.2, 1, 2],
+    [2, 3, 2.6, 0, 7, "end"]
+  ] },
+  { id: "tower", name: "\uD558\uB298 \uD0D1", segs: [
+    [1, 2, 1, 0, 3],
+    [1, 2, 1.6, 4, 3],
+    [1, 2, 2.2, 0, 3],
+    [2, 3, 1.6, 2, 3],
+    [2, 3, 1.8, 0, 7, "cp"],
+    [2, 1, 2.9, 3, 2],
+    [2, 1, 2.3, 0, 2],
+    [2, 1, 3.4, 3, 2],
+    [2, 2, 2.8, 5, 2],
+    [2, 3, 2.6, 0, 7, "cp"],
+    [2, 1, 3.2, 1, 2],
+    [2, 1, 3.6, 4, 2],
+    [2, 3, 3, 0, 7, "end"]
+  ] }
+];
+function course(def, k) {
+  const y0 = 1 + k * STRIP, iy = y0 + 1, pads = [{ x: X0, y: iy, w: 3, h: 7, top: 0.5 }], blocks = [];
+  let x = X0 + 3;
+  for (const [gap, len, top, lane = 0, rows = 7, kind = "b"] of def.segs) {
+    x += gap;
+    const b = { x, y: iy + lane, w: len, h: rows, top, kind };
+    x += len;
+    (kind === "cp" || kind === "end" ? pads : blocks).push(b);
+  }
+  const cx = (r) => r.x + r.w / 2, minT = pads.map((p, i) => i ? Math.round((cx(p) - cx(pads[i - 1])) / JUMP_RUN * 1e3 * 0.7) : 0);
+  const spot = (p) => [cx(p), p.y + p.h / 2, E];
+  return { id: def.id, name: def.name, k, y0, pads, blocks, minT, spot: pads.map(spot), spawns: [[X0 + 1.5, iy + 1.5, E], [X0 + 1.5, iy + 5.5, E]], watch: [[X0 + 1.5, iy + 3.5, E]] };
+}
+var JUMP_COURSES = DEFS.map(course);
+var JUMP_ARENA = (() => {
+  const a = arena({ f: 21, game: "jump", info: "\uC810\uD504\uB9F5 \uB300\uACB0\uC7A5", spawns: JUMP_COURSES[0].spawns, watch: JUMP_COURSES[0].watch, starts: JUMP_COURSES.map((c) => [c.pads[0].x + 3.5, c.pads[0].y + 3.5]) });
+  for (const c of JUMP_COURSES) {
+    a.rooms.push(ring(1, c.y0, 54, STRIP));
+    a.zones.push(tint(2, c.y0 + 1, 52, 7, `${c.name} \uCF54\uC2A4`, "#DCEBFC", { checker: ["#E4F0FD", "#D2E4F9"] }));
+    c.pads.forEach((p, i) => a.furn.push({ ...p, kind: "jpad", mark: i === 0 ? "start" : i === c.pads.length - 1 ? "end" : "cp", n: i, course: c.k }));
+    for (const b of c.blocks) a.furn.push({ ...b, kind: b.kind === "t" ? "jtramp" : "jblock", ...b.kind === "t" ? { bounce: JUMP_BOUNCE } : {}, course: c.k });
+  }
+  return a;
+})();
+
+// src/duel/arena/shoot.mjs
+var SHOOT_FIELD = { x: 18, y: 7, w: 20, h: 20 };
+var CX = SHOOT_FIELD.x * 2 + SHOOT_FIELD.w;
+var CY = SHOOT_FIELD.y * 2 + SHOOT_FIELD.h;
+var HALF = [
+  // [x, y, w, h, 모양] 한쪽 절반. 나머지는 돌려서 만든다
+  [22, 10, 2, 2, "crate"],
+  // 내 자리 앞 상자
+  [34, 9, 2, 2, "crate"],
+  // 비어 있는 구석 상자
+  [30, 10, 3, 1, "wall"],
+  // 가로 종이벽
+  [23, 14, 1, 3, "wall"],
+  // 세로 종이벽
+  [27, 12, 1, 1, "barrel"],
+  // 가운데 앞 통
+  [19, 17, 1, 1, "barrel"]
+  // 옆 통
+];
+var SHOOT_COVER = [
+  ...HALF.flatMap(([x, y, w, h, look]) => [{ x, y, w, h, look }, { x: CX - x - w, y: CY - y - h, w, h, look }]),
+  { x: 27, y: 16, w: 2, h: 2, look: "crate", big: true }
+  // 한가운데 큰 상자
+];
+var SHOOT_ARENA = arena({
+  f: 22,
+  game: "shoot",
+  info: "\uC0AC\uACA9 \uB300\uACB0\uC7A5",
+  rooms: [ring(17, 6, 22, 22, { wall: 15251878 }), ring(17, 28, 22, 5)],
+  zones: [
+    tint(18, 7, 20, 20, "\uC0AC\uACA9 \uACBD\uAE30\uC7A5", "#F3EEE4"),
+    // 바둑판(checker)은 tint 위에 그려져 자리 색을 덮으므로 쓰지 않는다
+    tint(18, 7, 3, 3, "\uBE68\uAC15 \uC790\uB9AC", "#F6D3CC"),
+    tint(35, 24, 3, 3, "\uD30C\uB791 \uC790\uB9AC", "#CFE0F6"),
+    tint(18, 29, 20, 3, "\uAD00\uC804\uC11D", "#ECEAF4")
+  ],
+  furn: SHOOT_COVER.map((c) => ({ ...c, kind: "scover" })),
+  spawns: [[19.5, 8.5, Math.PI / 4], [36.5, 25.5, -Math.PI * 3 / 4]],
+  // 북서 구석(남동을 본다) · 남동 구석(북서를 본다)
+  watch: [[22.5, 30.5, N], [28, 30.5, N], [33.5, 30.5, N]]
+});
+
+// src/duel/arena/target.mjs
+var TARGET_ROWS = [10.5, 12.75, 15, 17.25];
+var TARGET_RAIL = 19;
+var TARGET_BOOTHS = [{ x: 15, y: 19, w: 12, h: 4 }, { x: 29, y: 19, w: 12, h: 4 }];
+var TARGET_ARENA = arena({
+  f: 23,
+  game: "target",
+  info: "\uACFC\uB141 \uC0AC\uACA9\uC7A5",
+  rooms: [ring(14, 7, 28, 17, { wall: 15325368 }), ring(14, 24, 28, 5)],
+  // 마당과 사대는 한 방(난간이 총알을 막으므로), 관전석은 뒤에 따로
+  zones: [tint(15, 8, 26, 11, "\uACFC\uB141 \uB9C8\uB2F9", "#EAF3E2"), tint(15, 20, 12, 3, "1\uBC88 \uC0AC\uB300", "#E3ECFA"), tint(29, 20, 12, 3, "2\uBC88 \uC0AC\uB300", "#FBE6E4"), tint(15, 25, 26, 3, "\uAD00\uC804\uC11D", "#ECEAF4")],
+  furn: [
+    { kind: "tback", x: 15, y: 8, w: 26, h: 1 },
+    // 뒷벽(과녁판 · 점수판)
+    ...TARGET_ROWS.map((r, i) => ({ kind: "ttrack", x: 15, y: r - 0.5, w: 26, h: 1, walk: true, n: i })),
+    // 과녁 레일(밟고 지나감)
+    ...TARGET_BOOTHS.map((b, i) => ({ kind: "tcounter", x: b.x, y: TARGET_RAIL, w: b.w, h: 1, top: 0.45, seat: i })),
+    // 낮은 카운터: 총알은 위로 지나간다
+    { kind: "tdiv", x: 27, y: 19, w: 2, h: 4 }
+    // 부스 칸막이
+  ],
+  spawns: [[21, 21.5, N], [35, 21.5, N]],
+  watch: [[20, 26.5, N], [28, 26.5, N], [36, 26.5, N]]
+});
+
+// src/duel/arena/box.mjs
+var BOX = {
+  HP: 100,
+  RANGE: 1.3,
+  ANGLE: Math.PI / 3,
+  GUARD: 0.3,
+  GAP: 180,
+  // GAP: 잽 · 스트레이트를 섞어도 주먹 사이 최소 간격
+  PUNCH: { jab: { dmg: 8, gap: 350 }, str: { dmg: 14, gap: 700 } }
+};
+var face = (x, y, tx, ty) => Math.atan2(tx - x, ty - y);
+var SP = [[26.2, 18.2], [29.8, 21.8]];
+var BOX_ARENA = arena({
+  f: 24,
+  game: "box",
+  info: "\uBCF5\uC2F1 \uB9C1",
+  rooms: [ring(18, 10, 20, 20, { wall: 14274024 }), ring(24, 16, 8, 8, { wall: 3820154 })],
+  zones: [tint(19, 11, 18, 18, "\uAD00\uC804 \uB9C8\uB2F9", "#EFECF6"), tint(25, 17, 6, 6, "\uB9C1", "#F7E7C6")],
+  furn: [
+    { kind: "boxring", x: 24, y: 16, w: 8, h: 8, walk: true },
+    // 관전 의자: 올라서면 링이 잘 보인다(윗면 0.42m, 점프로 올라선다)
+    { kind: "boxbench", x: 22, y: 11, w: 12, h: 1, top: 0.42 },
+    { kind: "boxbench", x: 22, y: 28, w: 12, h: 1, top: 0.42 },
+    { kind: "boxbench", x: 19, y: 14, w: 1, h: 12, top: 0.42 },
+    { kind: "boxbench", x: 36, y: 14, w: 1, h: 12, top: 0.42 }
+  ],
+  spawns: [[...SP[0], face(...SP[0], ...SP[1])], [...SP[1], face(...SP[1], ...SP[0])]],
+  watch: [[21.5, 20, E], [34.5, 20, Wd], [28, 13.5, 0], [28, 26.5, Math.PI], [21.5, 15, E], [34.5, 25, Wd]]
+});
+
+// src/duel/arena/index.mjs
+var ARENAS = [JUMP_ARENA, SHOOT_ARENA, TARGET_ARENA, BOX_ARENA];
+
 // src/engine/world.ts
 var W = 56;
 var H = 40;
@@ -9,6 +210,8 @@ var FH = 4.6;
 var WALL = 0.9;
 var DOLL = 1.12;
 var CEIL = { 11: 4.4, 12: 4.4, 13: 4.4, 14: 3.8 };
+var CAMPUS = [11, 12, 13, 14];
+for (const a of ARENAS) CEIL[a.f] = 9;
 var VIEW = { mode: "top" };
 var inside = () => VIEW.mode !== "top";
 var INK = 1118488;
@@ -39,6 +242,7 @@ var tX = (x) => (x + W * S / 2) / S;
 var tY = (z) => (z + H * S / 2) / S;
 var floorY = (f) => (f - 11) * FH;
 var FLOOR_INFO = { 11: "\uBC30\uC6C0\uC774 \uC2DC\uC791\uB418\uB294 \uACF5\uAC04", 12: "\uD568\uAED8, \uB610 \uB530\uB85C \uD559\uC2B5\uC758 \uACF5\uAC04", 13: "\uBAB0\uC785\uD558\uACE0 \uBC1C\uD45C\uD558\uB294 \uACF5\uAC04", 14: "\uD558\uB8E8\uB4E4 \uC6D4\uB4DC" };
+for (const a of ARENAS) FLOOR_INFO[a.f] = a.info;
 var DECK_H = 0.25;
 var STEP_LAND = FH * 6 / 27;
 var STAIR_L = [
@@ -55,9 +259,9 @@ function makeFloor(f) {
   const F = (kind, x, y, w, h, o = {}) => furn.push({ kind, x, ...o.raw ? { y, h } : span(y, h), w, ...o.raw ? o : shiftO(o) });
   const Z = (x, y, w, h, name, desc, o = {}) => zones.push({ x, ...o.raw ? { y, h } : span(y, h), w, name, desc, ...o });
   const P = (kind, x, y, w, h, to, spawn, label) => portals.push({ kind, x, ...span(y, h), w, to, spawn: [spawn[0], gy(spawn[1])], label });
-  const closed = (x, y, w, h, name, tint = "#E6E5EC") => {
+  const closed = (x, y, w, h, name, tint2 = "#E6E5EC") => {
     R(x, y, w, h, name, { closed: true });
-    Z(x + 1, y + 1, w - 2, h - 2, name, "", { npc: false, tint });
+    Z(x + 1, y + 1, w - 2, h - 2, name, "", { npc: false, tint: tint2 });
   };
   R(28, 12, 10, 14, "", { raw: true, doors: [{ s: "n", from: 3, len: 4 }, { s: "s", from: 3, len: 4 }], core: true, ...f === 13 ? { brick: "w" } : {} });
   Z(29, 13, 8, 12, "\uC5D8\uB9AC\uBCA0\uC774\uD130 \uD640", "\uC11C\uCABD \uC5D8\uB9AC\uBCA0\uC774\uD130 3\uB300\uB9CC \uD0C0\uC694. \uB3D9\uCABD 2\uB300\uB294 \uC6B0\uC544\uD55C\uD14C\uD06C\uCF54\uC2A4 \uD604\uC218\uB9C9\uC73C\uB85C \uB9C9\uD600 \uC788\uC5B4\uC694. \uC55E\uC5D0 \uC11C\uC11C F\uB97C \uB204\uB974\uBA74 \uB2E4\uB978 \uCE35\uC73C\uB85C \uAC00\uC694.", { npc: false, tint: "#EEF0F5", raw: true });
@@ -363,7 +567,8 @@ function makeFloor(f) {
   return { f, rooms, furn, zones, portals, calls };
 }
 var FLOORS = {};
-for (const f of [11, 12, 13, 14]) FLOORS[f] = makeFloor(f);
+for (const f of CAMPUS) FLOORS[f] = makeFloor(f);
+for (const a of ARENAS) FLOORS[a.f] = { f: a.f, rooms: a.rooms, furn: a.furn, zones: a.zones, portals: [], calls: [], arena: a, starts: a.starts };
 var TOPS = {
   table: 0.44,
   bigtable: 0.44,
@@ -399,6 +604,8 @@ var TOPS = {
   plant: 0.36,
   crates: 0.5
 };
+var topOf = (o) => o.lift ? 0 : o.top ?? TOPS[o.kind] ?? 0;
+var walkThrough = (o) => WALK_THROUGH.has(o.kind) || !!o.walk;
 function furnCells(fl, o, set) {
   if (o.kind === "screenwall") {
     const along = o.face === "w" ? o.h : o.w, len = along * S - 0.2, hh = Math.min(len * 9 / 16, o.big ? CEIL[fl.f] - 0.3 : 2.2), half = Math.min(len, hh * 16 / 9 * (o.wide || 1)) / S / 2, mid = along / 2;
@@ -423,7 +630,7 @@ function furnCells(fl, o, set) {
     for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) if (stadiumWall(o, x + 0.5, y + 0.5)) set(x, y);
     return;
   }
-  if (WALK_THROUGH.has(o.kind)) return;
+  if (walkThrough(o)) return;
   for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) set(x, y);
 }
 var WALK_THROUGH = /* @__PURE__ */ new Set(["hbmat", "runway", "neonsign", "marquee", "floaters", "wallsign", "poster", "walldeco", "linelight", "bleacher", "arcbleacher", "flight", "brickdeck", "pebbles", "redsteps", "mirrorball", "trampoline", "ballpit"]);
@@ -457,20 +664,21 @@ for (const fl of Object.values(FLOORS)) {
   fl.grid = g;
   const top = new Float32Array(W * H);
   for (const o of fl.furn) {
-    const h = TOPS[o.kind];
-    if (!h || o.lift) continue;
+    const h = topOf(o);
+    if (!h) continue;
     for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) if (x >= 0 && y >= 0 && x < W && y < H) top[y * W + x] = Math.max(top[y * W + x], h);
   }
   for (const o of fl.furn) {
-    if (TOPS[o.kind] || WALK_THROUGH.has(o.kind)) continue;
+    if (topOf(o) || o.lift && TOPS[o.kind] || walkThrough(o)) continue;
     for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) if (x >= 0 && y >= 0 && x < W && y < H && g[y * W + x]) top[y * W + x] = 0;
   }
   for (let i = 0; i < W * H; i++) if (fl.wgrid[i]) top[i] = 0;
   fl.top = top;
 }
+var startCells = (fl) => (fl.starts || [ELEV_SPAWN]).map(([x, y]) => Math.floor(y) * W + Math.floor(x));
 for (const fl of Object.values(FLOORS)) {
-  const reach = new Uint8Array(W * H), q = [Math.floor(ELEV_SPAWN[1]) * W + Math.floor(ELEV_SPAWN[0])];
-  reach[q[0]] = 1;
+  const reach = new Uint8Array(W * H), q = startCells(fl);
+  for (const i of q) reach[i] = 1;
   for (let i = 0; i < q.length; i++) {
     const x = q[i] % W, y = q[i] / W | 0;
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
@@ -643,8 +851,8 @@ function buildNav(fl) {
     if (y + 1 < H && walk[i + W]) ey[i] = fl.fine ? +sweep(fl, x + 0.5, y + 0.5, x + 0.5, y + 1.5) : 1;
   }
   Object.assign(fl, { walk, ex, ey });
-  const q = [Math.floor(ELEV_SPAWN[1]) * W + Math.floor(ELEV_SPAWN[0])];
-  nreach[q[0]] = 1;
+  const q = startCells(fl);
+  for (const i of q) nreach[i] = 1;
   for (let k = 0; k < q.length; k++) for (const n of navNext(fl, q[k])) if (!nreach[n]) {
     nreach[n] = 1;
     q.push(n);
@@ -663,6 +871,7 @@ for (const fl of Object.values(FLOORS)) buildNav(fl);
 export {
   ARC_STEP,
   BRAND,
+  CAMPUS,
   CEIL,
   CLIMB,
   DECK_H,
@@ -719,6 +928,8 @@ export {
   tX,
   tY,
   topAt,
+  topOf,
+  walkThrough,
   wx,
   wz
 };
