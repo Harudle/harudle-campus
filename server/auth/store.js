@@ -3,7 +3,9 @@
 //   - 메모리(로컬 확인·시험): CAMPUS_AUTH_STORE=memory. 운영(NODE_ENV=production)에서는 쓰지 않는다
 //     워커가 바뀌면 사라지므로 배포할 때마다 로그아웃된다
 // 세션은 sid 원본이 아니라 SHA-256 해시만 저장한다.
-// 하루들 연결 토큰은 한 번만 쓰도록 jti를 만료 시각까지 기억한다(하루들은 아무것도 저장하지 않는다).
+// 하루들 연결 토큰은 한 번만 쓰도록 jti를 시간 차이 허용까지 포함한 검증 종료 시각까지 기억한다(하루들은 아무것도 저장하지 않는다).
+// 지갑 '컷'(잔액 · 거래 기록)도 여기 둔다. 지급은 같은 (회원, 종류, 기준 키)에 한 번만 된다(docs/supabase/campus-wallet.sql).
+// 연동한 크루의 캐릭터(외형 44글자 · 푼 장식)도 여기 둔다. 처음 연동할 때 그 브라우저의 캐릭터가 들어가고, 그 뒤로는 이것을 불러온다.
 
 export function createStoreFromEnv(env, { fetch } = {}) {
   if (env.SUPABASE_URL && env.SUPABASE_SERVICE_ROLE_KEY) return createSupabaseStore({ url: env.SUPABASE_URL, key: env.SUPABASE_SERVICE_ROLE_KEY, fetch });
@@ -12,7 +14,9 @@ export function createStoreFromEnv(env, { fetch } = {}) {
 }
 
 export function createMemoryStore() {
-  const users = new Map(), sessions = new Map(), usedTokens = new Map();
+  const users = new Map(), sessions = new Map(), usedTokens = new Map(), characters = new Map();
+  const wallets = new Map(), entries = [];   // 회원 → 잔액, 거래 기록
+  const inventory = new Map(), gears = new Map();   // 회원 → 가진 sku 목록, 쓰고 있는 것
   return {
     kind: "memory",
     async useLinkToken(jti, expiresAt) { if (usedTokens.has(jti)) return false; usedTokens.set(jti, expiresAt); return true; },
@@ -26,10 +30,39 @@ export function createMemoryStore() {
       return s && u ? { expiresAt: s.expiresAt, revokedAt: s.revokedAt, user: { id: u.id, nickname: u.nickname, profileImageUrl: u.profileImageUrl } } : null;
     },
     async revokeSession(sidHash, at) { const s = sessions.get(sidHash); if (s && !s.revokedAt) s.revokedAt = at; },
+    async getCharacter(userId) { const c = characters.get(userId); return c ? { av: c.av, unlocks: [...c.unlocks] } : null; },
+    async saveCharacter({ userId, av, unlocks, at }) { characters.set(userId, { av, unlocks: [...unlocks], updatedAt: at }); },
+    async createCharacter({ userId, av, unlocks, at }) { if (!characters.has(userId)) characters.set(userId, { av, unlocks: [...unlocks], updatedAt: at }); },
+    async getWallet(userId) { return { balance: wallets.get(userId) ?? 0 }; },
+    async grantReward({ userId, kind, refKey, amount, meta = {}, at }) {
+      if (!users.has(userId)) throw new Error("memory no_user");
+      if (!Number.isInteger(amount) || amount <= 0) throw new Error("memory amount");
+      const balance = wallets.get(userId) ?? 0;
+      if (entries.some((e) => e.userId === userId && e.kind === kind && e.refKey === refKey)) return { granted: false, balance };
+      wallets.set(userId, balance + amount);
+      entries.push({ userId, kind, refKey, amount, balanceAfter: balance + amount, meta, at });
+      return { granted: true, balance: balance + amount };
+    },
+    async listWalletEntries(userId, limit = 20) {
+      return entries.filter((e) => e.userId === userId).slice(-limit).reverse().map((e) => ({ kind: e.kind, refKey: e.refKey, amount: e.amount, balanceAfter: e.balanceAfter, at: e.at }));
+    },
+    async getInventory(userId) { return [...(inventory.get(userId) || [])]; },
+    async buyItem({ userId, sku, price, at }) {
+      if (!users.has(userId)) throw new Error("memory no_user");
+      if (!Number.isInteger(price) || price <= 0) throw new Error("memory price");
+      const balance = wallets.get(userId) ?? 0, mine = inventory.get(userId) || [];
+      if (mine.includes(sku)) return { ok: false, reason: "owned", balance };
+      if (balance < price) return { ok: false, reason: "insufficient", balance };
+      wallets.set(userId, balance - price); inventory.set(userId, [...mine, sku]);
+      entries.push({ userId, kind: "purchase", refKey: sku, amount: -price, balanceAfter: balance - price, meta: {}, at });
+      return { ok: true, reason: null, balance: balance - price };
+    },
+    async getGear(userId) { return { ...(gears.get(userId) || {}) }; },
+    async saveGear({ userId, gear }) { gears.set(userId, { ...gear }); },
     async cleanup({ sessionsBefore, usersBefore }) {
       for (const [k, at] of usedTokens) if (at < sessionsBefore) usedTokens.delete(k);
       for (const [k, s] of sessions) if (s.expiresAt < sessionsBefore) sessions.delete(k);
-      for (const [id, u] of users) if (u.lastLoginAt < usersBefore) { users.delete(id); for (const [k, s] of sessions) if (s.userId === id) sessions.delete(k); }
+      for (const [id, u] of users) if (u.lastLoginAt < usersBefore) { users.delete(id); characters.delete(id); wallets.delete(id); inventory.delete(id); gears.delete(id); for (let i = entries.length - 1; i >= 0; i--) if (entries[i].userId === id) entries.splice(i, 1); for (const [k, s] of sessions) if (s.userId === id) sessions.delete(k); }
     },
   };
 }
@@ -72,10 +105,55 @@ export function createSupabaseStore({ url, key, fetch = globalThis.fetch }) {
       return { expiresAt: Date.parse(r.expires_at), revokedAt: r.revoked_at ? Date.parse(r.revoked_at) : null, user: { id: u.harudle_user_id, nickname: u.nickname, profileImageUrl: u.profile_image_url } };
     },
     revokeSession: (sidHash, at) => call(`/campus_sessions?sid_hash=${eq(sidHash)}&revoked_at=is.null`, { method: "PATCH", body: JSON.stringify({ revoked_at: iso(at) }) }),
+    async getCharacter(userId) {
+      const rows = await call(`/campus_characters?harudle_user_id=${eq(userId)}&select=avatar,unlocks&limit=1`, { method: "GET" }, "count=none");
+      const r = Array.isArray(rows) ? rows[0] : null;
+      return r ? { av: r.avatar, unlocks: Array.isArray(r.unlocks) ? r.unlocks : [] } : null;
+    },
+    // 바꿀 때마다 덮어쓴다
+    saveCharacter: ({ userId, av, unlocks, at }) => call("/campus_characters?on_conflict=harudle_user_id", {
+      method: "POST", body: JSON.stringify({ harudle_user_id: userId, avatar: av, unlocks, updated_at: iso(at) }),
+    }, "resolution=merge-duplicates,return=minimal"),
+    // 처음 연동할 때만: 이미 있으면 그대로 둔다(다른 브라우저에서 다시 연동해도 저장된 캐릭터가 이긴다)
+    createCharacter: ({ userId, av, unlocks, at }) => call("/campus_characters?on_conflict=harudle_user_id", {
+      method: "POST", body: JSON.stringify({ harudle_user_id: userId, avatar: av, unlocks, updated_at: iso(at) }),
+    }, "resolution=ignore-duplicates,return=minimal"),
+    async getWallet(userId) {
+      const rows = await call(`/campus_wallets?harudle_user_id=${eq(userId)}&select=balance&limit=1`, { method: "GET" }, "count=none");
+      return { balance: Number((Array.isArray(rows) ? rows[0] : null)?.balance ?? 0) };
+    },
+    // 잔액 · 거래 기록을 DB 함수 하나로 함께 바꾼다. 같은 (회원, kind, refKey)는 granted:false로 돌아온다
+    async grantReward({ userId, kind, refKey, amount, meta = {} }) {
+      const r = await call("/rpc/campus_wallet_grant", { method: "POST", body: JSON.stringify({ p_user: userId, p_kind: kind, p_ref: refKey, p_amount: amount, p_meta: meta }) }, "count=none");
+      if (!r || typeof r.granted !== "boolean" || !Number.isSafeInteger(Number(r.balance))) throw new Error("supabase wallet_grant");
+      return { granted: r.granted, balance: Number(r.balance) };
+    },
+    async listWalletEntries(userId, limit = 20) {
+      const rows = await call(`/campus_wallet_entries?harudle_user_id=${eq(userId)}&select=kind,ref_key,amount,balance_after,created_at&order=id.desc&limit=${Math.max(1, Math.min(100, limit | 0))}`, { method: "GET" }, "count=none");
+      return (Array.isArray(rows) ? rows : []).map((r) => ({ kind: r.kind, refKey: r.ref_key, amount: Number(r.amount), balanceAfter: Number(r.balance_after), at: Date.parse(r.created_at) }));
+    },
+    async getInventory(userId) {
+      const rows = await call(`/campus_inventory?harudle_user_id=${eq(userId)}&select=sku&order=acquired_at.asc`, { method: "GET" }, "count=none");
+      return (Array.isArray(rows) ? rows : []).map((r) => r.sku).filter((v) => typeof v === "string");
+    },
+    // 차감 · 거래 기록 · 보유 추가를 DB 함수 하나로. 이미 가졌거나 컷이 모자라면 ok:false와 사유가 돌아온다
+    async buyItem({ userId, sku, price }) {
+      const r = await call("/rpc/campus_shop_buy", { method: "POST", body: JSON.stringify({ p_user: userId, p_sku: sku, p_price: price }) }, "count=none");
+      if (!r || typeof r.ok !== "boolean" || !Number.isSafeInteger(Number(r.balance))) throw new Error("supabase shop_buy");
+      return { ok: r.ok, reason: r.ok ? null : String(r.reason), balance: Number(r.balance) };
+    },
+    async getGear(userId) {
+      const rows = await call(`/campus_gear?harudle_user_id=${eq(userId)}&select=gear&limit=1`, { method: "GET" }, "count=none");
+      const g = (Array.isArray(rows) ? rows[0] : null)?.gear;
+      return g && typeof g === "object" ? g : {};
+    },
+    saveGear: ({ userId, gear, at }) => call("/campus_gear?on_conflict=harudle_user_id", {
+      method: "POST", body: JSON.stringify({ harudle_user_id: userId, gear, updated_at: iso(at) }),
+    }, "resolution=merge-duplicates,return=minimal"),
     async cleanup({ sessionsBefore, usersBefore }) {
       await call(`/campus_used_link_tokens?expires_at=lt.${encodeURIComponent(iso(sessionsBefore))}`, { method: "DELETE" });
       await call(`/campus_sessions?expires_at=lt.${encodeURIComponent(iso(sessionsBefore))}`, { method: "DELETE" });
-      await call(`/campus_users?last_login_at=lt.${encodeURIComponent(iso(usersBefore))}`, { method: "DELETE" });   // 세션은 ON DELETE CASCADE
+      await call(`/campus_users?last_login_at=lt.${encodeURIComponent(iso(usersBefore))}`, { method: "DELETE" });   // 세션 · 캐릭터 · 지갑 · 보유 · 착용은 ON DELETE CASCADE
     },
   };
 }

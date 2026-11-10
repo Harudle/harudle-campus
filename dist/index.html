@@ -20,11 +20,11 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=Gowun+Dodum&display=swap">
-  <script type="module" crossorigin src="/assets/main-DibpqMTI.js"></script>
+  <script type="module" crossorigin src="/assets/main-CM6rrKvJ.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/easelDrawing-C9S9TUW5.js">
-  <link rel="modulepreload" crossorigin href="/assets/preload-helper-BUmcHDW0.js">
-  <link rel="modulepreload" crossorigin href="/assets/RoundedBox-vcxh4kTL.js">
-  <link rel="stylesheet" crossorigin href="/assets/main-DaeneUZJ.css">
+  <link rel="modulepreload" crossorigin href="/assets/preload-helper-C6vZgFtR.js">
+  <link rel="modulepreload" crossorigin href="/assets/RoundedBox-DDK7HNru.js">
+  <link rel="stylesheet" crossorigin href="/assets/main-DmiWsoKe.css">
 </head>
 <body>
 
@@ -37,6 +37,7 @@
 <div class="hud" id="floorHud">
   <div class="chip" id="floorBadge"><b>12F</b><span>함께, 또 따로 학습의 공간</span></div>
   <button type="button" class="chip" id="setBtn" title="설정 (Esc)" aria-label="설정 열기">⚙️</button>
+  <button type="button" class="chip" id="walletChip" hidden title="내 컷" aria-label="내 컷"><b>0</b><span>컷</span></button>
 </div>
 <div class="hud" id="topRight">
   <button class="chip" id="feedBtn" hidden>네 컷 사진 불러오기</button>
@@ -138,6 +139,8 @@
 <div id="sideShow">
   <button type="button" id="showPeople" title="같이 있는 크루 보기" aria-label="같이 있는 크루 보기"><i class="dot"></i><em id="sideShowCnt">1</em>명</button>
 </div>
+<!-- 근처 크루: 근처 채팅 · 음성이 닿는 크루(같은 층 12칸 안, 방 안이면 같은 방). 사이드바를 접었거나 모바일일 때 오른쪽 위에 뜬다 -->
+<section id="nearCard" aria-label="근처에 있는 크루" title="크루 목록 열기" hidden><p class="nhead"><i class="dot"></i>근처 <em id="nearCnt">0</em>명<button type="button" id="rangeBtn" aria-pressed="false" title="올려 두면 채팅 · 음성이 닿는 거리를 바닥에 보여 줘요 · 누르면 고정">거리 보기</button><span>채팅 · 음성이 닿아요</span></p><ul id="nearList"></ul></section>
 <aside id="side" aria-label="같이 있는 크루">
   <button type="button" id="sideTab" aria-label="사이드바 접기/펼치기" title="사이드바 접기 (\)"><span class="chev">›</span></button>
   <div class="spanel">
@@ -187,6 +190,7 @@
   <h4 id="menuTitle">설정</h4>
   <div class="mtabs" role="tablist">
     <button type="button" role="tab" data-mtab="main" aria-selected="true">설정</button>
+    <button type="button" role="tab" data-mtab="voice" aria-selected="false">음성</button>
     <button type="button" role="tab" data-mtab="keys" aria-selected="false">조작법</button>
   </div>
   <div class="mview mlist" data-mtab="main" role="tabpanel">
@@ -194,6 +198,14 @@
     <button class="btn ghost" type="button" id="menuLogin" hidden>하루들 연동하기</button>
     <button class="btn ghost" type="button" id="menuProfile">프로필 수정</button>
     <button class="btn ghost" type="button" id="menuLook">캐릭터 외형 수정</button>
+    <button class="btn ghost" type="button" id="menuDuel" aria-pressed="true">대결 신청 받기: 켬</button>
+  </div>
+  <!-- 음성: 마이크 고르기와 소리 막대(말하면 움직인다) -->
+  <div class="mview mvoice" data-mtab="voice" role="tabpanel" hidden>
+    <label class="plabel">마이크<select id="micSelect"><option value="">시스템 기본 마이크</option></select></label>
+    <div class="vmeter" aria-hidden="true"><i id="micMeter"></i></div>
+    <p class="vnote" id="micNote" aria-live="polite"></p>
+    <button class="btn ghost" type="button" id="micPermit" hidden>마이크 권한 허용하기</button>
   </div>
   <div class="mview mkeys" data-mtab="keys" role="tabpanel" hidden>
     <ul class="kb-only glist">
@@ -203,6 +215,7 @@
       <li><span><kbd>F</kbd></span>상호작용</li>
       <li><span><kbd>C</kbd></span>폭죽</li>
       <li><span><kbd>Enter</kbd></span>채팅</li>
+      <li><span><kbd>/</kbd></span>채팅 명령어 (/도움)</li>
       <li><span><kbd>Tab</kbd></span>인벤토리</li>
       <li><span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></span>네 컷 · 인사 · 하트</li>
       <li><span><kbd>Z</kbd></span>춤 (켜고 끄기)</li>
@@ -220,7 +233,7 @@
       <li><span>🖍️👋💗💃</span>표현</li>
       <li><span>🎆</span>폭죽 · 종이 총</li>
       <li><span>🎒</span>인벤토리</li>
-      <li><span>💬</span>채팅</li>
+      <li><span>💬</span>채팅 · /로 명령어</li>
       <li><span>⚙️</span>설정</li>
     </ul>
   </div>
@@ -240,6 +253,23 @@
   <p class="lreason" id="loginAskReason"></p>
   <p class="mhint">하루들에서 [연동하기]를 누르면 닉네임과 프로필 사진으로 캠퍼스에 들어와요.</p>
   <div class="prow"><button class="btn ghost" type="button" id="loginAskLater">나중에</button><button class="btn" type="button" id="loginAskGo">하루들 연동하기</button></div>
+</div></div>
+<!-- 하루들 부스 선물 입간판: 하루들에서 받는 아이템과 받는 법 -->
+<div id="gifts" class="modal" hidden><div class="box giftbox" role="dialog" aria-labelledby="giftsTitle">
+  <h4 id="giftsTitle">🎁 하루들에서 예쁜 아이템 받기</h4>
+  <p class="gsub">하루들에서 하나씩 해 보면 캐릭터 귀 장식이 풀려요.</p>
+  <ul class="glist" id="giftList"></ul>
+  <div class="linkcard" id="giftLink" hidden></div>
+  <div class="prow"><button class="btn lav" type="button" id="giftsShop" hidden>컷 상점 열기</button><button class="btn ghost" type="button" id="giftsClose">닫기</button></div>
+</div></div>
+<!-- 컷 상점: 하루들 피드에 네컷만화를 올려 받은 컷으로 펫 · 만화 효과 · 장식을 산다(연동한 크루만) -->
+<div id="shop" class="modal" hidden><div class="box giftbox" role="dialog" aria-labelledby="shopTitle">
+  <h4 id="shopTitle">컷 상점</h4>
+  <p class="gsub" id="shopCuts"></p>
+  <div class="linkcard" id="shopEarn" hidden></div>
+  <div class="shoptabs" id="shopTabs" role="tablist"></div>
+  <ul class="glist" id="shopList"></ul>
+  <div class="prow"><button class="btn ghost" type="button" id="shopClose">닫기</button></div>
 </div></div>
 <!-- 하루들 부스 함께 그리는 이젤: 그림판 -->
 <div id="easelEd" class="modal" hidden><div class="box ezbox" role="dialog" aria-label="함께 그리는 네컷">

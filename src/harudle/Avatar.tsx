@@ -6,6 +6,7 @@ import type { AvatarConfig } from './avatarData'
 import { COLORS } from './brand'
 import { drawSketch, Ink, INK, Line, Skin, useLegSwing, type WalkMotion } from './Characters'
 import { useCanvasTexture } from './useCanvasTexture'
+import { GearFx, GearHead, GearHeld, GearNeck, type GearState } from '../scene/Gear'   // 캠퍼스 확장: 컷 상점 장식
 
 const HEAD_Y = 1.3
 const HEAD_RADIUS = 0.34
@@ -503,16 +504,22 @@ function BrushArm({ color, motion }: { color: string; motion?: RefObject<WalkMot
 }
 
 /** 우테코 캠퍼스 확장: 스킬과 점프 자세. 원본 Avatar의 모양은 그대로 두고 팔·소품만 바꾼다. */
-export type AvatarPose = { act: 'draw' | 'wave' | 'heart' | 'laptop' | 'coffee' | 'dance' | 'gun' | 'read' | null; waving: boolean; air: boolean; style?: number; actT?: number; noHead?: boolean }
+export type AvatarPose = { act: 'draw' | 'wave' | 'heart' | 'laptop' | 'coffee' | 'dance' | 'gun' | 'read' | null; waving: boolean; air: boolean; style?: number; actT?: number; noHead?: boolean; arms?: number[] | null }
 
 type AvatarProps = {
   config: AvatarConfig
   motion?: RefObject<WalkMotion>
   pose?: RefObject<AvatarPose>
+  /** 캠퍼스 확장: 컷 상점에서 사서 쓰고 있는 장식. 있으면 그 부위는 외형 대신 이것을 그린다 */
+  gear?: GearState | null
 }
 
 /** 시안의 낙서 캐릭터를 기본 몸으로 삼아 고른 악세서리를 입힌 방문자 캐릭터. 발이 원점이고 +z를 바라본다. */
-export function Avatar({ config, motion, pose }: AvatarProps) {
+export function Avatar({ config: look, motion, pose, gear }: AvatarProps) {
+  // 상점 장식을 쓰면 그 부위의 외형은 비운다. 네컷 원고는 연필처럼 옆으로 든 자세를 쓴다
+  const config: AvatarConfig = gear && (gear.head || gear.neck || gear.held)
+    ? { ...look, head: gear.head ? 'none' : look.head, neck: gear.neck ? 'none' : look.neck, held: gear.held ? 'pencil' : look.held }
+    : look
   const { left, right } = useLegSwing(motion)
   const holdingBoard = config.held === 'sketch'
   const holdingSide = config.held === 'pencil' || config.held === 'heart'
@@ -530,7 +537,7 @@ export function Avatar({ config, motion, pose }: AvatarProps) {
     const p = pose?.current
     if (head.current) head.current.visible = !p?.noHead
     const armsUp = !!p && (p.act === 'wave' || p.act === 'heart' || p.act === 'dance' || p.waving || p.air)
-    const busy = p?.act === 'laptop' || p?.act === 'coffee' || p?.act === 'gun' || p?.act === 'read'   // 노트북·커피를 쓰는 동안엔 원래 든 것을 내려놓는다
+    const busy = p?.act === 'laptop' || p?.act === 'coffee' || p?.act === 'gun' || p?.act === 'read' || !!p?.arms   // 노트북·커피를 쓰는 동안엔 원래 든 것을 내려놓는다(대결 팔 자세도: 복싱 글러브)
     // 1인칭(noHead)에선 그림판·옆에 든 소품을 생략한다: 눈앞을 통째로 가린다(특히 앉으면). 팔과 노트북·커피·총은 그대로
     const boardOn = !p?.noHead && (p?.act === 'draw' || (holdingBoard && !armsUp && !busy))
     if (boardSet.current) boardSet.current.visible = boardOn
@@ -541,7 +548,8 @@ export function Avatar({ config, motion, pose }: AvatarProps) {
     if (!l || !r) return
     l.rotation.x = 0; r.rotation.x = 0
     if (p?.act !== 'coffee' && actRef.current.act) actRef.current = { act: null, t0: 0 }
-    if (p?.act === 'read') { l.rotation.z = -0.32; r.rotation.z = 0.32; l.rotation.x = -1.05; r.rotation.x = -1.05 + Math.max(0, Math.sin(clock.elapsedTime * 1.6) - 0.97) * 4 }   // 두 손을 앞으로(빈백에선 책을 받쳐 들고, 책상에선 독서대 양옆에 손을 얹는다)
+    if (p?.arms) { l.rotation.x = p.arms[0]; l.rotation.z = p.arms[1]; r.rotation.x = p.arms[2]; r.rotation.z = p.arms[3] }   // 대결 종목이 정한 팔(armL이 캐릭터의 오른팔)
+    else if (p?.act === 'read') { l.rotation.z = -0.32; r.rotation.z = 0.32; l.rotation.x = -1.05; r.rotation.x = -1.05 + Math.max(0, Math.sin(clock.elapsedTime * 1.6) - 0.97) * 4 }   // 두 손을 앞으로(빈백에선 책을 받쳐 들고, 책상에선 독서대 양옆에 손을 얹는다)
     else if (p?.act === 'laptop') { // 두 손을 앞으로 뻗어 자판을 번갈아 톡톡
       const tt = clock.elapsedTime * 14
       l.rotation.z = -0.22; r.rotation.z = 0.22
@@ -616,7 +624,7 @@ export function Avatar({ config, motion, pose }: AvatarProps) {
             <Line length={0.38} />
           </group>
         )}
-        <group ref={heldItem}>{holdingSide && <HeldItem kind={config.held} color={config.heldColor} />}</group>
+        <group ref={heldItem}>{gear?.held ? <GearHeld sku={gear.held} /> : holdingSide && <HeldItem kind={config.held} color={config.heldColor} />}</group>
       </group>
 
       <group ref={head} position-y={HEAD_Y}>
@@ -628,7 +636,10 @@ export function Avatar({ config, motion, pose }: AvatarProps) {
         <Eyewear kind={config.eyewear} />
         <Headwear kind={config.head} color={config.headColor} skinColor={config.skinColor} />
         <Earwear kind={config.ear} />
+        <GearHead sku={gear?.head} />
+        <GearFx sku={gear?.fx} />
       </group>
+      <GearNeck sku={gear?.neck} />
     </group>
   )
 }

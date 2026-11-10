@@ -3,7 +3,8 @@ import { useRef, useSyncExternalStore } from 'react'
 import { createPortal, useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { Avatar, type AvatarPose } from '../harudle/Avatar'
-import { Doodle, Haru, Harudle, type WalkMotion } from '../harudle/Characters'
+import { Haru, Harudle, type WalkMotion } from '../harudle/Characters'
+import { Pet } from './Pets'
 import { dollStore, type Doll } from '../engine/dolls'
 
 /** 하루들 월드 캐릭터는 키가 약 1.64라서 캠퍼스(사람 키 ≈ 1.12)에 맞춰 줄인다 */
@@ -22,7 +23,7 @@ function DollView({ doll }: { doll: Doll }) {
     else if (a.moving) m.phase += dt * (a.run ? STEP.run : STEP.walk)
     m.sit = THREE.MathUtils.damp(m.sit ?? 0, a.seated ? 1 : 0, 12, dt)
     m.sitH = a.seatH ?? 0.26
-    pose.current.act = a.act; pose.current.waving = a.waving; pose.current.air = a.air; pose.current.style = a.style; pose.current.actT = a.actT; pose.current.noHead = a.noHead
+    pose.current.act = a.act; pose.current.waving = a.waving; pose.current.air = a.air; pose.current.style = a.style; pose.current.actT = a.actT; pose.current.noHead = a.noHead; pose.current.arms = a.arms
     if (bob.current) {
       bob.current.position.y = a.moving && !a.air && !a.seated ? Math.abs(Math.sin(m.phase)) * m.amount * 0.08 : 0
       bob.current.rotation.x = THREE.MathUtils.damp(bob.current.rotation.x, a.moving && a.run ? 0.14 : 0, 10, dt)
@@ -33,13 +34,13 @@ function DollView({ doll }: { doll: Doll }) {
     <group scale={scale}>
       <group ref={bob}>
         {doll.kind === 'dog' ? (
-          <Doodle motion={motion} />
+          <Pet kind={doll.pet} motion={motion} />
         ) : doll.kind === 'harudle' ? (
           <Harudle motion={motion} />
         ) : doll.kind === 'haru' ? (
           <Haru motion={motion} waving />
         ) : (
-          doll.config && <Avatar config={doll.config} motion={motion} pose={pose} />
+          doll.config && <Avatar config={doll.config} motion={motion} pose={pose} gear={doll.gear} />
         )}
       </group>
     </group>,

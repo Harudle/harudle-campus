@@ -25,7 +25,7 @@ export default defineConfig(({ mode }) => {
       port: 8080,
       proxy: {
         '/api': 'http://127.0.0.1:3000',
-        '/auth': 'http://127.0.0.1:3000',   // 하루들 로그인(연동 시작·콜백·로그아웃)도 개발 서버에서 백엔드로
+        '/auth': 'http://127.0.0.1:3000',   // 하루들 연동: 연동하기를 누른 화면(이 주소)으로 돌아와야 그 브라우저의 캐릭터가 이어진다
         '/ws': { target: 'ws://127.0.0.1:3000', ws: true },
         '/world/ws': { target: 'ws://127.0.0.1:3000', ws: true },
         ...Object.fromEntries(WORLD_API.map((path) => [path, 'http://127.0.0.1:3000'])),
