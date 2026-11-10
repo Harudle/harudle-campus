@@ -1,4 +1,7 @@
-// 사격 대결(22층) 브라우저 쪽: 엄폐물 그리기, 선수에게 종이 총 쥐여 주기, 내 총알이 상대에게 닿으면 서버로 알리기, 체력 · 라운드 HUD · 머리 위 체력 막대
+// 사격 대결(22층) 브라우저 쪽: 엄폐물 그리기, 선수에게 종이 AK-47 쥐여 주기, 내 총알이 상대에게 닿으면 서버로 알리기, 체력 · 라운드 HUD · 머리 위 체력 막대
+// FPS 1:1처럼: 선수는 1인칭만(V 막음) · 이 층은 이름표를 숨긴다 · 탄창 20발(R · 다 쓰면 저절로 장전) · 누르고 있으면 연사 · 쏠 때 반동
+// 오른쪽 클릭을 누르고 있으면 가늠자 조준(화면이 당겨지고 총이 가운데로, 느리게 걷고 반동이 줄어든다. 장전 중엔 풀린다)
+// 선수 화면엔 상대 체력이 안 보인다(내 체력 · 탄창 · 라운드 점수 · 남은 시간만). 관전자는 두 선수 체력과 머리 위 막대를 본다
 // 명중은 서버(server/duel/games/shoot.js)가 쏜 위치 · 방향 · 시각과 상대의 위치 기록으로 정한다. 여기서는 맞은 쪽 엔진 처리(hc)를 막고, 서버가 받은 것만 휘청이게 한다
 import type { DuelGame, DuelSeat } from "../client";
 import { registerFurn } from "../furniture";
@@ -25,7 +28,7 @@ registerFurn("scover", (G, o, k) => {
 });
 
 const COLOR = [0xF15B5B, 0x2F80ED], CSS = ["#F15B5B", "#2F80ED"];   // 0번 자리 빨강(북서) · 1번 자리 파랑(남동)
-const BLOCK = new Set(["Digit1", "Digit2", "Digit3", "Digit4", "Numpad1", "Numpad2", "Numpad3", "Numpad4", "KeyZ"]);   // 경기 중 선수: 총을 내려놓게 하는 동작 키(그리기 · 인사 · 하트 · 춤 · 인벤토리 칸)
+const BLOCK = new Set(["KeyR", "Digit1", "Digit2", "Digit3", "Digit4", "Numpad1", "Numpad2", "Numpad3", "Numpad4", "KeyZ"]);   // 경기 중 선수: 총을 내려놓게 하는 동작 키(그리기 · 인사 · 하트 · 춤 · 인벤토리 칸)
 const turn = (a: number, b: number) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
 
 /* ───── 경기 ───── */
@@ -39,8 +42,15 @@ export const game: DuelGame = {
     const big = document.createElement("div"); big.className = "shootCount"; big.hidden = true; big.setAttribute("aria-live", "assertive"); document.body.append(big);
     const mark = document.createElement("div"); mark.className = "shootMark"; mark.hidden = true; document.body.append(mark);
     const flash = document.createElement("div"); flash.className = "shootFlash"; document.body.append(flash);
-    let key = "", bigKey = "", n = st().n ?? 1, armedAt = -9, told = false, markT = 0;
+    let key = "", bigKey = "", statKey = "", n = st().n ?? 1, armedAt = -9, told = false, markT = 0;
     const shots: { dir: number; lift: number; at: number; used?: boolean }[] = [];
+    // 이 층 총은 종이 AK(관전자에게도 같은 모양 · 같은 총알 빠르기), 이름표는 숨긴다. 선수는 1인칭만 · 연사 간격은 AK
+    ctx.gun("ak"); ctx.bulletSpeed(SHOOT.SPEED * 1.25); ctx.tags(false);
+    if (ctx.mine) { ctx.view("first"); ctx.fireGap(SHOOT.FIRE); document.body.classList.add("duelFps"); }
+    // 탄창: 쏠 때마다 하나씩, 다 쓰면 저절로 · R로 장전(2.2초 동안 못 쏜다). 라운드가 바뀌면 가득
+    let ammo = SHOOT.MAG, reloadAt = 0, firing = false, aiming = false;
+    const stat = document.createElement("div"); stat.className = "shootStat"; if (ctx.mine) document.body.append(stat);
+    const reload = () => { if (reloadAt || ammo >= SHOOT.MAG) return; reloadAt = performance.now() + SHOOT.RELOAD; };
 
     // 머리 위 체력 막대(엄폐물 뒤에서는 가려진다). 캐릭터는 외형이 바뀌면 새로 만들어지므로 매 프레임 위치만 따라간다
     const bars = [0, 1].map((s) => {
@@ -52,7 +62,7 @@ export const game: DuelGame = {
     function paintBars() {
       const hp = st().hp || [SHOOT.HP, SHOOT.HP];
       bars.forEach((b, s) => {
-        const d = ctx.doll(s as DuelSeat), show = !!d && d.root.visible && ctx.me.f === ctx.floor && s !== seat && ctx.match.phase !== "countdown";   // 내 막대는 HUD에(1인칭이면 카메라를 가린다)
+        const d = ctx.doll(s as DuelSeat), show = !!d && d.root.visible && ctx.me.f === ctx.floor && seat === null && ctx.match.phase !== "countdown";   // 관전자만(선수는 상대 체력을 모른다)
         b.g.visible = show; if (!show) return;
         b.g.position.copy(d.root.position); b.g.position.y += 1.78; b.g.quaternion.copy(ctx.camera.quaternion);
         const k = Math.max(.001, hp[s] / SHOOT.HP); b.fill.scale.x = k; b.fill.position.x = -.42 * (1 - k);
@@ -61,8 +71,16 @@ export const game: DuelGame = {
     function paintHud() {
       const m = ctx.match, s = st(), hp = s.hp || [SHOOT.HP, SHOOT.HP], wins = s.wins || [0, 0];
       const pips = (w: number) => Array.from({ length: SHOOT.WIN }, (_, i) => `<i class="${i < w ? "on" : ""}"></i>`).join("");
-      const html = `<b class="sr">${s.round || 1}라운드${s.again ? " 다시" : ""}</b>${m.players.map((p, i) => `<span class="sp${i === seat ? " me" : ""}" style="--c:${CSS[i]}"><em>${i === seat ? "나" : esc(p.name)}</em><span class="hp"><b style="width:${hp[i] / SHOOT.HP * 100}%"></b></span><span class="hn">${hp[i]}</span><span class="w">${pips(wins[i])}</span></span>`).join("")}`;
+      const left = s.phase === "go" && m.phase === "playing" ? Math.max(0, Math.ceil((m.endsAt - ctx.now()) / 1000)) : null, clock = left === null ? "" : `<b class="st${left <= 10 ? " low" : ""}">${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}</b>`;
+      const html = seat !== null   // 선수: 라운드 · 남은 시간 · 두 사람이 이긴 라운드(나 : 상대)만
+        ? `<b class="sr">${s.round || 1}라운드${s.again ? " 다시" : ""}</b>${clock}<span class="sp me" style="--c:${CSS[seat]}"><em>나</em><span class="w">${pips(wins[seat])}</span></span><span class="sp" style="--c:${CSS[1 - seat]}"><em>상대</em><span class="w">${pips(wins[1 - seat])}</span></span>`
+        : `<b class="sr">${s.round || 1}라운드${s.again ? " 다시" : ""}</b>${clock}${m.players.map((p, i) => `<span class="sp" style="--c:${CSS[i]}"><em>${esc(p.name)}</em><span class="hp"><b style="width:${hp[i] / SHOOT.HP * 100}%"></b></span><span class="hn">${hp[i]}</span><span class="w">${pips(wins[i])}</span></span>`).join("")}`;
       if (html !== key) { key = html; box.innerHTML = html; }
+      if (seat === null) return;
+      // 선수 아래쪽: 왼쪽 내 체력, 오른쪽 탄창(장전 중이면 막대)
+      const mine = hp[seat], rl = reloadAt ? Math.min(1, 1 - (reloadAt - performance.now()) / SHOOT.RELOAD) : -1;
+      const sh = `<span class="sh${mine <= 30 ? " low" : ""}"><i>✚</i><b>${mine}</b></span><span class="sa${ammo <= 5 && !reloadAt ? " low" : ""}">${reloadAt ? `<em>장전 중</em><span class="rl"><b style="width:${Math.round(rl * 100)}%"></b></span>` : `<b>${ammo}</b><small>/ ${SHOOT.MAG}</small>${ammo === 0 ? "" : ammo <= 5 ? "<em>R 장전</em>" : ""}`}</span>`;
+      if (sh !== statKey) { statKey = sh; stat.innerHTML = sh; }
     }
     // 라운드 사이 3·2·1(첫 라운드는 틀의 3·2·1)
     function paintCount() {
@@ -78,7 +96,10 @@ export const game: DuelGame = {
 
     if (ctx.mine) {
       // 내가 쏜 발을 기억했다가, 그 총알이 상대에게 닿으면 쏜 때 · 방향과 함께 서버로 알린다(서버가 내 위치 기록에서 그 발을 찾는다)
-      ctx.onFire((s) => { if (!live()) return; shots.push({ dir: s.dir, lift: s.lift, at: s.at }); if (shots.length > 16) shots.shift(); });
+      ctx.onFire((s) => {
+        ammo = Math.max(0, ammo - 1); ctx.recoil((.012 + Math.random() * .008) * (aiming && !reloadAt ? .55 : 1)); if (!ammo) reload();   // 반동: 연사하면 조금씩 위로 뜬다(조준하면 덜)
+        if (!live()) return; shots.push({ dir: s.dir, lift: s.lift, at: s.at }); if (shots.length > 24) shots.shift();
+      });
     }
     // 사람에게 닿은 총알은 모두 엔진 기본 처리(맞은 사람이 hc로 알림)를 막는다. 휘청임은 서버가 받은 hit에서
     ctx.onBulletHit((b) => {
@@ -94,9 +115,14 @@ export const game: DuelGame = {
         const m = ctx.match, s = st(), on = m.phase === "countdown" || m.phase === "playing";
         if (ctx.mine) {
           if (on && ctx.me.act !== "gun" && t - armedAt > .5) { armedAt = t; ctx.act("gun"); }   // 경기 동안은 늘 총을 든다
-          if (on && !told) { told = true; ctx.toast("종이 총을 들었어요", ctx.touch ? "🎆를 누르면 쏴요. 다섯 번 맞으면 라운드를 져요." : "왼쪽 클릭이나 F로 쏴요. 다섯 번 맞으면 라운드를 져요.", 3200); }
-          ctx.canFire(live());
+          if (on && !told) { told = true; ctx.toast("종이 AK-47을 들었어요", ctx.touch ? `🎆를 누르면 쏴요. 탄창 ${SHOOT.MAG}발, 다 쓰면 저절로 장전해요.` : `누르고 있으면 연사(왼쪽 클릭 · F), R로 장전. 탄창 ${SHOOT.MAG}발이에요.`, 3600); }
+          if (reloadAt && performance.now() >= reloadAt) { reloadAt = 0; ammo = SHOOT.MAG; }
+          ctx.reloading(reloadAt ? 1 - (reloadAt - performance.now()) / SHOOT.RELOAD : null);   // 장전 동작
+          ctx.canFire(live() && ammo > 0 && !reloadAt);
+          if (firing && live() && ammo > 0 && !reloadAt) ctx.fire();   // 누르고 있는 동안 연사(간격은 엔진이 지킨다)
           if (m.phase === "playing") ctx.lock(s.phase === "ready");   // 라운드 사이 3·2·1 동안은 제자리
+          const ads = aiming && !reloadAt && on; ctx.ads(ads); document.body.classList.toggle("ads", ads);   // 조준: 장전하는 동안은 풀린다
+          ctx.doubleJump(false); ctx.speed(ads ? .4 : ctx.me.running ? .6 : .75);   // 엄폐물을 넘나드는 더블 점프는 막고, 조준할 틈이 생기게 느리게(걷기 3.2→2.4, 달리기 7.3→4.4칸/초)
         } else ctx.canFire(false);   // 관전자는 쏘지 않는다(경기에 영향 없음)
         paintHud(); paintCount(); paintBars();
         if (!mark.hidden && performance.now() - markT > 650) mark.hidden = true;
@@ -104,11 +130,21 @@ export const game: DuelGame = {
       match(m) {
         const s = m.state || {};
         if ((s.n ?? 1) !== n) { // 새 라운드: 체력이 차고 둘 다 자기 구석으로
-          n = s.n ?? 1; shots.length = 0;
+          n = s.n ?? 1; shots.length = 0; ammo = SHOOT.MAG; reloadAt = 0; firing = false; aiming = false;
           if (ctx.mine && s.phase === "ready") { const sp = m.spawns[seat]; ctx.place(sp[0], sp[1], sp[2]); }
         }
       },
-      key(e) { return !!ctx.mine && e.type === "keydown" && BLOCK.has(e.code) && (ctx.match.phase === "countdown" || ctx.match.phase === "playing"); },
+      key(e) {
+        const on = !!ctx.mine && (ctx.match.phase === "countdown" || ctx.match.phase === "playing"); if (!on) return false;
+        if (e.code === "KeyF") { firing = e.type === "keydown"; return true; }   // F도 누르고 있으면 연사(엔진의 한 발 쏘기 대신)
+        if (e.code === "KeyR" && e.type === "keydown") reload();
+        return e.type === "keydown" && BLOCK.has(e.code);
+      },
+      pointer(e) {   // 왼쪽 버튼을 누르고 있는 동안 연사(엔진의 한 발 쏘기 대신) · 오른쪽 버튼을 누르고 있는 동안 조준
+        if (!ctx.mine || (e.button !== 0 && e.button !== 2) || !(ctx.match.phase === "countdown" || ctx.match.phase === "playing")) return false;
+        if (e.button === 2) aiming = e.type === "mousedown"; else firing = e.type === "mousedown";
+        return true;
+      },
       message(p) {
         if (p.k === "hit") {
           ctx.hitReact(p.to, p.dir);
@@ -129,7 +165,8 @@ export const game: DuelGame = {
         return seat === null ? `라운드 ${w[0]} : ${w[1]}` : `라운드 ${w[seat]} : ${w[1 - seat]}`;
       },
       stop() {
-        box.remove(); big.remove(); mark.remove(); flash.remove();
+        box.remove(); big.remove(); mark.remove(); flash.remove(); stat.remove(); document.body.classList.remove("duelFps", "ads"); ctx.ads(false); ctx.reloading(null);
+        ctx.view(null); ctx.tags(true); ctx.gun(null); ctx.fireGap(250); ctx.bulletSpeed(0);
         for (const b of bars) { b.g.removeFromParent(); b.mats.forEach((x) => x.dispose()); b.geos.forEach((x) => x.dispose()); }
         if (ctx.mine && ctx.me.act === "gun") ctx.act(null);   // 경기가 끝나면 총을 넣는다
       },

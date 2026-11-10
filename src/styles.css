@@ -81,7 +81,12 @@ button.chip{cursor:pointer}
 #floorHud{top:calc(12px + env(safe-area-inset-top,0px));left:max(12px,env(safe-area-inset-left,0px));max-width:calc(100% - 24px)}
 #floorBadge b{font-size:24px;color:var(--brand-strong);margin-right:6px}
 #setBtn{width:40px;height:40px;padding:0;display:grid;place-items:center;font-size:19px}
-#walletChip{height:40px;display:flex;align-items:baseline;gap:4px;background:#EFE7FB}#walletChip b{font-size:22px}   /* 하루들 연동 크루의 컷 잔액 */
+/* 컷 상점 칩: 상점 아이콘은 누구나, 옆의 컷 잔액(컷 아이콘 + 숫자)은 하루들 연동 크루만 */
+#walletChip{height:40px;display:flex;align-items:center;gap:6px;padding:0 10px;background:#EFE7FB}
+#walletChip svg{fill:none;stroke:var(--ink);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+#walletChip .wshop{width:22px;height:22px;fill:#fff}
+#walletCuts{display:flex;align-items:center;gap:3px;padding-left:7px;border-left:1.5px dashed var(--ink)}#walletCuts[hidden]{display:none}
+#walletCuts .wcuticon{width:17px;height:17px;fill:#B9A6EC}#walletCuts b{font-size:22px}
 button:focus-visible,input:focus-visible{outline:3px solid var(--brand);outline-offset:2px}
 #topRight{top:calc(12px + env(safe-area-inset-top,0px));right:max(12px,env(safe-area-inset-right,0px));justify-content:flex-end;max-width:calc(100% - 24px)}
 @media (max-width:640px){#topRight{top:calc(96px + env(safe-area-inset-top,0px))}}
@@ -604,6 +609,16 @@ body.touch .dcBtns kbd{display:none}
 .shootMark{position:fixed;z-index:15;left:50%;top:calc(50% + 34px);transform:translateX(-50%);font-family:var(--hand);font-weight:700;font-size:22px;color:#fff;-webkit-text-stroke:3px var(--ink);paint-order:stroke fill;pointer-events:none}
 .shootFlash{position:fixed;inset:0;z-index:14;pointer-events:none;box-shadow:inset 0 0 90px 30px rgba(241,91,91,.55);opacity:0}
 .shootFlash.on{animation:shootFlash .45s ease-out}
+/* 사격 대결 선수(FPS 1:1): 남은 시간 · 아래쪽 내 체력과 탄창 · 십자 조준점 */
+.shootHud .st{font-variant-numeric:tabular-nums;padding:0 6px;border-radius:6px;background:var(--ink);color:#fff;font-size:13px}.shootHud .st.low{background:#E5484D}
+.shootStat{position:fixed;z-index:9;left:0;right:0;bottom:calc(92px + env(safe-area-inset-bottom,0px));display:flex;justify-content:space-between;align-items:flex-end;padding:0 max(24px,env(safe-area-inset-left,0px));pointer-events:none;font-family:"Pretendard","Apple SD Gothic Neo",sans-serif;color:#fff;text-shadow:0 1px 0 #111118,0 0 6px rgba(17,17,24,.6)}
+.shootStat .sh,.shootStat .sa{display:flex;align-items:baseline;gap:6px;padding:6px 14px;border-radius:12px;background:rgba(17,17,24,.45)}
+.shootStat b{font:800 34px/1 "Pretendard",sans-serif;font-variant-numeric:tabular-nums}.shootStat i{font-style:normal;font-size:20px;color:#7FCFAE}
+.shootStat small{font:700 15px "Pretendard",sans-serif;opacity:.75}.shootStat em{font:700 12px "Pretendard",sans-serif;font-style:normal;color:#FFD43B}
+.shootStat .low b,.shootStat .low i{color:#FF8A8A}
+.shootStat .rl{display:block;width:96px;height:8px;border-radius:4px;background:rgba(255,255,255,.25);overflow:hidden;align-self:center}.shootStat .rl b{display:block;height:100%;background:#FFD43B}
+body.duelFps.ads #cross{opacity:0}   /* 조준하면 가늠자로 본다 */
+body.duelFps #cross{transition:opacity .1s;width:18px;height:18px;margin:-9px 0 0 -9px;border:0;border-radius:0;box-shadow:none;background:linear-gradient(#fff,#fff) center/2px 7px no-repeat,linear-gradient(#fff,#fff) center/7px 2px no-repeat;filter:drop-shadow(0 0 1px #111118) drop-shadow(0 0 1px #111118)}
 @keyframes shootFlash{0%{opacity:1}100%{opacity:0}}
 @media (max-width:640px){.shootHud .hp{width:64px}}
 @media (max-width:640px){#duelHud{top:calc(58px + env(safe-area-inset-top,0px))}.dhBar{font-size:15px;gap:6px;padding:4px 9px}#duelInbox{top:calc(150px + env(safe-area-inset-top,0px))}}

@@ -55,25 +55,25 @@ export function createShopUi(d: Deps) {
   const $ = (id: string) => document.getElementById(id)!;
   const modal = $("shop"), list = $("shopList"), tabs = $("shopTabs"), cuts = $("shopCuts"), entry = $("giftsShop"), earnBox = $("shopEarn");
   let available = false, loggedIn = false, catalog: Item[] = [], owned: string[] = [], gear: GearState = {}, balance = 0, tab = "pet", busy = false;
-  let earn = { reward: 0, today: false }, short = 0, wentOut = false;   // short: 방금 누른 상품에 모자란 컷(0이면 안내 카드를 그냥 "모으는 법"으로)
+  let earn = { reward: 0, today: false, welcome: 0 }, short = 0, wentOut = false;   // short: 방금 누른 상품에 모자란 컷(0이면 안내 카드를 그냥 "모으는 법"으로)
 
   function renderEarn(show: boolean) {
     earnBox.hidden = !show; if (!show) return;
     const r = earn.reward;
-    const how = !loggedIn ? "하루들과 연동하고 피드에 네컷만화를 올리면 컷을 받아요."
+    const how = !loggedIn ? `${earn.welcome ? `하루들과 처음 연동하면 ${earn.welcome}컷을 선물로 받고, ` : "하루들과 연동하고 "}피드에 네컷만화를 올리면 날마다 컷을 받아요.`
       : earn.today ? `오늘 컷은 이미 받았어요. 내일 하루들 피드에 네컷만화를 올리면 ${r}컷을 또 받아요.`
       : `하루들에서 네컷만화를 만들어 피드에 올리고 돌아오면 ${r}컷을 바로 받아요. 하루에 한 번이에요.`;
     earnBox.innerHTML = `<p><b>${short > 0 ? `${short}컷이 모자라요` : "컷 모으는 법"}</b></p><p>${esc(how)}</p><button type="button" class="btn lav" data-earn="go">네컷만화 만들러 가기 ↗</button>`;
   }
 
   function render() {
-    cuts.innerHTML = loggedIn ? `내 컷 <b>${balance.toLocaleString("ko-KR")}</b>컷 <button type="button" class="linkbtn" data-earn="how">모으는 법</button>` : "하루들과 연동하면 컷을 모아 살 수 있어요";
+    cuts.innerHTML = loggedIn ? `내 컷 <b>${balance.toLocaleString("ko-KR")}</b>컷 <button type="button" class="linkbtn" data-earn="how">모으는 법</button>` : `지금은 구경만 할 수 있어요. 하루들과 ${earn.welcome ? `처음 연동하면 ${earn.welcome}컷 선물!` : "연동하면 컷을 모아 살 수 있어요."}`;
     tabs.innerHTML = TABS.map(([k, label]) => `<button type="button" role="tab" class="dbtn${k === tab ? " on" : ""}" aria-selected="${k === tab}" data-tab="${k}">${label}</button>`).join("");
     const pick = TABS.find(([k]) => k === tab)![2];
     list.innerHTML = catalog.filter(pick).map((it) => {
       const got = owned.includes(it.sku), on = gear[it.slot] === it.sku, pet = it.slot === "pet", lack = loggedIn && !got && balance < it.price, off = busy ? " disabled" : "";
       // 컷이 모자라고 오늘 보상을 아직 안 받았으면: 버튼이 곧 "네컷만화 만들러 가기"다(누르면 하루들 만들기 화면이 열린다)
-      const buyLabel = lack && !earn.today ? `네컷만화 만들고 ${pet ? "데려오기" : "사기"} ↗` : `${it.price}컷으로 ${pet ? "데려오기" : "사기"}`;
+      const buyLabel = !loggedIn ? `🔒 연동하고 ${pet ? "데려오기" : "사기"}` : lack && !earn.today ? `네컷만화 만들고 ${pet ? "데려오기" : "사기"} ↗` : `${it.price}컷으로 ${pet ? "데려오기" : "사기"}`;
       const act = !got ? `<button type="button" class="btn${lack ? (earn.today ? " lack" : " lav") : ""}" data-buy="${esc(it.sku)}"${off}>${buyLabel}</button><button type="button" class="btn ghost" data-try="${esc(it.slot)}" data-sku="${esc(it.sku)}"${off}>${pet ? "미리 만나기" : "입어 보기"}</button>`
         : on ? `<button type="button" class="btn ghost" data-wear="${esc(it.slot)}" data-sku=""${off}>${pet ? "쉬게 하기" : "벗기"}</button>`
         : `<button type="button" class="btn" data-wear="${esc(it.slot)}" data-sku="${esc(it.sku)}"${off}>${pet ? "데리고 다니기" : "쓰기"}</button>`;
@@ -86,7 +86,7 @@ export function createShopUi(d: Deps) {
     if (Array.isArray(data.owned)) owned = data.owned;
     if (data.gear && typeof data.gear === "object") { gear = data.gear; d.setGear(gear); }
     if (typeof data.balance === "number") { balance = data.balance; d.showCuts(balance); }
-    if (data.earn && typeof data.earn === "object") earn = { reward: Number(data.earn.reward) || 0, today: !!data.earn.today };
+    if (data.earn && typeof data.earn === "object") earn = { reward: Number(data.earn.reward) || 0, today: !!data.earn.today, welcome: Number(data.earn.welcome) || 0 };
   }
 
   // 들어올 때 한 번: 상점이 켜져 있는지, (연동했으면) 가진 것 · 쓰는 것 · 잔액

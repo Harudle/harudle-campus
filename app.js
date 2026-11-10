@@ -24,7 +24,7 @@ import { createAuth } from "./server/auth/index.js";
 import { createStartrack } from "./server/startrack.js";
 import { canControlStartrack } from "./src/startrack/shared.mjs";
 import { CHAT_CMDS, rollText, pickText } from "./src/chat/shared.mjs";
-import { createDuel } from "./server/duel/index.js";
+import { createDuel, TESTER } from "./server/duel/index.js";
 import { DUEL } from "./src/duel/shared.mjs";
 
 const PORT = Number(process.env.PORT || 80);
@@ -160,7 +160,16 @@ const peers = new Map();   // id -> { ws, name, presence }
 auth.onGear((userId, gear) => { const uid = `h_${userId}`; for (const p of peers.values()) if (p.uid === uid) { if (Object.keys(gear).length) p.gear = gear; else delete p.gear; dirty = true; } });
 const startrack = createStartrack({ onChange: (state) => ezAll({ t: "startrack", state }) });
 // 1:1 대결: 경기 · 관전 자리는 공개 주소(uid)에 묶는다. 100ms마다 시간을 흘려 보낸다(카운트다운 · 시간 제한 · 끊김 기다림)
-const duel = createDuel({ peers, send: (pid, msg) => { const p = peers.get(pid); if (p?.ws.readyState === 1) p.ws.send(JSON.stringify(msg)); } });
+// 개발 서버(NODE_ENV가 production이 아닐 때)만: /대결 테스터 상대. 경기 동안 그 경기장 2번 자리에 서 있는 가짜 크루로 세운다(소켓 없음)
+const tester = process.env.NODE_ENV === "production" ? null : {
+  enter(m, sp) {
+    const p = { ws: { readyState: 3, send() { } }, name: TESTER.name, uid: TESTER.u, presence: null };
+    peers.set(TESTER.peer, p);
+    p.presence = sanitize({ f: m.floor, ar: m.ar, x: sp[0], y: sp[1], h: sp[2] ?? 0 }, duel.arenaOf(TESTER.u)); duel.presence(TESTER.peer, p.presence); dirty = true;
+  },
+  leave() { peers.delete(TESTER.peer); dirty = true; },
+};
+const duel = createDuel({ peers, tester, send: (pid, msg) => { const p = peers.get(pid); if (p?.ws.readyState === 1) p.ws.send(JSON.stringify(msg)); } });
 setInterval(() => duel.tick(), DUEL.TICK).unref();
 const admission = process.env.MEDIA_PROVIDER === "managed-draft" ? createMediaAdmission({ peers, maxParticipants: Number(process.env.MEDIA_MAX_PARTICIPANTS || 20), perAddressPerMinute: Number(process.env.MEDIA_JOIN_PER_IP_PER_MINUTE || 12) }) : null;
 const mediaSwitch = createSwitchCoordinator(peers, process.env.MEDIA_PROVIDER === "managed-draft" ? 2000 : 15000);

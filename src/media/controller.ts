@@ -1,5 +1,6 @@
 import { areaOf, canHear, canShareScreen } from "./policy.mjs";
 import { createMediaProvider } from "./provider";
+import { releaseMicrophone } from "./livekit";
 import type { CloudflareRequest, MediaCallbacks, MediaJoin, MediaProvider, NearbyPeer, Position } from "./types";
 import { mountMeetings } from "./meetings";
 import { mountMicrophone } from "./microphone";
@@ -29,6 +30,9 @@ export function mountMediaControls({ requestJoin, requestRenew, requestCloudflar
   let reconciling = false, queued = false, message = "";
   let leaseTimer: number | undefined, renewLease = false, pendingSwitch: number | null = null;
   let cleanupUnconfirmed = false, voiceState: VoiceState = 0;
+  // 캠퍼스 서버와 잠깐 끊겨도(배포로 워커가 바뀔 때 등) 음성은 바로 끊지 않는다. 이만큼 안에 다시 붙으면 음성·마이크를 그대로 이어 간다
+  const OFFLINE_GRACE_MS = 20000;
+  let offlineTimer: number | undefined;
   // 말하는 중 표시 · 설정창 마이크 고르기
   const micUi = mountMicrophone({
     track: () => provider?.microphoneTrack() ?? null,
@@ -97,6 +101,8 @@ export function mountMediaControls({ requestJoin, requestRenew, requestCloudflar
       dailyReady() { if (current()) notifyDailyReady(); },
       connectionLost() {
         if (!current()) return;
+        // 캠퍼스 서버가 바뀌는 중(배포)이면 서버가 음성 방을 정리하며 내보낸다: 끊긴 방만 닫고, 다시 붙으면 음성·마이크 그대로 다시 들어간다
+        if (!network && wanted) { renewLease = true; queue(); return; }
         wanted = false; microphone = false; sharing = false;
         message = "음성 연결이 끊겼어요. 다시 연결해 주세요.";
         queue();
@@ -104,13 +110,15 @@ export function mountMediaControls({ requestJoin, requestRenew, requestCloudflar
     };
   }
 
-  async function closeProvider() {
+  // keepMicrophone: 곧 다시 들어갈 거라 마이크는 열어 둔다. 아니면 들고 있던 마이크까지 끈다
+  async function closeProvider(keepMicrophone = false) {
     const old = provider;
+    if (!keepMicrophone) releaseMicrophone();
     if (leaseTimer !== undefined) { clearTimeout(leaseTimer); leaseTimer = undefined; }
     provider = null; providerArea = ""; connected = false; sharing = false; audioBlocked = false;
     clearTracks();
     if (old) {
-      try { await old.disconnect(); notifyLeft(); }
+      try { await old.disconnect(keepMicrophone); notifyLeft(); }
       catch { cleanupUnconfirmed = true; }
     }
     return !cleanupUnconfirmed;
@@ -142,8 +150,10 @@ export function mountMediaControls({ requestJoin, requestRenew, requestCloudflar
     reconciling = true;
     while (queued) {
       queued = false;
+      if (!network && wanted && provider && connected && !renewLease) { render(); continue; }   // 캠퍼스 서버만 끊긴 동안은 지금 음성을 그대로 둔다(다시 붙으면 새로 들어간다)
       if (!wanted || !network || !position || (meetings.isRequired() && !meetings.isSelected())) {
-        if (provider) await closeProvider();
+        const rejoin = wanted && !network;   // 캠퍼스 서버가 바뀌는 중: 다시 붙으면 들어간다
+        if (provider) await closeProvider(rejoin); else if (!rejoin) releaseMicrophone();
         if (pendingSwitch !== null && !cleanupUnconfirmed) { acknowledgeSwitch(pendingSwitch); pendingSwitch = null; }
         connecting = false; render();
         continue;
@@ -158,7 +168,7 @@ export function mountMediaControls({ requestJoin, requestRenew, requestCloudflar
         provider.setAllowedPeers(allowedPeers()); render(); continue;
       }
       const interruptedShare = renewLease && sharing;
-      if (provider && !(await closeProvider())) {
+      if (provider && !(await closeProvider(true))) {
         wanted = false; microphone = false;
         message = "이전 음성 연결을 정리했는지 확인하지 못했어요.";
         render(); continue;
@@ -171,12 +181,13 @@ export function mountMediaControls({ requestJoin, requestRenew, requestCloudflar
         const join = await requestJoin(area);
         if (!wanted || !network || !position || areaOf(position) !== area || join.area !== area) { notifyLeft(); queued = true; continue; }
         candidate = await createMediaProvider(join.provider, callbacksFor(() => candidate), requestCloudflare);
+        if (join.provider !== "livekit") releaseMicrophone();   // 들고 있던 마이크는 LiveKit만 다시 쓴다
         if (!wanted || !network || !position || areaOf(position) !== area) { notifyLeft(); queued = true; continue; }
         provider = candidate; providerArea = area;
         await candidate.setMicrophoneDevice(micUi.device()).catch(() => {});   // 설정창에서 고른 마이크
         candidate.setAllowedPeers(allowedPeers());
         await candidate.connect(join);
-        if (!wanted || !network || !position || areaOf(position) !== area) { await closeProvider(); queued = true; continue; }
+        if (!wanted || !network || !position || areaOf(position) !== area) { await closeProvider(wanted); queued = true; continue; }
         connected = true;
         candidate.setAllowedPeers(allowedPeers());
         if (microphone) await candidate.setMicrophone(true);
@@ -237,7 +248,22 @@ export function mountMediaControls({ requestJoin, requestRenew, requestCloudflar
     },
     setAvailable(available: boolean) { dock.hidden = !available; buttons.hidden = !available; if (!available) { wanted = false; queue(); } },
     setMeetingEnabled(enabled: boolean) { meetings.setEnabled(enabled); },
-    setNetwork(online: boolean) { network = online; meetings.setNetwork(online); if (!online) { provider?.setAllowedPeers([]); wanted = false; microphone = false; message = ""; } queue(); },
+    setNetwork(online: boolean) {
+      const was = network; network = online; meetings.setNetwork(online);
+      if (!online) {
+        if (offlineTimer === undefined) offlineTimer = window.setTimeout(() => {   // 오래 못 붙으면 그때 음성을 끊는다
+          offlineTimer = undefined; if (network) return;
+          provider?.setAllowedPeers([]); wanted = false; microphone = false; message = ""; queue();
+        }, OFFLINE_GRACE_MS);
+      } else {
+        if (offlineTimer !== undefined) { clearTimeout(offlineTimer); offlineTimer = undefined; }
+        // 다시 붙으면 서버가 새 크루 ID를 주므로, 듣던 음성은 새 ID로 다시 들어간다(음성·마이크 상태는 그대로)
+        if (!was && wanted && provider) renewLease = true;
+        // 회의 선택은 서버가 바뀌면 사라진다(비공개 회의는 비밀번호도 다시 받아야 한다): 회의실에서는 다시 고르게 한다
+        if (!was && wanted && meetings.isRequired()) { wanted = false; microphone = false; message = "캠퍼스에 다시 연결됐어요. 회의를 다시 선택해 주세요."; }
+      }
+      queue();
+    },
     updateWorld(nextPosition: Position, nextPeers: NearbyPeer[]) {
       const before = position && areaOf(position);
       position = nextPosition; peers = nextPeers;

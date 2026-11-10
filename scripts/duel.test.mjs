@@ -224,3 +224,23 @@ test("신청한 사람만 /종료로 경기를 끝내고, 승패 없이 끝나 �
   assert.equal(s.duel.records.users[UA], undefined, "전적에 남기지 않는다");
 });
 
+
+test("개발 서버: /대결 테스터는 신청 · 수락 없이 바로 열리고, 경기가 닫히면 테스터가 빠진다 · 운영에선 찾지 못한다", async () => {
+  const { TESTER } = await import("../server/duel/index.js");
+  for (const game of Object.keys(SERVER_GAMES)) {
+    let t = 1_000_000; const peers = new Map([["pa", { uid: "p_aaaaaaaaaaaaaaaa", name: "에이", presence: null }]]), sent = [], seen = [];
+    const tester = { enter: (m, sp) => { seen.push(["enter", m.floor, sp.length]); peers.set(TESTER.peer, { uid: TESTER.u, name: TESTER.name, presence: { f: m.floor, ar: m.ar, x: sp[0], y: sp[1] } }); }, leave: () => { seen.push(["leave"]); peers.delete(TESTER.peer); } };
+    const duel = createDuel({ peers, tester, send: (pid, msg) => sent.push({ pid, ...msg }), now: () => t, random: () => 0, store: { load: () => null, save() { } } });
+    duel.message("pa", { t: "duel:invite", to: TESTER.peer, game });
+    const m = duel.matchOf("p_aaaaaaaaaaaaaaaa");
+    assert.ok(m, `${game}: 바로 경기`); assert.equal(m.game, game); assert.equal(m.players[1].u, TESTER.u); assert.equal(seen[0][0], "enter");
+    assert.ok(!sent.some((x) => x.t === "duel:invited"), "초대장 없이");
+    duel.message("pa", { t: "duel:stop" });
+    for (let k = 0; k < 80; k++) { t += DUEL.TICK; duel.tick(); }
+    assert.equal(duel.matchOf("p_aaaaaaaaaaaaaaaa"), null); assert.deepEqual(seen.at(-1), ["leave"]); assert.ok(!peers.has(TESTER.peer));
+  }
+  const peers = new Map([["pa", { uid: "p_aaaaaaaaaaaaaaaa", name: "에이", presence: null }]]), sent = [];
+  const prod = createDuel({ peers, send: (pid, msg) => sent.push({ pid, ...msg }), store: { load: () => null, save() { } } });
+  prod.message("pa", { t: "duel:invite", to: "tester", game: "shoot" });
+  assert.equal(prod.matchOf("p_aaaaaaaaaaaaaaaa"), null); assert.equal(sent.at(-1).code, "unknown");
+});
