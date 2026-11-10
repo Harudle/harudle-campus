@@ -4,6 +4,7 @@
 // - GET /api/feed : 하루들 공개 피드를 작성자별로 묶어 중계 (4분 캐시)
 // - WS  /ws       : 같은 캠퍼스에 있는 크루 위치·말풍선·스킬 공유
 // - 14층 하루들 월드: /world/(dist), WS /world/ws, 월드 API (dist-server/world.mjs, world/server/campus.ts)
+// - 1:1 대결: WS duel:* (server/duel, docs/duel.md)
 import http from "node:http";
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
@@ -23,6 +24,8 @@ import { createAuth } from "./server/auth/index.js";
 import { createStartrack } from "./server/startrack.js";
 import { canControlStartrack } from "./src/startrack/shared.mjs";
 import { CHAT_CMDS, rollText, pickText } from "./src/chat/shared.mjs";
+import { createDuel } from "./server/duel/index.js";
+import { DUEL } from "./src/duel/shared.mjs";
 
 const PORT = Number(process.env.PORT || 80);
 const BIND_HOST = process.env.CAMPUS_BIND_HOST || undefined;
@@ -156,6 +159,9 @@ const peers = new Map();   // id -> { ws, name, presence }
 // 연동 크루가 상점에서 펫 · 장식을 쓰거나 벗으면 접속 중인 그 크루의 gear를 바로 바꾼다
 auth.onGear((userId, gear) => { const uid = `h_${userId}`; for (const p of peers.values()) if (p.uid === uid) { if (Object.keys(gear).length) p.gear = gear; else delete p.gear; dirty = true; } });
 const startrack = createStartrack({ onChange: (state) => ezAll({ t: "startrack", state }) });
+// 1:1 대결: 경기 · 관전 자리는 공개 주소(uid)에 묶는다. 100ms마다 시간을 흘려 보낸다(카운트다운 · 시간 제한 · 끊김 기다림)
+const duel = createDuel({ peers, send: (pid, msg) => { const p = peers.get(pid); if (p?.ws.readyState === 1) p.ws.send(JSON.stringify(msg)); } });
+setInterval(() => duel.tick(), DUEL.TICK).unref();
 const admission = process.env.MEDIA_PROVIDER === "managed-draft" ? createMediaAdmission({ peers, maxParticipants: Number(process.env.MEDIA_MAX_PARTICIPANTS || 20), perAddressPerMinute: Number(process.env.MEDIA_JOIN_PER_IP_PER_MINUTE || 12) }) : null;
 const mediaSwitch = createSwitchCoordinator(peers, process.env.MEDIA_PROVIDER === "managed-draft" ? 2000 : 15000);
 let managedStack = null;
@@ -200,13 +206,17 @@ const pubOf = (secret) => `p_${createHash("sha256").update(`harudle-campus:${sec
 const asPub = (u) => (typeof u !== "string" || !u ? u : PUB_RE.test(u) ? u : pubOf(u));   // 예전 기록(비밀 uid 그대로)을 공개 주소로
 function dmKeyOf(a, b) { return a < b ? `${a}|${b}` : `${b}|${a}`; }
 const strokeId = (u, id) => (id.startsWith(`${u}-`) ? id : `${u}-${createHash("sha256").update(id).digest("hex").slice(0, 12)}`);   // 예전 클라이언트는 획 id에 비밀 uid를 넣었다
-function sanitize(p) {
+// arena: 이 크루가 지금 있는 경기 방(duel.arenaOf). 대결장 층(21~24)은 그 경기의 선수 · 관전자만 그 방 번호(ar)로 받고, 나머지는 캠퍼스로 돌린다
+function sanitize(p, arena = null) {
   if (!p || typeof p !== "object") return null;
   const num = (v, a, b) => (typeof v === "number" && isFinite(v) ? Math.min(b, Math.max(a, v)) : 0);
+  const inArena = !!arena && p.f === arena.floor && p.ar === arena.ar, f = inArena ? p.f : [11, 12, 13, 14].includes(p.f) ? p.f : 11;
   return {
-    f: [11, 12, 13, 14].includes(p.f) ? p.f : 11, x: num(p.x, 0, 56), y: num(p.y, 0, 40), u: num(p.u, 0, 2), h: num(p.h, -7, 7),
+    f, x: num(p.x, 0, 56), y: num(p.y, 0, 40), u: num(p.u, 0, inArena ? 12 : 2), h: num(p.h, -7, 7),
     m: p.m ? 1 : 0, r: p.r ? 1 : 0, look: Math.floor(num(p.look, 0, 99)), jc: Math.floor(num(p.jc, 0, 1e9)), ac: Math.floor(num(p.ac, 0, 1e9)),
-    br: p.br ? 1 : 0, bc: typeof p.bc === "string" && /^#[0-9a-f]{6}$/i.test(p.bc) ? p.bc : null, l: p.l ? 1 : 0, ly: num(p.ly, -7, 7), st: p.st ? 1 : 0, av: typeof p.av === "string" && /^[0-9a-z]{7}([0-9A-F]{6}){6}[0-9a-z]?$/.test(p.av) ? p.av : null, an: ["draw", "wave", "heart", "laptop", "coffee", "dance", "gun"].includes(p.an) ? p.an : null, lp: p.lp ? 1 : 0, gn: p.gn ? 1 : 0, fk: p.fk ? 1 : 0, fl: p.fl ? 1 : 0, ox: num(p.ox, -20, 2), oz: num(p.oz, -40, 20), hc: Math.floor(num(p.hc, 0, 1e9)), hd: num(p.hd, -50, 50), dn: Math.floor(num(p.dn, 0, 10)), fc: Math.floor(num(p.fc, 0, 1e9)), fh: num(p.fh, -50, 50), as: Math.floor(num(p.as, 0, 1e7)), vc: [0, 1, 2].includes(p.vc) ? p.vc : 0, rm: roomKeyAt([11, 12, 13, 14].includes(p.f) ? p.f : 11, num(p.x, 0, 56), num(p.y, 0, 40)),
+    br: p.br ? 1 : 0, bc: typeof p.bc === "string" && /^#[0-9a-f]{6}$/i.test(p.bc) ? p.bc : null, l: p.l ? 1 : 0, ly: num(p.ly, -7, 7), st: p.st ? 1 : 0, av: typeof p.av === "string" && /^[0-9a-z]{7}([0-9A-F]{6}){6}[0-9a-z]?$/.test(p.av) ? p.av : null, an: ["draw", "wave", "heart", "laptop", "coffee", "dance", "gun"].includes(p.an) ? p.an : null, lp: p.lp ? 1 : 0, gn: p.gn ? 1 : 0, fk: p.fk ? 1 : 0, fl: p.fl ? 1 : 0, ox: num(p.ox, -20, 2), oz: num(p.oz, -40, 20), hc: Math.floor(num(p.hc, 0, 1e9)), hd: num(p.hd, -50, 50), dn: Math.floor(num(p.dn, 0, 10)), fc: Math.floor(num(p.fc, 0, 1e9)), fh: num(p.fh, -50, 50), as: Math.floor(num(p.as, 0, 1e7)), vc: [0, 1, 2].includes(p.vc) ? p.vc : 0,
+    // 대결장의 방 이름은 경기 방: 근처 채팅과 음성이 그 경기(선수 + 관전자) 안에서만 오간다. 회의실이 아니라 화면 공유는 꺼진다. dr: 1 선수 · 2 관전
+    rm: inArena ? `duel:${arena.ar}` : roomKeyAt(f, num(p.x, 0, 56), num(p.y, 0, 40)), ...(inArena ? { ar: arena.ar, ...(arena.role ? { dr: arena.role } : {}) } : {}),
   };
 }
 /* ───────── 13층 스타트랙 객석 뒤 창문 두 칸(이스터에그, 창가 테이블 띠 남쪽): 종이 총알 50발이면 깨지고 1분 뒤 다시 붙는다 ─────────
@@ -322,9 +332,10 @@ wss.on("connection", (ws, request) => {
     if (raw.length > 4096 && msg.t !== "media:cf") return;
     const me = peers.get(id); if (!me) return;
     if (msg.t === "name" && !me.verified) { me.name = clean(msg.name, 16) || "크루"; dirty = true; }
+    if (msg.t === "p" && !me.uid && +msg.p?.f >= 21) return;   // 다시 붙자마자 오는 대결장 위치: 누구인지(uid) 정해진 뒤 다시 온다(먼저 받으면 11층으로 튀어 보인다)
     if (msg.t === "p") {
       const previousArea = me.presence && mediaArea(me.presence);
-      me.presence = sanitize(msg.p);
+      me.presence = sanitize(msg.p, duel.arenaOf(me.uid)); duel.presence(id, me.presence);
       startrack.setPresent(id, canControlStartrack(me.presence));
       if (meetings && previousArea && (!me.presence || mediaArea(me.presence) !== previousArea)) {
         me.meetingId = null; me.meetingArea = null; me.dailyReady = false;
@@ -443,9 +454,10 @@ wss.on("connection", (ws, request) => {
       sendHistory(me);
     });
     if (msg.t === "chat" && ["near", "all", "dm"].includes(msg.k)) chatMessage(id, msg);
+    if (typeof msg.t === "string" && msg.t.startsWith("duel:")) void ready.then(() => { if (peers.has(id)) duel.message(id, msg); });   // uid가 정해진 뒤("id" 처리 다음)에 받는다
   });
   ws.on("pong", () => startrack.setPresent(id, canControlStartrack(peers.get(id)?.presence)));
-  ws.on("close", () => { const me = peers.get(id); if (me) void retireMedia(me).catch(() => {}); startrack.setPresent(id, false); cloudflareTest?.disconnected?.(id); mediaSwitch.disconnected(id); peers.delete(id); managedStack?.dailyPermissions.changed(); dirty = true; });
+  ws.on("close", () => { const me = peers.get(id); duel.left(id); if (me) void retireMedia(me).catch(() => {}); startrack.setPresent(id, false); cloudflareTest?.disconnected?.(id); mediaSwitch.disconnected(id); peers.delete(id); managedStack?.dailyPermissions.changed(); dirty = true; });
   ws.on("error", () => {});
 });
 setInterval(() => { // 초당 12번, 바뀐 게 있을 때만 모두에게 전체 상태를 보낸다

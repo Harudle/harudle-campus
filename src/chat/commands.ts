@@ -1,5 +1,6 @@
 // 채팅 명령어: "/"로 시작하면 채팅으로 보내지 않고 여기서 처리한다. "//"로 시작하면 "/"를 붙인 그대로 보낸다
 // 엔진의 기능은 host로 받아 쓰고, 결과 안내는 나에게만 보이는 줄(note)로 남긴다
+import { findGame, isArena } from "../duel/shared.mjs";
 export type ChatTab = "near" | "all" | "dm";
 export type CommandPeer = { id: string; u?: string; name: string; f: number; place: string; near: boolean };
 export type CommandHost = {
@@ -20,10 +21,14 @@ export type CommandHost = {
   mic(): boolean
   open(what: "menu" | "voice" | "keys" | "profile" | "look" | "inv" | "tour"): void
   prefill(text: string): void
+  // 1:1 대결(src/duel/client.ts). game은 종목 id(jump · shoot · target · box), 없으면 종목 고르는 창
+  duel: { games: readonly { id: string; name: string }[]; invite(p: CommandPeer, game?: string): void; watch(p: CommandPeer | null): void; forfeit(): void; records(p: CommandPeer | null): void }
 };
 type Command = { names: string[]; args?: string; desc: string; run(arg: string, host: CommandHost): void };
 
 const FLOOR_RE = /^(1[1-4])\s*(f|층)?$/i;
+// 크루가 있는 곳: 대결장(21~24층)은 층 대신 "대결 중 · 관전 중"
+const where = (p: CommandPeer) => (isArena(p.f) ? p.place : `${p.f}F${p.place ? ` ${p.place}` : ""}`);
 
 // 이름으로 크루 찾기: 똑같은 이름 → 이름으로 시작 → 이름에 들어 있음 순. 여럿이면 고르게 안내한다
 function findPeer(host: CommandHost, q: string): CommandPeer | null {
@@ -79,11 +84,24 @@ const COMMANDS: Command[] = [
     h.floor(+m[1]);
   } },
   { names: ["찾기", "find"], args: "[이름]", desc: "크루가 어디 있는지 보기", run: (a, h) => {
-    if (!a) { const all = h.peers(); h.note(all.length ? all.slice(0, 10).map((p) => `${p.name} ${p.f}F${p.place ? ` ${p.place}` : ""}`).join(" · ") + (all.length > 10 ? ` 외 ${all.length - 10}명` : "") : "아직 다른 크루가 없어요"); return; }
-    const p = findPeer(h, a); if (p) h.note(`${p.name}님은 ${p.f}F${p.place ? ` ${p.place}` : ""}에 있어요${p.near ? " · 바로 근처예요" : ""}`);
+    if (!a) { const all = h.peers(); h.note(all.length ? all.slice(0, 10).map((p) => `${p.name} ${where(p)}`).join(" · ") + (all.length > 10 ? ` 외 ${all.length - 10}명` : "") : "아직 다른 크루가 없어요"); return; }
+    const p = findPeer(h, a); if (p) h.note(isArena(p.f) ? `${p.name}님은 ${p.place}이에요 · /관전 ${p.name}` : `${p.name}님은 ${where(p)}에 있어요${p.near ? " · 바로 근처예요" : ""}`);
   } },
   { names: ["따라가기", "follow"], args: "이름", desc: "크루 따라가기", run: (a, h) => { const p = findPeer(h, a); if (p) h.follow(p.id); } },
   { names: ["멈춤", "stop"], desc: "따라가기 멈추기", run: (_, h) => h.stopFollow() },
+  // 1:1 대결(docs/duel.md)
+  { names: ["대결", "duel"], args: "이름 [종목]", desc: "1:1 대결 신청 (점프맵 · 사격 · 과녁 · 복싱)", run: (a, h) => {
+    if (!a) { h.note("대결할 크루 이름을 같이 써 주세요 (예: /대결 포비 점프맵)"); return; }
+    const whole = h.peers().find((p) => p.name === a); if (whole) { h.duel.invite(whole, undefined); return; }   // 쓴 글 전체가 이름이면 그 사람("고양이 복싱" 같은 이름)
+    // 끝 단어가 종목이면 종목, 아니면 이름 전체(띄어쓰기 있는 이름도 된다)
+    const sp = a.lastIndexOf(" "), g = sp > 0 ? findGame(a.slice(sp + 1)) : null;
+    const [p, rest] = splitTarget(h, g ? a.slice(0, sp).trim() : a); if (!p) return;
+    if (rest) { const g2 = findGame(rest); if (!g2) { h.note(`종목은 ${h.duel.games.map((x) => x.name).join(" · ")} 중에서 골라 주세요`); return; } h.duel.invite(p, g2.id); return; }
+    h.duel.invite(p, g?.id);
+  } },
+  { names: ["관전", "watch"], args: "[이름]", desc: "크루의 대결 보기 · 이름 없이 쓰면 그만 보기", run: (a, h) => { if (!a) { h.duel.watch(null); return; } const p = findPeer(h, a); if (p) h.duel.watch(p); } },
+  { names: ["기권", "forfeit"], desc: "진행 중인 대결 기권", run: (_, h) => h.duel.forfeit() },
+  { names: ["전적", "record"], args: "[이름]", desc: "대결 승 · 패 · 무와 점프맵 기록", run: (a, h) => { if (!a) { h.duel.records(null); return; } const p = findPeer(h, a); if (p) h.duel.records(p); } },
   // 음성
   { names: ["음성", "voice"], desc: "음성 연결 · 나가기", run: (_, h) => { if (!h.voice()) h.note("지금은 음성을 쓸 수 없어요"); } },
   { names: ["마이크", "mic"], desc: "마이크 켜기 · 끄기", run: (_, h) => { if (!h.mic()) h.note("먼저 /음성으로 연결해 주세요"); } },
