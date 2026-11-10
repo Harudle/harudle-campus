@@ -1,4 +1,4 @@
-// 사격 대결 서버 규칙: 체력 100 · 한 발 20, 라운드마다 체력이 다시 차고 3판 2선승. 라운드 90초, 시간이 다 되면 체력이 많은 쪽이 이기고 같으면 다시 한다
+// 사격 대결 서버 규칙: 체력 200 · 몸 15 · 머리 26(1.75배, headshot), 라운드마다 체력이 다시 차고 3판 2선승. 라운드 60초, 시간이 다 되면 체력이 많은 쪽이 이기고 같으면 다시 한다
 // 명중은 서버가 정한다. 쏜 사람 브라우저가 "내 총알이 상대에게 닿았다"(hit)를 보내면, 그 사람의 위치 기록에서 그 발을 쏜 순간(fc가 바뀐 위치, fh = 방향)을 찾아
 // 거리 · 앞쪽 · 옆으로 벗어난 정도 · 엄폐물 · 연사 간격을 상대의 최근 위치 기록과 맞춰 본다. 맞은 사람 브라우저의 말(hc)은 쓰지 않는다
 import { SHOOT, SHOOT_COVER } from "../../../src/duel/arena/shoot.mjs";
@@ -19,6 +19,13 @@ function crosses(r, x0, y0, x1, y1, m = .2) {
 // (예전 발의 fc를 그대로 단 채 더 가까이 걸어온 위치를 쏜 자리로 우기지 못하게)
 const shotsOf = (hist) => hist.filter((e, i) => i > 0 && e.fk && e.fc !== hist[i - 1].fc);
 
+// 헤드샷 확인: 브라우저가 말한 맞은 높이(hy, 상대 발에서 m)가 머리이고, 쏜 높이 · 위아래(fp) · 거리로 셈한 총알 높이와 말이 되는지
+// 상대가 뛰는 중이면 발이 높아져 hy가 셈보다 낮게 나오므로 아래로는 넉넉히(점프 1.4m) 봐준다
+export function headshot(r, p) {
+  if (!p.head || !fin(p.hy) || p.hy < SHOOT.HEAD_Y || p.hy > 1.3 || !fin(r.shot.fp)) return false;
+  const y = r.lift + SHOOT.MUZZLE + Math.tan(Math.max(-1.5, Math.min(1.5, r.shot.fp))) * r.fwd * 1.25 - (+r.h.u || 0);   // 한 칸 1.25m
+  return p.hy <= y + .45 && p.hy >= y - 1.4;
+}
 // 맞힘 확인: 받으면 { shot }, 아니면 { why } (why: round · self · bad · late · fast · shot · behind · far · cover · aim)
 export function judge(m, seat, p, api) {
   const st = m.state, sh = m.shoot, t = api.now();
@@ -41,8 +48,8 @@ export function judge(m, seat, p, api) {
   for (const h of pts) {
     const dx = h.x - shot.x, dy = h.y - shot.y, fwd = dx * fx + dy * fy, side = Math.abs(dx * fy - dy * fx);
     const k = fwd <= 0 ? "behind" : fwd > SHOOT.RANGE ? "far" : side > SHOOT.WIDE ? "aim" : Math.abs(h.at - (shot.at + fwd / SHOOT.SPEED * 1000 - 250)) > 1100 ? "aim"
-      : lift < SHOOT.OVER && SHOOT_COVER.some((c) => crosses(c, shot.x, shot.y, h.x, h.y)) ? "cover" : "";
-    if (!k) return { shot };
+      : SHOOT_COVER.some((c) => (c.ht > 2 || (c.ht >= 1 && lift < SHOOT.OVER)) && crosses(c, shot.x, shot.y, h.x, h.y)) ? "cover" : "";   // 높은 엄폐물은 늘, 상자 · 통은 낮게 쏘면 막는다(모래주머니는 안 막는다)
+    if (!k) return { shot, h, fwd, lift };
     if (rank[k] > best) { best = rank[k]; why = k; }
   }
   return { why };
@@ -77,8 +84,8 @@ export default {
     const r = judge(m, seat, p, api);
     if (!r.shot) return api.send(m, seat, { k: "miss", why: r.why });
     m.shoot.lastAt[seat] = p.at; m.shoot.lastShot[seat] = r.shot.at; m.shoot.lastFc[seat] = r.shot.fc;
-    const foe = 1 - seat, st = m.state; st.hp[foe] = Math.max(0, st.hp[foe] - SHOOT.DMG);
-    api.broadcast(m, { k: "hit", seat, to: foe, dir: r.shot.fh, hp: [...st.hp] });
+    const foe = 1 - seat, st = m.state, head = headshot(r, p), dmg = head ? Math.round(SHOOT.DMG * SHOOT.HEAD) : SHOOT.DMG; st.hp[foe] = Math.max(0, st.hp[foe] - dmg);
+    api.broadcast(m, { k: "hit", seat, to: foe, dir: r.shot.fh, hp: [...st.hp], dmg, ...(head ? { head: 1 } : {}) });
     if (st.hp[foe] <= 0) return roundOver(m, api, seat, "ko");
     api.sync(m);
   },

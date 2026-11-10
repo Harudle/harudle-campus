@@ -11,134 +11,137 @@ function arena(def) {
 // src/duel/arena/jump.mjs
 var JUMP_RUN = 7.3;
 var JUMP_BOUNCE = 8;
-var STRIP = 9;
-var X0 = 2;
+var JUMP_CEIL = 40;
+var OUTER = 15;
+var INNER = 9;
+var LOOKS = ["crate", "pipe", "can", "books", "beam"];
 var DEFS = [
-  { id: "cloud", name: "\uAD6C\uB984 \uACC4\uB2E8", segs: [
-    [1, 2, 0.8, 2, 3],
-    [2, 2, 1.2, 1, 3],
-    [2, 2, 1.6, 3, 3],
-    [2, 3, 1.2, 2, 3],
-    [2, 3, 1.4, 0, 7, "cp"],
-    [2, 1, 1.8, 0, 2],
-    [2, 1, 2.2, 2, 2],
-    [2, 1, 2.6, 4, 2],
-    [2, 2, 2, 2, 3],
-    [2, 3, 2, 0, 7, "cp"],
-    [2, 2, 0.6, 2, 3, "t"],
-    [2, 3, 2.6, 0, 7, "end"]
-  ] },
-  { id: "stone", name: "\uC9D5\uAC80\uB2E4\uB9AC", segs: [
-    [1, 1, 0.7, 1, 2],
-    [2, 1, 0.9, 4, 2],
-    [2, 1, 1.1, 1, 2],
-    [2, 1, 1.3, 4, 2],
-    [2, 2, 1, 2, 3],
-    [2, 3, 1.2, 0, 7, "cp"],
-    [2, 1, 1.5, 0, 2],
-    [1, 1, 1.8, 3, 2],
-    [1, 1, 2.1, 5, 2],
-    [2, 1, 1.6, 2, 2],
-    [2, 1, 2, 0, 2],
-    [2, 3, 2, 0, 7, "cp"],
-    [2, 1, 2.4, 2, 3],
-    [2, 1, 2.8, 4, 3],
-    [2, 3, 2.8, 0, 7, "end"]
-  ] },
-  { id: "spring", name: "\uD1B5\uD1B5 \uD2B8\uB7A8\uD384\uB9B0", segs: [
-    [2, 2, 0.4, 2, 3, "t"],
-    [2, 3, 2, 2, 3],
-    [2, 2, 1.2, 1, 3],
-    [2, 3, 1.2, 0, 7, "cp"],
-    [2, 2, 0.6, 3, 3, "t"],
-    [2, 2, 2.6, 1, 3],
-    [2, 2, 0.8, 4, 3, "t"],
-    [2, 2, 3.2, 2, 3],
-    [2, 3, 3, 0, 7, "cp"],
-    [2, 2, 2.2, 1, 2],
-    [2, 3, 2.6, 0, 7, "end"]
-  ] },
-  { id: "tower", name: "\uD558\uB298 \uD0D1", segs: [
-    [1, 2, 1, 0, 3],
-    [1, 2, 1.6, 4, 3],
-    [1, 2, 2.2, 0, 3],
-    [2, 3, 1.6, 2, 3],
-    [2, 3, 1.8, 0, 7, "cp"],
-    [2, 1, 2.9, 3, 2],
-    [2, 1, 2.3, 0, 2],
-    [2, 1, 3.4, 3, 2],
-    [2, 2, 2.8, 5, 2],
-    [2, 3, 2.6, 0, 7, "cp"],
-    [2, 1, 3.2, 1, 2],
-    [2, 1, 3.6, 4, 2],
-    [2, 3, 3, 0, 7, "end"]
-  ] }
+  { id: "tower-sky", name: "\uD558\uB298 \uD0D1", seed: 11, rise: [1, 1.25], drop: 6, tramp: [9] },
+  { id: "tower-junk", name: "\uACE0\uBB3C \uD0D1", seed: 23, rise: [1.05, 1.28], drop: 7, tramp: [] },
+  { id: "tower-bounce", name: "\uD1B5\uD1B5 \uD0D1", seed: 37, rise: [1, 1.2], drop: 5, tramp: [4, 12] },
+  { id: "tower-onlyup", name: "\uC628\uB9AC \uC5C5", seed: 59, rise: [1.15, 1.3], drop: 0, tramp: [] }
 ];
-function course(def, k) {
-  const y0 = 1 + k * STRIP, iy = y0 + 1, pads = [{ x: X0, y: iy, w: 3, h: 7, top: 0.5 }], blocks = [];
-  let x = X0 + 3;
-  for (const [gap, len, top, lane = 0, rows = 7, kind = "b"] of def.segs) {
-    x += gap;
-    const b = { x, y: iy + lane, w: len, h: rows, top, kind };
-    x += len;
-    (kind === "cp" || kind === "end" ? pads : blocks).push(b);
+var QUADS = [[2, 2], [29, 2], [2, 21], [29, 21]];
+var QW = 25;
+var QH = 17;
+var lcg = (seed) => () => {
+  seed = seed * 1103515245 + 12345 & 2147483647;
+  return seed / 2147483647;
+};
+function perim(rx, ry, L, p) {
+  const s = L - 1;
+  if (p < s) return [rx + p, ry];
+  if (p < 2 * s) return [rx + s, ry + p - s];
+  if (p < 3 * s) return [rx + s - (p - 2 * s), ry + s];
+  return [rx, ry + s - (p - 3 * s)];
+}
+function steps(total, r) {
+  const four = (total - 3 * Math.floor(total / 3)) % 3, n4 = [0, 4, 2][four] + 3 * Math.floor(r() * 2);
+  const n3 = (total - 4 * n4) / 3, out = [...Array(n4).fill(4), ...Array(n3).fill(3)];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(r() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
   }
-  const cx = (r) => r.x + r.w / 2, minT = pads.map((p, i) => i ? Math.round((cx(p) - cx(pads[i - 1])) / JUMP_RUN * 1e3 * 0.7) : 0);
-  const spot = (p) => [cx(p), p.y + p.h / 2, E];
-  return { id: def.id, name: def.name, k, y0, pads, blocks, minT, spot: pads.map(spot), spawns: [[X0 + 1.5, iy + 1.5, E], [X0 + 1.5, iy + 5.5, E]], watch: [[X0 + 1.5, iy + 3.5, E]] };
+  return out;
+}
+function course(def, k) {
+  const r = lcg(def.seed), [qx2, qy2] = QUADS[k], rx = qx2 + 7, ry = qy2 + 1;
+  const start = { x: rx - 4, y: ry, w: 3, h: 3, top: 0.5, kind: "start" }, pads = [start], blocks = [], path = [start];
+  let top = start.top, n = 0;
+  const rise = () => def.rise[0] + r() * (def.rise[1] - def.rise[0]);
+  const put = (x, y, kind = "b", w = 1, h = 1) => {
+    n++;
+    const prev = path[path.length - 1], dropNow = kind === "b" && def.drop && n % def.drop === 0, bounce = prev.kind === "t";
+    top = Math.round((dropNow ? top - 0.5 : bounce ? top + 2.4 : kind === "t" ? top + 0.3 : top + rise()) * 100) / 100;
+    const b = { x, y, w, h, top, kind, look: LOOKS[Math.floor(r() * LOOKS.length)] };
+    (kind === "cp" || kind === "end" ? pads : blocks).push(b);
+    path.push(b);
+  };
+  let p = 0;
+  const s1 = steps(4 * (OUTER - 1) - 3, r);
+  for (let i = 0; i <= s1.length; i++) {
+    const [x, y] = perim(rx, ry, OUTER, p);
+    put(x, y, def.tramp.includes(i) ? "t" : "b");
+    p += s1[i] ?? 0;
+  }
+  p = 0;
+  const s2 = steps(4 * (INNER - 1) - 3, r);
+  for (let i = 0; i <= s2.length; i++) {
+    const [x, y] = perim(rx + 3, ry + 3, INNER, p);
+    put(x, y, i === 0 ? "cp" : def.tramp.includes(i + 20) ? "t" : "b");
+    p += s2[i] ?? 0;
+  }
+  put(rx + 6, ry + 6, "end", 3, 3);
+  const cx = (o) => o.x + o.w / 2, cy = (o) => o.y + o.h / 2;
+  const minT = pads.map((o, i) => i ? Math.round(path.slice(path.indexOf(pads[i - 1]) + 1, path.indexOf(o) + 1).reduce((t, b, j, a) => t + Math.hypot(cx(b) - cx(j ? a[j - 1] : pads[i - 1]), cy(b) - cy(j ? a[j - 1] : pads[i - 1])), 0) / JUMP_RUN * 1e3 * 0.5) : 0);
+  const spot = (o) => [cx(o), cy(o), E];
+  return { id: def.id, name: def.name, k, quad: [qx2, qy2], pads, blocks, path, minT, spot: pads.map(spot), spawns: [[start.x + 1.5, start.y + 0.8, E], [start.x + 1.5, start.y + 2.2, E]], watch: [[qx2 + 1.5, qy2 + QH / 2, E]] };
 }
 var JUMP_COURSES = DEFS.map(course);
 var JUMP_ARENA = (() => {
-  const a = arena({ f: 21, game: "jump", info: "\uC810\uD504\uB9F5 \uB300\uACB0\uC7A5", spawns: JUMP_COURSES[0].spawns, watch: JUMP_COURSES[0].watch, starts: JUMP_COURSES.map((c) => [c.pads[0].x + 3.5, c.pads[0].y + 3.5]) });
+  const a = arena({ f: 21, game: "jump", info: "\uC810\uD504\uB9F5 \uB300\uACB0\uC7A5", ceil: JUMP_CEIL, spawns: JUMP_COURSES[0].spawns, watch: JUMP_COURSES[0].watch, starts: JUMP_COURSES.map((c) => [c.pads[0].x + 1.5, c.pads[0].y + 1.5]) });
   for (const c of JUMP_COURSES) {
-    a.rooms.push(ring(1, c.y0, 54, STRIP));
-    a.zones.push(tint(2, c.y0 + 1, 52, 7, `${c.name} \uCF54\uC2A4`, "#DCEBFC", { checker: ["#E4F0FD", "#D2E4F9"] }));
-    c.pads.forEach((p, i) => a.furn.push({ ...p, kind: "jpad", mark: i === 0 ? "start" : i === c.pads.length - 1 ? "end" : "cp", n: i, course: c.k }));
-    for (const b of c.blocks) a.furn.push({ ...b, kind: b.kind === "t" ? "jtramp" : "jblock", ...b.kind === "t" ? { bounce: JUMP_BOUNCE } : {}, course: c.k });
+    const [qx2, qy2] = c.quad;
+    a.rooms.push(ring(qx2 - 1, qy2 - 1, QW + 2, QH + 2));
+    a.zones.push(tint(qx2, qy2, QW, QH, `${c.name} \uCF54\uC2A4`, "#DCEBFC", { checker: ["#E4F0FD", "#D2E4F9"] }));
+    c.pads.forEach((p, i) => a.furn.push({ x: p.x, y: p.y, w: p.w, h: p.h, top: p.top, kind: "jpad", mark: i === 0 ? "start" : i === c.pads.length - 1 ? "end" : "cp", n: i, course: c.k }));
+    for (const b of c.blocks) a.furn.push({ x: b.x, y: b.y, w: b.w, h: b.h, top: b.top, look: b.look, kind: b.kind === "t" ? "jtramp" : "jblock", ...b.kind === "t" ? { bounce: JUMP_BOUNCE } : {}, course: c.k });
   }
   return a;
 })();
 
 // src/duel/arena/shoot.mjs
-var SHOOT_FIELD = { x: 18, y: 7, w: 20, h: 20 };
+var SHOOT_FIELD = { x: 14, y: 5, w: 28, h: 24 };
 var CX = SHOOT_FIELD.x * 2 + SHOOT_FIELD.w;
 var CY = SHOOT_FIELD.y * 2 + SHOOT_FIELD.h;
+var rot = ([x, y, w, h, ...r]) => [CX - x - w, CY - y - h, w, h, ...r];
+var COVER_HT = { tall: 2.8, container: 2.6, stack: 2.4, crate: 1.2, barrel: 1.2, sandbag: 0.8 };
 var HALF = [
   // [x, y, w, h, 모양] 한쪽 절반. 나머지는 돌려서 만든다
-  [22, 10, 2, 2, "crate"],
-  // 내 자리 앞 상자
-  [34, 9, 2, 2, "crate"],
-  // 비어 있는 구석 상자
-  [30, 10, 3, 1, "wall"],
-  // 가로 종이벽
-  [23, 14, 1, 3, "wall"],
-  // 세로 종이벽
-  [27, 12, 1, 1, "barrel"],
-  // 가운데 앞 통
-  [19, 17, 1, 1, "barrel"]
-  // 옆 통
+  [17, 9, 4, 2, "container"],
+  // 내 자리 앞 컨테이너(자리를 가린다)
+  [38, 6, 2, 3, "container"],
+  // 비어 있는 구석 컨테이너
+  [24, 6, 1, 4, "tall"],
+  // 북쪽 길을 나누는 벽
+  [31, 5, 1, 2, "tall"],
+  // 북쪽 끝 짧은 벽(가장자리를 끝까지 못 보게)
+  [40, 19, 2, 1, "tall"],
+  // 동쪽 끝 짧은 벽
+  [29, 12, 1, 3, "tall"],
+  // 가운데를 도는 벽(바람개비 모양)
+  [22, 15, 3, 1, "tall"],
+  [15, 15, 2, 2, "stack"],
+  // 2단 상자 더미
+  [21, 11, 2, 2, "crate"],
+  // 상자
+  [33, 8, 1, 1, "barrel"],
+  [19, 20, 1, 1, "barrel"],
+  [35, 10, 3, 1, "sandbag"]
+  // 모래주머니(다리만 가린다)
 ];
 var SHOOT_COVER = [
-  ...HALF.flatMap(([x, y, w, h, look]) => [{ x, y, w, h, look }, { x: CX - x - w, y: CY - y - h, w, h, look }]),
-  { x: 27, y: 16, w: 2, h: 2, look: "crate", big: true }
-  // 한가운데 큰 상자
-];
+  ...HALF.flatMap((c) => [c, rot(c)]),
+  [27, 16, 2, 2, "crate", true]
+  // 한가운데 큰 상자(뛰면 너머가 보인다)
+].map(([x, y, w, h, look, big]) => ({ x, y, w, h, look, ht: COVER_HT[look], ...big ? { big } : {} }));
+var SHOOT_DECKS = [[36, 14, 3, 2, 0.9], [36, 16, 3, 1, 0.45, "step"]].flatMap((d) => [d, rot(d)]).map(([x, y, w, h, top, look]) => ({ x, y, w, h, top, look: look || "deck" }));
 var SHOOT_ARENA = arena({
   f: 22,
   game: "shoot",
   info: "\uC0AC\uACA9 \uB300\uACB0\uC7A5",
-  rooms: [ring(17, 6, 22, 22, { wall: 15251878 }), ring(17, 28, 22, 5)],
+  rooms: [ring(13, 4, 30, 26, { wall: 15251878 }), ring(13, 30, 30, 5)],
   zones: [
-    tint(18, 7, 20, 20, "\uC0AC\uACA9 \uACBD\uAE30\uC7A5", "#F3EEE4"),
+    tint(14, 5, 28, 24, "\uC0AC\uACA9 \uACBD\uAE30\uC7A5", "#F3EEE4"),
     // 바둑판(checker)은 tint 위에 그려져 자리 색을 덮으므로 쓰지 않는다
-    tint(18, 7, 3, 3, "\uBE68\uAC15 \uC790\uB9AC", "#F6D3CC"),
-    tint(35, 24, 3, 3, "\uD30C\uB791 \uC790\uB9AC", "#CFE0F6"),
-    tint(18, 29, 20, 3, "\uAD00\uC804\uC11D", "#ECEAF4")
+    tint(14, 5, 3, 3, "\uBE68\uAC15 \uC790\uB9AC", "#F6D3CC"),
+    tint(39, 26, 3, 3, "\uD30C\uB791 \uC790\uB9AC", "#CFE0F6"),
+    tint(14, 31, 28, 3, "\uAD00\uC804\uC11D", "#ECEAF4")
   ],
-  furn: SHOOT_COVER.map((c) => ({ ...c, kind: "scover" })),
-  spawns: [[19.5, 8.5, Math.PI / 4], [36.5, 25.5, -Math.PI * 3 / 4]],
+  furn: [...SHOOT_COVER.map((c) => ({ ...c, kind: "scover" })), ...SHOOT_DECKS.map((d) => ({ ...d, kind: "sdeck" }))],
+  spawns: [[15.5, 6.5, Math.PI / 4], [40.5, 27.5, -Math.PI * 3 / 4]],
   // 북서 구석(남동을 본다) · 남동 구석(북서를 본다)
-  watch: [[22.5, 30.5, N], [28, 30.5, N], [33.5, 30.5, N]]
+  watch: [[20.5, 32.5, N], [28, 32.5, N], [35.5, 32.5, N]]
 });
 
 // src/duel/arena/target.mjs
@@ -211,7 +214,7 @@ var WALL = 0.9;
 var DOLL = 1.12;
 var CEIL = { 11: 4.4, 12: 4.4, 13: 4.4, 14: 3.8 };
 var CAMPUS = [11, 12, 13, 14];
-for (const a of ARENAS) CEIL[a.f] = 9;
+for (const a of ARENAS) CEIL[a.f] = a.ceil ?? 9;
 var VIEW = { mode: "top" };
 var inside = () => VIEW.mode !== "top";
 var INK = 1118488;
@@ -446,6 +449,7 @@ function makeFloor(f) {
     F("plant", 3, 20, 2, 2);
     F("pebbles", 1, 16, 2, 9, { turn: Math.PI / 2, raw: true });
     for (const y of [17, 20, 23]) F("windowseat", 1, y, 2, 1, { turn: Math.PI / 2, raw: true });
+    F("mcsign", 2, 28, 1, 1, { raw: true });
     Z(1, 29, 13, 10, "\uC2A4\uD0C0\uD2B8\uB799", "", { npc: false, tint: "#F2F4E2", raw: true });
     Z(1, 11, 30, 1, "\uC2A4\uD0C0\uD2B8\uB799 \uAC00\uB294 \uAE38", "", { npc: false, tint: "#E4E3E0" });
     F("pillar", 9, 12, 1, 1);
@@ -787,16 +791,32 @@ function heightAt(fl, x, y) {
 }
 var R_ME = 0.28;
 var bagSpot = (o) => ({ x: o.x + o.w / 2, y: o.y + o.h / 2, yaw: o.yaw || 0 });
+var qmul = (a, b) => [a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1], a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0], a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3], a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2]];
+var qy = (t) => [0, Math.sin(t / 2), 0, Math.cos(t / 2)];
+var qx = (t) => [Math.sin(t / 2), 0, 0, Math.cos(t / 2)];
 function applyLie(doll, lie) {
   const r = doll.root;
   r.rotation.order = "YXZ";
+  if (lie?.lp || lie?.guitar || lie?.club) {
+    r.rotation.set(0, lie.yaw, 0);
+    return;
+  }
+  if (lie?.curl) {
+    const q = qmul(qmul(qy(lie.yaw), qx(-0.7)), qy(1.15));
+    r.quaternion.set(q[0], q[1], q[2], q[3]);
+    r.position.x += Math.sin(lie.yaw) * 0.22;
+    r.position.z += Math.cos(lie.yaw) * 0.22;
+    r.position.y += 0.22;
+    doll.blob.visible = false;
+    return;
+  }
   if (lie) {
     r.rotation.set(-Math.PI / 2 + 0.3, lie.yaw, 0);
     r.position.x += Math.sin(lie.yaw) * 0.42;
     r.position.z += Math.cos(lie.yaw) * 0.42;
     r.position.y += 0.5;
     doll.blob.visible = false;
-  } else if (r.rotation.x) {
+  } else if (r.rotation.x || r.rotation.y || r.rotation.z) {
     r.rotation.set(0, 0, 0);
     doll.blob.visible = true;
   }

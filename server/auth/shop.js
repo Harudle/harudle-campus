@@ -18,7 +18,7 @@ async function readJson(req, max = 512) {
 
 export function createShop({ env = {}, store, feedReward = 0, linkBonus = 0, now = () => Date.now(), log = console }) {
   const enabled = env.CAMPUS_WALLET === "on" && !!store?.buyItem;
-  const listeners = new Set();
+  const listeners = new Set(), ownedListeners = new Set();
   const notify = (userId, gear) => { for (const fn of listeners) try { fn(userId, gear); } catch (e) { log.error?.("[shop] gear listener failed:", e.message); } };
 
   // 이 회원이 지금 쓰고 있는 것(가진 것만). 꺼져 있거나 못 읽으면 빈 것
@@ -26,6 +26,12 @@ export function createShop({ env = {}, store, feedReward = 0, linkBonus = 0, now
     if (!enabled) return {};
     try { const [owned, gear] = await Promise.all([store.getInventory(userId), store.getGear(userId)]); return cleanGear(gear, owned); }
     catch (e) { log.error?.("[shop] gear lookup failed:", e.message); return {}; }
+  }
+
+  // 이 회원이 가진 것(감정표현을 쓸 수 있는지 서버가 본다). 꺼져 있거나 못 읽으면 빈 것
+  async function ownedOf(userId) {
+    if (!enabled) return [];
+    try { return await store.getInventory(userId); } catch (e) { log.error?.("[shop] inventory lookup failed:", e.message); return []; }
   }
 
   async function handle(req, res, url, { user, origin, json }) {
@@ -51,7 +57,9 @@ export function createShop({ env = {}, store, feedReward = 0, linkBonus = 0, now
         if (!it) { json(res, 400, { error: "sku" }); return true; }
         const r = await store.buyItem({ userId: u.id, sku: it.sku, price: it.price, at: now() });
         if (!r.ok) { json(res, 409, { error: r.reason, balance: r.balance }); return true; }
-        json(res, 200, { sku: it.sku, balance: r.balance, owned: await store.getInventory(u.id) });
+        const owned = await store.getInventory(u.id);
+        for (const fn of ownedListeners) try { fn(u.id, owned); } catch (e) { log.error?.("[shop] owned listener failed:", e.message); }   // 산 감정표현을 바로 쓸 수 있게
+        json(res, 200, { sku: it.sku, balance: r.balance, owned });
         return true;
       }
       // 쓰기 · 벗기
@@ -70,5 +78,5 @@ export function createShop({ env = {}, store, feedReward = 0, linkBonus = 0, now
     return true;
   }
 
-  return { enabled, handle, gearOf, onGear: (fn) => { listeners.add(fn); return () => listeners.delete(fn); } };
+  return { enabled, handle, gearOf, ownedOf, onGear: (fn) => { listeners.add(fn); return () => listeners.delete(fn); }, onOwned: (fn) => { ownedListeners.add(fn); return () => ownedListeners.delete(fn); } };
 }

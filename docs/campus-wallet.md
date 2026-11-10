@@ -68,3 +68,9 @@
 ```bash
 node --test scripts/wallet.test.mjs scripts/shop.test.mjs
 ```
+
+## 감정표현
+
+- 컷 상점 「감정표현」 탭의 상품은 쓰는 자리(slot)가 아니라 **가지면 G 감정표현 휠에서 고르는 것**입니다(`slot: "emote"`, `SLOTS`에 없어 `PUT /api/me/gear`로는 못 씁니다). 상품은 「개인 빈백에서 잠자기」(`emote_beanbag`) · 「기타 연주」(`emote_guitar`) · 「LP 감상」(`emote_lp`) · 「클럽 파티」(`emote_club`), 모두 15컷.
+- 서버는 로그인할 때와 산 직후 그 크루가 가진 감정표현 목록을 `{ t: "emotes", list }`로 보내고, 위치 정보의 감정표현(`em`, 예: `bag`)은 **가진 사람 것만** 받아 줍니다(`app.js` `emoteOk`). 개발 서버(`NODE_ENV`가 `production`이 아닐 때)는 서버가 모두 열어 두지만, 브라우저(vite 개발 서버)는 개발용 가짜 상점이 켜져 있으면 그 상점에서 산 감정표현만 G 휠에 띄웁니다(`src/engine/shop.ts`, `?nomock`이면 서버 목록 그대로).
+- 감정표현 휠: G를 꾹 누르면 **가진 프리미엄 감정표현만** 화면 가운데에 피자 모양으로 나오고, 마우스를 그쪽으로 밀고 G를 떼거나 누르면 합니다(Esc는 닫기). 하나도 없으면 G를 눌러도 아무것도 안 뜹니다. 기본 표현(네 컷 · 인사 · 하트 · 춤)은 1 2 3 Z 그대로입니다.

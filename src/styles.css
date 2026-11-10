@@ -335,6 +335,7 @@ body.touch.chatting #topRight,body.touch.peopleOpen #topRight{display:none}
 .modal .plabel input{font:inherit;font-size:16px;padding:8px 10px;border:2px solid var(--ink);border-radius:10px}
 .modal .prow{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
 /* 하루들 부스 선물 입간판: 받는 법 창 · 컷 상점(같은 목록 모양) */
+#shop .mockTag{display:inline-block;margin-bottom:2px;padding:1px 8px;border:1.5px dashed var(--ink);border-radius:8px;background:#E9F7EF;color:#1F7A4D;font-size:13px}   /* 개발 서버 가짜 상점 표시 */
 :is(#gifts,#shop) .giftbox{width:min(400px,calc(100% - 32px));max-height:calc(100dvh - 32px);overflow-y:auto}   /* 연동 안내까지 들어가 작은 화면에서는 스크롤 */
 :is(#gifts,#shop) h4{margin-bottom:4px}
 :is(#gifts,#shop) .gsub{margin:0 0 12px;font-size:14px;color:var(--muted)}
@@ -624,6 +625,19 @@ body.touch .dcBtns kbd{display:none}
 .shootMark{position:fixed;z-index:15;left:50%;top:calc(50% + 34px);transform:translateX(-50%);font-family:var(--hand);font-weight:700;font-size:22px;color:#fff;-webkit-text-stroke:3px var(--ink);paint-order:stroke fill;pointer-events:none}
 .shootFlash{position:fixed;inset:0;z-index:14;pointer-events:none;box-shadow:inset 0 0 90px 30px rgba(241,91,91,.55);opacity:0}
 .shootFlash.on{animation:shootFlash .45s ease-out}
+.shootFlash.head{box-shadow:inset 0 0 120px 46px rgba(229,72,77,.8)}   /* 머리에 맞으면 더 진하게 */
+/* 히트마커: 조준점 둘레 X(몸 흰색 · 머리 빨강 · 쓰러뜨리면 크게), 오른쪽 위로 데미지 숫자 */
+.shootHitX{position:fixed;z-index:15;left:50%;top:50%;width:30px;height:30px;margin:-15px 0 0 -15px;pointer-events:none;--c:#fff;
+  background:linear-gradient(45deg,transparent 46%,var(--c) 46%,var(--c) 54%,transparent 54%) 0 0/9px 9px no-repeat,linear-gradient(-45deg,transparent 46%,var(--c) 46%,var(--c) 54%,transparent 54%) 100% 0/9px 9px no-repeat,
+    linear-gradient(-45deg,transparent 46%,var(--c) 46%,var(--c) 54%,transparent 54%) 0 100%/9px 9px no-repeat,linear-gradient(45deg,transparent 46%,var(--c) 46%,var(--c) 54%,transparent 54%) 100% 100%/9px 9px no-repeat;
+  filter:drop-shadow(0 0 1px #111118) drop-shadow(0 0 1px #111118)}
+.shootHitX.head{--c:#FF4D4F}.shootHitX.kill{--c:#FF4D4F;width:42px;height:42px;margin:-21px 0 0 -21px;background-size:13px 13px}
+.shootHitX.on{animation:shootHitX .42s ease-out forwards}
+@keyframes shootHitX{0%{transform:scale(1.5);opacity:1}25%{transform:scale(1)}100%{transform:scale(1);opacity:0}}
+.shootDmg{position:fixed;z-index:15;left:calc(50% + 22px);top:calc(50% - 30px);font-family:var(--hand);font-weight:700;font-size:20px;color:#fff;-webkit-text-stroke:3px var(--ink);paint-order:stroke fill;pointer-events:none;white-space:nowrap}
+.shootDmg.head,.shootDmg.kill{color:#FF4D4F;font-size:24px}
+.shootDmg.on{animation:shootDmg .42s ease-out forwards}
+@keyframes shootDmg{0%{transform:translateY(4px) scale(1.2);opacity:1}100%{transform:translateY(-14px);opacity:0}}
 /* 사격 대결 선수(FPS 1:1): 남은 시간 · 아래 오른쪽 탄창 · 십자 조준점(내 체력은 아래 독 #duelDock) */
 .shootHud .st{font-variant-numeric:tabular-nums;padding:0 6px;border-radius:6px;background:var(--ink);color:#fff;font-size:13px}.shootHud .st.low{background:#E5484D}
 .akAmmo{position:fixed;z-index:9;bottom:calc(92px + env(safe-area-inset-bottom,0px));display:flex;pointer-events:none;font-family:"Pretendard","Apple SD Gothic Neo",sans-serif;color:#fff;text-shadow:0 1px 0 #111118,0 0 6px rgba(17,17,24,.6)}
@@ -638,7 +652,7 @@ body.duelFps #cross{transition:opacity .1s;width:18px;height:18px;margin:-9px 0 
 @keyframes shootFlash{0%{opacity:1}100%{opacity:0}}
 @media (max-width:640px){.shootHud .hp{width:64px}}
 @media (max-width:640px){#duelHud{top:calc(58px + env(safe-area-inset-top,0px))}.dhBar{font-size:15px;gap:6px;padding:4px 9px}#duelInbox{top:calc(150px + env(safe-area-inset-top,0px))}}
-@media (prefers-reduced-motion:reduce){#duelCount.pop,.shootCount.pop,.shootFlash.on{animation:none}.dcBar{transition:none}}
+@media (prefers-reduced-motion:reduce){#duelCount.pop,.shootCount.pop,.shootFlash.on,.shootHitX.on,.shootDmg.on{animation:none}.dcBar{transition:none}}
 #shop .glist .btn.lack{background:var(--paper-2);color:var(--muted)}   /* 컷이 모자란 상품: 눌리긴 하고, 누르면 모으는 법을 안내한다 */
 #shop .gacts{display:flex;gap:6px;flex-wrap:wrap}
 #shop #shopEarn{margin:0 0 12px}#shop #shopEarn b{font-size:17px}
@@ -647,3 +661,13 @@ body.duelFps #cross{transition:opacity .1s;width:18px;height:18px;margin:-9px 0 
 #shop .glist li.rare.got{background:linear-gradient(135deg,#F4F0FD 60%,#FFF3C4)}
 #shop .glist i.rare{font-style:normal;font-size:11px;padding:1px 7px;border-radius:999px;background:#FFD43B;border:1.5px solid var(--ink);color:var(--ink)}
 #shop .glist li.rare .gicon{background:#FFF3C4}
+/* 감정표현 휠(G를 꾹): 화면 가운데 피자 모양(가진 프리미엄 감정표현만). 고른 칸은 노랑 */
+#emoteWheel{position:fixed;z-index:25;left:50%;top:50%;width:340px;height:340px;margin:-170px 0 0 -170px;pointer-events:none;opacity:0;transform:scale(.85);transition:opacity .12s,transform .12s;font-family:"Pretendard","Apple SD Gothic Neo",sans-serif}
+#emoteWheel.on{opacity:1;transform:none}
+#emoteWheel svg{width:100%;height:100%;overflow:visible;filter:drop-shadow(0 6px 18px rgba(17,17,24,.35))}
+#emoteWheel .sl{fill:rgba(255,251,234,.9);stroke:#111118;stroke-width:2.5;transition:fill .08s}
+#emoteWheel .sl.on{fill:#FFD43B}
+#emoteWheel .ic{font-size:30px;text-anchor:middle;dominant-baseline:middle}
+#emoteWheel .hub{fill:#0E1E46;stroke:#111118;stroke-width:2.5}
+#emoteWheel .nm{position:absolute;left:50%;top:50%;width:88px;margin:0;transform:translate(-50%,-50%);text-align:center;color:#fff;font:800 13px/1.25 "Pretendard",sans-serif}
+#emoteWheel .nm small{display:block;font-size:10px;font-weight:600;opacity:.8}

@@ -1445,6 +1445,12 @@ function buildFurn(G, o, fl) {
       box(g3, .3, .26, .3, 0xFFD43B, .3, 0, .1, { line: .008 }); box(g3, .31, .27, .05, 0xE77FA6, .3, -.005, .1, { line: 0 }); box(g3, .05, .27, .31, 0xE77FA6, .3, -.005, .1, { line: 0 });
       for (const k of [-1, 1]) ball(g3, .055, 0xE77FA6, .3 + k * .05, .29, .1, { line: .004 }).scale.set(1.3, .8, .8);
       break; }
+    case "mcsign": { // 마인크래프트 참나무 표지판(동쪽 객석을 본다): 각진 기둥 위 판자에 도트 글씨. 뒤 창문이 깨진다는 힌트만
+      cyl(G, .045, .045, 1.05, 0x8A6A3B, x, 0, z, { seg: 4, line: .006 });
+      const g3 = new THREE.Group(); g3.position.set(x, 0, z); g3.rotation.y = Math.PI / 2; G.add(g3);   // 그룹 안 +z가 동쪽
+      box(g3, 1.04, .54, .07, 0x9C7444, 0, .98, 0, { line: .008 });
+      board(g3, 1.0, .5, mcSignTex, 0, 1.23, .036); board(g3, 1.0, .5, mcPlankTex, 0, 1.23, -.036, Math.PI);   // 뒷면은 글씨 없는 판자
+      break; }
     case "hbmenu": { // 컷 상점 메뉴 입간판(서쪽을 본다): 분홍 A자 판에 파는 것과 사는 법. 누르면 컷 상점
       const g3 = new THREE.Group(); g3.position.set(x, 0, z); g3.rotation.y = -Math.PI / 2 + (o.tilt || 0); G.add(g3);
       for (const s of [1, -1]) {
@@ -1853,6 +1859,24 @@ const avatarCache = new Map();
 const avatarURL = (look) => { const k = lookKey(look); if (avatarCache.has(k)) return avatarCache.get(k); const cv = document.createElement("canvas"); cv.width = cv.height = 128; const g = cv.getContext("2d"); g.fillStyle = WEAK; g.fillRect(0, 0, 128, 128); g.translate(64, 122); g.scale(3.4, 3.4); drawChar(g, look); const u = cv.toDataURL(); avatarCache.set(k, u); return u; };
 
 /* ════════════════ 5-2. 스킬: 네 컷 그리기 · 인사 · 하트 ════════════════ */
+// 앉은 자리 앞 책상 윗면 높이(앉은 자리 바닥 기준, m): 처음 쓸 때 그 자리 앞(.42m)을 위에서 아래로 쏘아 위를 향한 면 가운데 가장 낮은 것(.36~1m)을 찾고 자리마다 기억한다.
+// 캠퍼스는 사람 키가 1.1m쯤이라 보통 책상이 .44m, 높은 카운터 · 스탠딩 책상이 .6~.8m. 의자 앉는 면(.26~.34)은 범위 밖
+// 책상 위 모니터 · 소품보다 책상 판이 먼저 잡히게 "가장 낮은" 면. 아무것도 없으면 null(무릎 위 · 손에 든다). 그 층이 안 보일 때(그려지기 전)는 배치 값으로 잠깐 쓰고 기억하지 않는다
+const deskRay = new THREE.Raycaster(), DOWN = new THREE.Vector3(0, -1, 0), deskFrom = new THREE.Vector3(), deskN = new THREE.Vector3();
+function deskAt(st, p, base, fx, fz) {
+  if (!st || typeof st !== "object") return null;
+  if (st.deskTop !== undefined) return st.deskTop;
+  const roots = Object.values(floorGroups).filter((g: any) => g.visible) as THREE.Object3D[];
+  if (!roots.length) return st.desk ?? null;
+  deskFrom.set(p.x + fx * .42, base + 1.2, p.z + fz * .42); deskRay.set(deskFrom, DOWN); deskRay.near = 0; deskRay.far = 1.2 - .36;
+  let top = null;
+  for (const h of deskRay.intersectObjects(roots, true)) {
+    const m = h.object as any; if (!m.isMesh || m.material === inkMat || m.material === inkSoft || !h.face) continue;
+    deskN.copy(h.face.normal).transformDirection(m.matrixWorld); if (deskN.y < .7) continue;   // 위를 향한 면만(옆면 · 모서리 빼고)
+    const y = h.point.y - base; if (y >= .36 && y <= 1) top = top == null ? y : Math.min(top, y);
+  }
+  return (st.deskTop = top);
+}
 const SKILLS = { draw: { label: "네 컷 그리기", dur: 5.4 }, wave: { label: "인사", dur: 2 }, heart: { label: "하트", dur: 2 }, laptop: { label: "노트북", dur: 1e9 }, coffee: { label: "아이스 아메리카노", dur: 4.6 }, dance: { label: "춤", dur: 1e9 }, gun: { label: "종이 총", dur: 1e9 }, read: { label: "책 읽기", dur: 1e9 } }   // 춤은 한 번 누르면 계속(다시 누르거나 움직이면 멈춘다);   // laptop은 일어날 때까지 펼쳐 둔다
 const easeOut = (x) => 1 - (1 - x) ** 3;
 // 하루들 낙서 한 칸씩(0~108 좌표). 같은 seed면 누가 봐도 같은 네 컷이 나온다
@@ -2084,6 +2108,32 @@ function makePaperAK() {
   g.traverse((m: any) => { if (m.isMesh) m.castShadow = false; });
   return g;
 }
+// 통기타(앞판이 +z, 넥은 +x로, 원점은 울림통 가운데): 허리가 잘록한 울림통(윤곽을 그려 둥글게 뽑음) · 테두리 띠 · 울림구멍과 장식 고리 · 픽가드 · 브리지와 새들
+// · 프렛을 박은 넥 · 헤드와 줄감개 여섯 · 브리지에서 헤드까지 줄 여섯
+function makeGuitar() {
+  const g = new THREE.Group(), top = 0xE8B26A, side = 0x8A5A32, dark = 0x3A2A20, neckC = 0x7A5236, steel = 0xD9DCE2;
+  const sh = new THREE.Shape(); sh.moveTo(-.2, 0);   // 아래(큰 통 · 브리지 쪽 -x)부터 위(작은 통 · 넥 쪽 +x)까지 반쪽씩
+  sh.bezierCurveTo(-.2, .15, -.08, .17, -.01, .12); sh.bezierCurveTo(.03, .09, .05, .09, .08, .11); sh.bezierCurveTo(.14, .14, .2, .1, .2, 0);
+  sh.bezierCurveTo(.2, -.1, .14, -.14, .08, -.11); sh.bezierCurveTo(.05, -.09, .03, -.09, -.01, -.12); sh.bezierCurveTo(-.08, -.17, -.2, -.15, -.2, 0);
+  const bodyGeo = new THREE.ExtrudeGeometry(sh, { depth: .08, bevelEnabled: true, bevelThickness: .008, bevelSize: .008, bevelSegments: 3, curveSegments: 28 }); bodyGeo.translate(0, 0, -.04);
+  const body = new THREE.Mesh(bodyGeo, [toon(top), toon(side)]); g.add(body);   // 앞뒤 판은 노란 나무, 옆판은 진한 나무
+  const rim = new THREE.Mesh(new THREE.ShapeGeometry(sh, 28), toon(0xF6E7C8)); rim.scale.setScalar(1.01); rim.position.z = .0475; g.add(rim);   // 테두리 띠(앞판보다 살짝 크게)
+  const face = new THREE.Mesh(new THREE.ShapeGeometry(sh, 28), toon(top)); face.position.z = .049; g.add(face);
+  const hole = new THREE.Mesh(new THREE.CircleGeometry(.045, 32), toon(0x1E1410)); hole.position.set(.06, 0, .0505); g.add(hole);
+  for (const [r, c] of [[.052, 0x2E2C38], [.058, 0xF6E7C8]] as [number, number][]) { const ring = new THREE.Mesh(new THREE.RingGeometry(r - .004, r, 40), toon(c)); ring.position.set(.06, 0, .0506); g.add(ring); }   // 장식 고리
+  const guard = new THREE.Mesh(new THREE.CircleGeometry(.05, 24, -Math.PI * .1, Math.PI * .7), toon(0x3A2A20)); guard.position.set(.06, -.01, .0504); g.add(guard);   // 픽가드
+  box(g, .025, .085, .012, dark, -.11, -.0425, .052, { line: .003 }); box(g, .006, .07, .006, 0xF4F1EA, -.104, -.035, .062, { line: 0 });   // 브리지 · 새들
+  box(g, .42, .05, .03, neckC, .41, -.025, .028, { line: .004 });                                        // 넥(울림통 위로 이어진다)
+  box(g, .42, .052, .004, 0x2B1E16, .41, -.026, .045, { line: 0 });                                      // 지판
+  for (let k = 0; k < 12; k++) box(g, .003, .052, .006, steel, .6 - .38 * (1 - Math.pow(.89, k)) / (1 - Math.pow(.89, 12)), -.026, .047, { line: 0 });   // 프렛(헤드 쪽은 넓고 울림통 쪽일수록 촘촘)
+  const head = solidMesh(new RoundedBoxGeometry(.13, .07, .02, 3, .01), 0x5A3C26, { line: .004 }); head.position.set(.69, 0, .025); head.rotation.z = .08; g.add(head);   // 헤드
+  for (let k = 0; k < 6; k++) { const px = .65 + (k % 3) * .035, py = k < 3 ? .045 : -.045; cyl(g, .006, .006, .025, steel, px, py - .0125, .025, { line: 0, seg: 8 }); box(g, .012, .018, .006, 0xF4F1EA, px, py + (k < 3 ? .012 : -.03), .025, { line: 0 }); }   // 줄감개(축 · 손잡이)
+  const B = -.105, NUT = .62;   // 줄은 브리지(새들)에서 헤드 앞 너트까지만
+  for (let k = 0; k < 6; k++) { const y = -.018 + k * .0072, r = .0009 + (5 - k) * .00025, str = cyl(g, r, r, NUT - B, steel, 0, 0, 0, { line: 0, seg: 5 }); str.rotation.z = -Math.PI / 2; str.position.set((B + NUT) / 2, y, .056); }   // 줄(굵은 줄부터)
+  box(g, .008, .055, .01, 0xF4F1EA, NUT, -.0275, .05, { line: 0 });   // 너트
+  g.traverse((m: any) => { if (m.isMesh) m.castShadow = false; });
+  return g;
+}
 function makePaperGun() { // 종이 총(파티 팡팡 총): 노란 몸통, 분홍 손잡이, 앞으로 벌어지는 하늘색 나팔 총구에 색종이가 살짝 삐져나온다. 앞(+z)을 겨눈다
   const g = new THREE.Group();
   box(g, .07, .07, .2, 0xFFD43B, 0, -.035, 0, { line: .008 });
@@ -2117,8 +2167,10 @@ function muzzle(f, x, y, dir, lift) {
 // 총알이 이 자리에서 무엇에 막히는지(날아가는 총알과 조준점 찾기가 같이 쓴다): 벽 · 가구, 사람(shooter 빼고)
 function bulletWall(fl, f, pos) {
   const gx = tX(pos.x), gy = tY(pos.z), y0 = pos.y - floorY(f), i = Math.floor(gy) * W + Math.floor(gx);
-  return solid(fl, gx, gy) && (fl.wgrid[i] || y0 < (fl.top[i] || 1.2) + .05);
+  return solid(fl, gx, gy) && (fl.wgrid[i] || y0 < (coverHt(fl)[i] || fl.top[i] || 1.2) + .05);
 }
+// 칸마다 총알을 막는 높이: 가구에 ht를 적으면 그 높이(대결 사격장의 높은 벽 · 컨테이너 · 모래주머니). 처음 쓸 때 한 번 셈한다
+const coverHt = (fl) => fl.coverHt || (fl.coverHt = (() => { const a = new Float32Array(W * H); for (const o of fl.furn) if (o.ht) for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) if (x >= 0 && y >= 0 && x < W && y < H) a[y * W + x] = Math.max(a[y * W + x], o.ht); return a; })());
 const bulletDoll = (f, pos, shooter) => { const y0 = pos.y - floorY(f); return [me, ...NPCS, ...peers.values()].find((a: any) => a !== shooter && a.doll?.root.visible && (a.f ?? f) === f && Math.hypot(a.doll.root.position.x - pos.x, a.doll.root.position.z - pos.z) < .3 && y0 > a.doll.root.position.y - floorY(f) && y0 < a.doll.root.position.y - floorY(f) + 1.15); };
 // 조준점이 가리키는 곳: 카메라에서 화면 가운데 쪽으로 광선을 따라가 처음 막히는 자리(없으면 60m 앞). 총구에서 그곳을 향하는 방향(fh)과 위아래(fp)
 const sightDir = new THREE.Vector3(), sightAt = new THREE.Vector3();
@@ -2176,12 +2228,12 @@ function tickAct(a, dt) {
         if (rl) { a.prop.rotateZ(rl.tilt); a.prop.rotateX(rl.pitch); } }
       else if (rl) { a.prop.rotateZ(rl.tilt); a.prop.position.y -= rl.dip; }   // 3인칭에서 보는 내 장전
       else if (fp) { if (ak) fpAt(a.prop, .17, -.23, -.36 + kick * .6); else fpAt(a.prop, .2, -.2, -.55 + kick * .5); a.prop.rotateX(-kick * 2); } }   // 1인칭: 화면 오른쪽 아래에서 조준점 쪽으로(AK는 어깨에 붙여 더 가까이)
-    else if (a.act.name === "laptop") { { const st = a.seat, desk = st && typeof st === "object" ? st.desk ?? (st.h == null ? .44 : null) : .44, base = p.y - seatLift(st), d = desk == null ? .22 : .42;   // 책상이 있으면 그 위에, 없으면(벤치·소파) 무릎 위에
+    else if (a.act.name === "laptop") { { const st = a.seat, base = p.y - seatLift(st), desk = deskAt(st, p, base, fx, fz), d = desk == null ? .22 : .42;   // 책상이 있으면 그 윗면에(실제 모양에서 찾는다), 없으면(벤치·소파) 무릎 위에
       a.prop.position.set(p.x + fx * d, desk == null ? p.y + .33 : base + desk + .002, p.z + fz * d); } a.prop.rotation.y = h + Math.PI; const ct = a.prop.userData.code; if (ct) ct.offset.y = (ct.offset.y - dt * .06) % 1; }   // 화면이 나를 본다, 코드는 위로 흘러간다
     else if (a.act.name === "read") { // 책: 의자 앞에 책상이 있으면 독서대에 세워 두고, 빈백에 누우면 얼굴 위로 든다(책상 없는 벤치·소파는 손에 든다). 4초마다 한 장 넘긴다
       const lying = !!a.doll.root.rotation.x, flip = a.prop.userData.flip, bk = a.prop.userData.bk, stand = a.prop.userData.stand;
       if (flip) { const k = (e % 4) / .6; flip.rotation.y = k < 1 ? -.22 - easeOut(k) * (Math.PI - .44) : -.22; flip.visible = k < 1; }   // 음의 방향으로 돌아야 종이가 표지 앞쪽으로 넘어간다(반대로 돌면 표지 뒤로 뚫고 나왔다). 넘기는 동안만 보인다
-      const st = a.seat, desk = !lying && st && typeof st === "object" ? st.desk ?? (st.h == null ? .44 : null) : null;
+      const st = a.seat, desk = lying ? null : deskAt(st, p, p.y - seatLift(st), fx, fz);
       a.prop.rotation.order = "YXZ"; bk.position.set(0, 0, 0); bk.rotation.set(0, 0, 0); stand.visible = desk != null;
       if (desk != null) { // 노트북처럼 앉은 자리 앞 책상 위에, 독서대에 기대 세운다(화면처럼 읽는 쪽을 본다)
         const base = p.y - seatLift(st), ph = .18;
@@ -2332,14 +2384,14 @@ function placeInside() {
   if (VIEW.mode === "first") {
     // 1인칭은 어지럽지 않게: 기울임·흔들림 없이, 눈높이는 계단·단을 오를 때 툭툭 끊기지 않게 부드럽게 따라가고, 고개는 제자리에서 돈다
     // 누우면 눈은 빈백 가운데가 아니라 applyLie로 눕힌 머리 자리(등받이 쪽으로 .39, 위로 .86): 낮으면 빈백 몸통 속에 묻혀 화면이 까맣게 가린다
-    const eyeT = base + (me.lie ? .86 : me.seat ? .72 : .92), back = me.lie ? -.39 : 0;
+    const eyeT = base + (me.lie?.club ? 1 : me.lie?.guitar ? .88 : me.lie?.lp || me.seat ? .72 : me.lie ? .86 : .92), back = me.lie && !me.lie.lp && !me.lie.guitar && !me.lie.club ? -.39 : 0;   // LP 감상은 방석에 앉은 눈높이
     cam.eye = cam.eye === undefined || me.out || Math.abs(cam.eye - eyeT) > 2 ? eyeT : lerp(cam.eye, eyeT, Math.min(1, fpDt * 12));   // 창밖에서 떨어질 땐 그대로 따라간다
     const eye = cam.eye;
     camera.position.set(wx(me.x) + (me.lie ? Math.sin(me.lie.yaw) * back : 0), eye, wz(me.y) + (me.lie ? Math.cos(me.lie.yaw) * back : 0));
     lookV.set(camera.position.x - Math.sin(cam.yaw) * Math.cos(cam.look), eye + Math.sin(cam.look), camera.position.z - Math.cos(cam.yaw) * Math.cos(cam.look));
     camera.lookAt(lookV); return;
   }
-  const head = base + (me.lie ? .5 : me.seat ? .75 : .9);
+  const head = base + (me.lie?.club ? 1 : me.lie?.guitar ? .9 : me.lie?.lp || me.seat ? .75 : me.lie ? .5 : .9);
   const c = Math.cos(cam.ip), dirX = Math.sin(cam.yaw), dirZ = Math.cos(cam.yaw);
   // 뒤쪽 벽까지 거리: 벽에 막히면 그 앞까지만 물러난다
   let d = cam.id; const flat = d * c / S;
@@ -2619,6 +2671,18 @@ const shopWallTex = canvasTex(1024, 704, (g, w, h) => {
   const c0 = h * .62, n = 16, t = w / n; for (let i = 0; i < n; i++) for (let j = 0; j * t < h - c0; j++) { g.fillStyle = (i + j) % 2 ? "#FFFFFF" : "#B39DDB"; g.fillRect(i * t, c0 + j * t, t, t); }
   g.fillStyle = "#E77FA6"; g.fillRect(0, c0 - 14, w, 16);
 });
+// 13층 깨지는 창 앞 마인크래프트 표지판: 작은 캔버스에 그려 최근접 필터로 키운다(도트 느낌)
+const mcPlank = (g, w, h) => {
+  const r = rng(13); g.fillStyle = "#B8935A"; g.fillRect(0, 0, w, h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const v = r(); if (v < .12) { g.fillStyle = v < .05 ? "#9E7A45" : "#C9A46A"; g.fillRect(x, y, 1, 1); } }   // 나뭇결 점
+  g.fillStyle = "#8F6C3C"; for (let y = 0; y < h; y += 12) g.fillRect(0, y, w, 1);   // 판자 이음매
+};
+const pixelTex = (w, h, draw) => { const t = canvasTex(w, h, draw); t.magFilter = t.minFilter = THREE.NearestFilter; t.generateMipmaps = false; return t; };
+const mcPlankTex = pixelTex(96, 48, mcPlank);
+const mcSignTex = pixelTex(192, 96, (g, w, h) => {
+  mcPlank(g, w, h); g.fillStyle = "#1A1208"; g.textAlign = "center"; g.textBaseline = "middle"; g.font = `bold 15px "Galmuri11","DungGeunMo",monospace`;
+  ["앞 유리창이", "다른 창보다", "부실해 보인다", "......"].forEach((t, i) => g.fillText(t, w / 2, 14 + i * 22));
+});
 // 연동 선물 안내판(둥근 판): 처음 연동하면 15컷(서버 CAMPUS_WALLET_LINK_BONUS 기본값과 같게)
 const WELCOME_CUTS = 15;
 const welcomeTex = canvasTex(512, 512, (g, w, h) => {
@@ -2790,7 +2854,7 @@ function tryEasel() {
 // 내 캐릭터: 하루들 월드와 같은 부위·색 조합. 이 브라우저에 저장
 let myAv = (() => { try { return avDecode(LS.get("ww.avatar")) || { ...DEFAULT_AV }; } catch { return { ...DEFAULT_AV }; } })();
 const lookOf = (i) => ({ hair: HAIRS[i % HAIRS.length], acc: ACC[Math.floor(i / HAIRS.length) % ACC.length], prop: "bag" });
-const me = { jumps: 0, out: null as null | { z: number; vx: number; vy: number; vz: number; flip: number; dead: boolean }, prop: null, goal: null, lie: null, seat: null, f: 12, x: ELEV_SPAWN[0], y: ELEV_SPAWN[1], h: Math.PI / 2, follow: null as string | null, followAt: 0, rideAt: 0, brush: false, brushMesh: null, fc: 0, fh: 0, fp: null as null | number, fk: 0, kickAt: -9, hc: 0, hd: 0, up: 0, jz: 0, jv: 0, jc: 0, ac: 0, an: null, as: 0, act: null, board: null, runHold: false, runToggle: false, moving: false, say: "", sayAt: 0, path: null };
+const me = { patUntil: 0, patArms: false, jumps: 0, em: "", out: null as null | { z: number; vx: number; vy: number; vz: number; flip: number; dead: boolean }, prop: null, goal: null, lie: null, seat: null, f: 12, x: ELEV_SPAWN[0], y: ELEV_SPAWN[1], h: Math.PI / 2, follow: null as string | null, followAt: 0, rideAt: 0, brush: false, brushMesh: null, fc: 0, fh: 0, fp: null as null | number, fk: 0, kickAt: -9, hc: 0, hd: 0, up: 0, jz: 0, jv: 0, jc: 0, ac: 0, an: null, as: 0, act: null, board: null, runHold: false, runToggle: false, moving: false, say: "", sayAt: 0, path: null };
 let floor = FLOORS[12];   // 처음 들어오면 12층 엘리베이터 앞
 let myGear: GearState | null = null, shownGear: GearState | null = null;   // 컷 상점에서 사서 쓰고 있는 것(서버가 알려 준 값만) · 지금 그려진 것
 let meDoll = makeChar(myAv); scene.add(meDoll.root);
@@ -2805,13 +2869,245 @@ function jump() { // 땅에서 한 번, 공중에서 한 번 더(더블 점프)
   // 14층: 뛰어들 수 있는 그림(꽃게 게임 만화) 앞에서 점프하면 월드처럼 그림 속으로 뛰어들어 게임을 시작한다
   const sl = nearShow(); if (sl && showItem(sl)?.dive && !inWorld) { spawnFx(starTex, meDoll.root.position, 8, .9, .4); setTimeout(() => { if (me.f === 14 && !inWorld) openShow("crab"); }, 380); }
 }
+/* ───── 감정표현 휠(배그처럼): G를 꾹 누르면 가진 프리미엄 감정표현(컷 상점)이 피자처럼 둘러 나오고, 마우스를 그쪽으로 밀었다 떼면 그것을 한다 ─────
+   가진 것만 나온다(목록은 서버가 emotes로 알려 준다. 개발 서버는 다 열린다). 하나도 없으면 G를 눌러도 아무것도 안 뜬다. 기본 표현(네 컷 · 인사 · 하트 · 춤)은 1 2 3 Z 그대로 */
+const EMOTE_WHEEL = [
+  { id: "bag", icon: "💤", name: "빈백에서 잠자기" },
+  { id: "guitar", icon: "🎸", name: "기타 연주" },
+  { id: "lp", icon: "🎧", name: "LP 감상" },
+  { id: "club", icon: "🪩", name: "클럽 파티" },
+];
+let myEmotes = new Set<string>();
+// kind: emote 감정표현(G를 꾹 → 떼면 고른 것) · pet 내 펫과 놀기(펫을 보고 F를 꾹 → 떼면 고른 것. 펫을 눌러 열었으면 클릭으로 고른다)
+const wheel = { el: null as HTMLElement | null, open: false, kind: "emote" as "emote" | "pet", vx: 0, vy: 0, pick: -1, cx: 0, cy: 0, list: [] as { id: string; icon: string; name: string }[] };
+function renderWheel() {
+  if (!wheel.el) { wheel.el = document.createElement("div"); wheel.el.id = "emoteWheel"; wheel.el.setAttribute("aria-hidden", "true"); document.body.append(wheel.el); }
+  const L = wheel.list, n = L.length, R = 150, r0 = 52, seg = Math.PI * 2 / Math.max(1, n), pt = (a, rr) => `${(170 + Math.sin(a) * rr).toFixed(1)} ${(170 - Math.cos(a) * rr).toFixed(1)}`;
+  const slices = L.map((e, i) => {
+    const a0 = i * seg - seg / 2, a1 = a0 + seg, am = n === 1 ? 0 : i * seg, on = i === wheel.pick;
+    const d = n === 1   // 하나뿐이면 고리 전체
+      ? `M${170 - R} 170 A${R} ${R} 0 1 0 ${170 + R} 170 A${R} ${R} 0 1 0 ${170 - R} 170Z M${170 - r0} 170 A${r0} ${r0} 0 1 1 ${170 + r0} 170 A${r0} ${r0} 0 1 1 ${170 - r0} 170Z`
+      : `M${pt(a0, r0)} L${pt(a0, R)} A${R} ${R} 0 0 1 ${pt(a1, R)} L${pt(a1, r0)} A${r0} ${r0} 0 0 0 ${pt(a0, r0)}Z`;
+    return `<path class="sl${on ? " on" : ""}" fill-rule="evenodd" d="${d}"/><text class="ic" x="${(170 + Math.sin(am) * 102).toFixed(1)}" y="${(170 - Math.cos(am) * 102 + 4).toFixed(1)}">${e.icon}</text>`;
+  }).join("");
+  const cur = L[wheel.pick];
+  wheel.el.innerHTML = `<svg viewBox="0 0 340 340">${slices}<circle class="hub" cx="170" cy="170" r="46"/></svg><p class="nm">${cur ? cur.name : wheel.kind === "pet" ? "<small>마우스로 고르고<br>F를 떼요</small>" : "<small>마우스로 고르고<br>G를 떼요</small>"}</p>`;
+  wheel.el.classList.toggle("on", wheel.open);
+}
+function openWheel() {
+  if (wheel.open || inWorld || typing() || uiOpen() || duelUi?.active()) return;
+  wheel.list = EMOTE_WHEEL.filter((e) => myEmotes.has(e.id)); if (!wheel.list.length) return;   // 가진 감정표현이 없으면 아무것도 안 뜬다
+  wheel.kind = "emote"; wheel.open = true; wheel.vx = wheel.vy = 0; wheel.pick = -1; keys.clear(); me.runHold = false; renderWheel();
+  const r = wheel.el.getBoundingClientRect(); wheel.cx = r.left + r.width / 2; wheel.cy = r.top + r.height / 2;
+}
+function steerWheel(dx, dy, absolute = false) {   // 고정 중엔 움직인 만큼 쌓고, 커서가 보이면 휠 가운데에서 커서까지
+  if (absolute) { wheel.vx = dx - wheel.cx; wheel.vy = dy - wheel.cy; } else { wheel.vx += dx; wheel.vy += dy; }
+  const len = Math.hypot(wheel.vx, wheel.vy); if (len > 140) { wheel.vx *= 140 / len; wheel.vy *= 140 / len; }
+  const n = wheel.list.length, pick = len < 34 || !n ? -1 : (Math.round(Math.atan2(wheel.vx, -wheel.vy) / (Math.PI * 2 / n)) % n + n) % n;
+  if (pick !== wheel.pick) { wheel.pick = pick; renderWheel(); }
+}
+function closeWheel(go) {
+  if (!wheel.open) return;
+  wheel.open = false; const e = wheel.list[wheel.pick]; renderWheel();
+  if (wheel.kind === "pet") { if (go && e?.id === "sit") petSit(); else if (go && e?.id === "pat") petPat(); return; }
+  if (go && e?.id === "bag") bagEmote();
+  else if (go && e?.id === "guitar") ownEmote("guitar");
+  else if (go && e?.id === "lp") ownEmote("lp");
+  else if (go && e?.id === "club") ownEmote("club");
+}
+/* ───── 내 펫과 놀기: 펫을 보고 F를 꾹(위에서 볼 땐 펫을 눌러도) → 마우스로 고르고 떼면 앉기 · 쓰다듬기 ─────
+   앉기: 그 자리에 앉아 주인을 본다(멀리 가면 일어나 다시 따라온다, 한 번 더 고르면 일어나기). 쓰다듬기: 주인이 손을 뻗어 쓰다듬고, 펫마다 다르게 좋아한다(Pets.tsx) + 하트.
+   펫 상태는 presence의 pt(1 앉음 · 2 쓰다듬는 중)로 남들에게도 보인다 */
+const PET_NAME = { doodle: "두들", cat: "고양이", panda: "판다", fox: "여우", zebra: "얼룩말", emu: "에뮤", tiger: "호랑이", bear: "불곰" };
+const PAT_MS = 2800;
+const petName = () => PET_NAME[dog.doll.pet] || "펫";
+// 펫을 보고 있나(2.6칸 안): 들어가서 볼 땐 카메라가 보는 쪽 50° 안, 위에서 볼 땐 캐릭터가 바라보는 쪽 90° 안이거나 펫 위에 마우스를 올렸을 때
+const mouseAt = { x: 0, y: 0, on: false, at: 0, hit: false };
+function nearPet() {
+  if (me.lie || me.seat || me.out || !dog.doll.root.visible || Math.hypot(dog.x - me.x, dog.y - me.y) > 2.6) return false;
+  if (inside()) { camera.getWorldDirection(tgt); const p = dog.doll.root.position, a = Math.atan2(p.x - camera.position.x, p.z - camera.position.z), c = Math.atan2(tgt.x, tgt.z); return Math.abs(Math.atan2(Math.sin(a - c), Math.cos(a - c))) < .9; }
+  const a = Math.atan2(dog.x - me.x, dog.y - me.y); if (Math.abs(Math.atan2(Math.sin(a - me.h), Math.cos(a - me.h))) < 1.6) return true;
+  const now = performance.now(); if (now - mouseAt.at > 120) { mouseAt.at = now; mouseAt.hit = false;   // 마우스 아래 펫 확인은 0.12초에 한 번
+    if (mouseAt.on) { ndc.set(mouseAt.x / innerWidth * 2 - 1, -(mouseAt.y / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera); mouseAt.hit = ray.intersectObject(dog.doll.root, true).some((h) => h.object !== dog.doll.blob); } }
+  return mouseAt.hit;
+}
+function openPetWheel() {
+  if (wheel.open || inWorld || typing() || uiOpen() || duelUi?.active()) return;
+  wheel.kind = "pet"; wheel.list = [{ id: "sit", icon: "🐾", name: dog.act === "sit" ? "일어나기" : "앉기" }, { id: "pat", icon: "🤚", name: "쓰다듬기" }];
+  wheel.open = true; wheel.vx = wheel.vy = 0; wheel.pick = -1; keys.clear(); me.runHold = false; renderWheel();
+  const r = wheel.el.getBoundingClientRect(); wheel.cx = r.left + r.width / 2; wheel.cy = r.top + r.height / 2;
+}
+function petSit() {
+  if (dog.act === "sit" || (dog.act === "pet" && dog.after === "sit")) { dog.act = null; dog.after = null; showToast(`${withJosa(petName(), "가", "이")} 일어났어요`, "다시 졸졸 따라와요.", 1800); }
+  else { dog.act = "sit"; dog.after = null; showToast(`${withJosa(petName(), "가", "이")} 앉았어요`, "멀리 가면 일어나서 따라와요.", 2200); }
+  sendPresence(true);
+}
+function petPat() {
+  if (Math.hypot(dog.x - me.x, dog.y - me.y) > 2.4) { showToast("조금 더 가까이 가 볼까요?", `${petName()} 옆에서 쓰다듬어요.`, 1800); return; }
+  if (me.act) endAct(me);
+  me.h = Math.atan2(dog.x - me.x, dog.y - me.y); me.patUntil = performance.now() + PAT_MS;   // 펫 쪽을 보고 손을 뻗는다
+  dog.after = dog.act === "sit" || dog.after === "sit" ? "sit" : null; dog.act = "pet"; dog.actUntil = me.patUntil;
+  const heart = () => { if (dog.act === "pet") spawnFx(heartTex, dog.doll.root.position, 3, .3, .7); };
+  heart(); setTimeout(heart, 1300);
+  sendPresence(true);
+}
+// 쓰다듬는 팔: 오른팔을 앞아래로 뻗어 살살 문지른다(엔진 팔 자세 [오른팔 x, z, 왼팔 x, z])
+const patArms = (t) => [-.75 + Math.sin(t * 9) * .16, -.12 + Math.sin(t * 4.5) * .08, 0, .35];
+// 개인 빈백에서 잠자기: 서 있던 자리에 폭신한 빈백을 펼치고(보던 쪽으로 발을 두고) 눕는다. 움직이거나 F를 누르면 일어나며 빈백도 사라진다
+function makeOwnBag() {   // 회색 빈백 소파(작고 포근하게): 동그란 앉는 자리를 등받이 쿠션이 C자로 둘러 감싼다 · 위에 흰 베개. 면을 촘촘히 쪼개 매끈하게. 그룹을 돌리면 등받이가 -z(머리 쪽)
+  const g = new THREE.Group(), r = .72, light = 0xADAEB6, dark = 0x92939D;
+  const seat = solidMesh(new THREE.SphereGeometry(r, 40, 24), light, { line: .015 }); seat.scale.set(1, .32, .95); seat.position.y = r * .16; g.add(seat);
+  const seam = new THREE.Mesh(new THREE.TorusGeometry(r * .99, .012, 8, 64), toon(0x7C7D86)); seam.rotation.x = Math.PI / 2; seam.scale.set(1, .95, 1); seam.position.y = r * .17; g.add(seam);
+  // 감싸는 등받이: 반지름 .5짜리 굵은 고리를 뒤쪽 225°만 남겨(앞이 트인 C자) 세로로 늘인다. 끝은 둥근 마개
+  const arc = Math.PI * 1.25, R = .5, tube = .18, wrapGeo = new THREE.TorusGeometry(R, tube, 20, 72, arc); wrapGeo.rotateZ(Math.PI / 2 - arc / 2); wrapGeo.rotateX(-Math.PI / 2);
+  const wrap = solidMesh(wrapGeo, dark, { line: .015 }); wrap.scale.set(1, 1.7, 1); wrap.position.y = .3; g.add(wrap);
+  for (const a of [Math.PI / 2 - arc / 2, Math.PI / 2 + arc / 2]) { const cap = solidMesh(new THREE.SphereGeometry(tube, 20, 14), dark, { line: .012 }); cap.scale.set(1, 1.7, 1); cap.position.set(R * Math.cos(a), .3, -R * Math.sin(a)); g.add(cap); }
+  const pillow = solidMesh(new THREE.SphereGeometry(.2, 24, 14), 0xF3F3F6, { line: .01 }); pillow.scale.set(1.35, .5, .75); pillow.position.set(0, .58, -.38); pillow.rotation.x = -.45; g.add(pillow);   // 등받이 위에 기댄 베개
+  return g;
+}
+// 웅크려 자는 자세: 무릎은 앉은 자세로 당기고(setSeated), 두 팔은 가슴 앞으로 모아 감싸 안고, 눈을 감고 고개를 숙인다
+const CURL_ARMS = [-1.15, .55, -1.15, -.55];
+function curlPose(doll, on) {
+  doll.anim.sleep = on;
+  if (on) doll.anim.arms = CURL_ARMS; else if (doll.anim.arms === CURL_ARMS) doll.anim.arms = null;   // 대결 종목이 정한 팔은 건드리지 않는다
+}
+const lpDiscs = new Set<THREE.Object3D>();
+// LP판 그림: 검은 판에 촘촘한 홈(곡 사이 빈 띠 둘), 비스듬한 윤기, 가운데 반반 색 라벨에 글자(돌면 글자가 같이 돌아 보인다)
+const vinylTex = canvasTex(512, 512, (g, w) => {
+  const c = w / 2; g.fillStyle = "#121116"; g.beginPath(); g.arc(c, c, c, 0, 7); g.fill();
+  for (let r = 70; r < c - 6; r += 2.4) { g.strokeStyle = (r > 150 && r < 156) || (r > 205 && r < 211) ? "#2A2830" : r % 4.8 < 2.4 ? "#1B1A20" : "#16151B"; g.lineWidth = 1.4; g.beginPath(); g.arc(c, c, r, 0, 7); g.stroke(); }
+  const sheen = g.createLinearGradient(0, 0, w, w); sheen.addColorStop(.3, "rgba(255,255,255,0)"); sheen.addColorStop(.5, "rgba(255,255,255,.13)"); sheen.addColorStop(.7, "rgba(255,255,255,0)"); g.fillStyle = sheen; g.beginPath(); g.arc(c, c, c - 4, 0, 7); g.fill();
+  g.fillStyle = "#FF8FB1"; g.beginPath(); g.arc(c, c, 64, 0, 7); g.fill(); g.fillStyle = "#FFD43B"; g.beginPath(); g.moveTo(c, c); g.arc(c, c, 64, 0, Math.PI); g.fill();   // 반반 라벨
+  g.fillStyle = "#111118"; g.font = '800 22px "Pretendard",sans-serif'; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("HARUDLE", c, c - 30); g.font = '700 14px "Pretendard",sans-serif'; g.fillText("SIDE A · 33⅓", c, c + 32);
+  g.fillStyle = "#EDEDED"; g.beginPath(); g.arc(c, c, 6, 0, 7); g.fill();
+});
+// LP 감상: 방석(그 위에 앉는다) · 앞에 나무 레코드 상자 위 턴테이블 · 옆에 기대 둔 앨범 셋 · 턴테이블에서 오른쪽 귀까지 늘어진 헤드셋 선. 그룹을 돌리면 앞이 +z
+// 턴테이블: 둥근 모서리 호두나무 받침 · 검은 윗판 · 은색 받침판 위에 도는 LP · 축 · 톤암(받침 · 기둥 · 팔 · 헤드셸 · 무게추) · 시작 버튼 · 33/45 버튼 · 빨간 불
+function makeLpSet() {
+  const g = new THREE.Group(), wood = 0xC99A62, woodD = 0xA87943, silver = 0xC9CDD3, X = -.02, Z = .62;
+  const cushion = solidMesh(new THREE.CylinderGeometry(.3, .32, .2, 40), 0xF7A6A0, { line: .012 }); cushion.position.y = .1; g.add(cushion);   // 방석(앉는 높이 .26쯤)
+  const top = solidMesh(new THREE.SphereGeometry(.3, 32, 10, 0, Math.PI * 2, 0, Math.PI / 2), 0xF7A6A0, { line: 0 }); top.scale.y = .25; top.position.y = .2; g.add(top);
+  box(g, .54, .34, .42, wood, X, 0, Z, { line: .01 }); for (const y of [.1, .22]) box(g, .56, .03, .44, woodD, X, y, Z, { line: 0 });   // 레코드 상자(가로대)
+  [[0xF15B5B, -.08], [0x7DB3F0, -.02], [0xFFD43B, .05]].forEach(([c, dz], k) => { const sl = box(g, .02, .3, .3, c, X - .31 - k * .012, 0, Z + dz, { line: .006 }); sl.rotation.z = .12 + k * .05; });   // 상자 옆에 기대 둔 앨범 셋
+  const plinth = solidMesh(new RoundedBoxGeometry(.5, .08, .4, 4, .02), 0x6B4426, { line: .008 }); plinth.position.set(X, .38, Z); g.add(plinth);   // 호두나무 받침
+  box(g, .47, .006, .37, 0x1E1C22, X, .42, Z, { line: 0 });                                                    // 검은 윗판
+  const PX = X - .07, PY = .423;
+  cyl(g, .158, .158, .018, silver, PX, PY, Z, { line: .004, seg: 48 });                                      // 받침판(옆면이 은색으로 보인다)
+  const disc = new THREE.Group(); disc.position.set(PX, PY + .02, Z); g.add(disc); lpDiscs.add(disc);
+  const vinyl = new THREE.Mesh(new THREE.CircleGeometry(.152, 64), toon(0xFFFFFF, { map: vinylTex })); vinyl.rotation.x = -Math.PI / 2; disc.add(vinyl);
+  cyl(disc, .004, .004, .02, silver, 0, 0, 0, { line: 0, seg: 8 });                                           // 축
+  // 톤암: 받침 · 기둥 → 팔(판 바깥쪽 홈에 바늘) → 헤드셸, 뒤로 무게추
+  const BX = X + .17, BZ = Z - .12, top2 = .47;
+  cyl(g, .03, .034, .022, 0x2E2C38, BX, .424, BZ, { line: .003, seg: 20 }); cyl(g, .01, .01, .03, silver, BX, .44, BZ, { line: 0, seg: 10 });
+  const sx = PX + .1, sz = Z + .085, dx = sx - BX, dz = sz - BZ, len = Math.hypot(dx, dz), ang = Math.atan2(dx, dz);
+  const arm = cyl(g, .005, .005, len, silver, 0, 0, 0, { line: 0, seg: 8 }); arm.rotation.set(Math.PI / 2, 0, 0); arm.position.set(0, 0, 0);
+  const armG = new THREE.Group(); armG.position.set(BX, top2, BZ); armG.rotation.y = ang; g.add(armG); armG.add(arm); arm.position.set(0, 0, len / 2);
+  const shell = box(armG, .022, .008, .04, 0x2E2C38, 0, -.006, len, { line: 0 }); shell.rotation.y = .4;        // 헤드셸
+  cyl(armG, .006, .006, .018, silver, 0, -.025, len + .005, { line: 0, seg: 6 });                              // 카트리지 · 바늘
+  const cw = cyl(armG, .014, .014, .03, 0x3A3540, 0, 0, 0, { line: 0, seg: 14 }); cw.rotation.x = Math.PI / 2; cw.position.set(0, 0, -.04);   // 무게추
+  box(g, .05, .012, .03, 0xE8E8EC, X + .17, .423, Z + .14, { line: .003 });                                   // 시작 버튼
+  for (const k of [0, 1]) box(g, .022, .01, .016, 0xBFC3CA, X + .1 + k * .03, .423, Z + .155, { line: 0 });    // 33 · 45
+  const led = new THREE.Mesh(new THREE.SphereGeometry(.006, 8, 6), new THREE.MeshBasicMaterial({ color: 0xFF4D4D })); led.position.set(X + .21, .43, Z + .1); g.add(led);   // 도는 중 빨간 불
+  // 헤드셋 선: 턴테이블 오른쪽 뒤 → 바닥으로 늘어졌다 → 앉은 사람 오른쪽 귀 쪽으로
+  const curve = new THREE.CatmullRomCurve3([new THREE.Vector3(X + .22, .4, Z - .17), new THREE.Vector3(.26, .12, .3), new THREE.Vector3(.22, .06, .12), new THREE.Vector3(.2, .35, .02), new THREE.Vector3(.17, .62, -.02)]);
+  g.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 56, .007, 6, false), toon(0x2E2C38)));
+  g.userData.disc = disc; return g;
+}
+let ownProp: THREE.Group | null = null;
+// 기타 연주 세트: 작은 나무 스툴(앉는 높이 .42) · 무릎 위에 비스듬히 얹은 통기타(넥은 캐릭터 왼쪽 위로, 앞판은 살짝 위를 봐서 내려다보며 친다)
+const GUITAR_SEAT = .42;
+function makeGuitarSet() {
+  const g = new THREE.Group(), wood = 0xC99A62, woodD = 0xA87943;
+  cyl(g, .17, .17, .045, wood, 0, GUITAR_SEAT - .045, 0, { seg: 32, line: .008 });                       // 둥근 앉는 판
+  for (let k = 0; k < 3; k++) { const a = k / 3 * Math.PI * 2 + .3, leg = cyl(g, .018, .022, GUITAR_SEAT, woodD, Math.sin(a) * .1, 0, Math.cos(a) * .1, { seg: 10, line: .004 }); leg.rotation.set(Math.cos(a) * .14, 0, -Math.sin(a) * .14); }   // 벌어진 다리 셋
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(.12, .008, 6, 32), toon(woodD)); ring.rotation.x = Math.PI / 2; ring.position.y = .16; g.add(ring);   // 발걸이 고리
+  const guitar = makeGuitar(); guitar.position.set(-.05, GUITAR_SEAT + .2, .13); guitar.rotation.set(-.3, 0, .38); g.add(guitar);   // 몸 쪽으로 붙여 무릎 위에(팔이 앞판 앞으로 오게)
+  return g;
+}
+// 클럽 파티 세트: 발밑의 LED 원판(색 타일이 박자마다 번갈아 빛난다 · 둘레 빛 고리) · 머리 위에 떠서 도는 미러볼 · 미러볼에서 쏟아지는 색 조명 넷과 바닥의 빛 점
+const clubSets = new Set<THREE.Group>(), CLUB_COLORS = [0xFF5FA2, 0x6FD3FF, 0xFFD43B, 0xB28CFF, 0x7CF0B0];
+function makeClubSet() {
+  const g = new THREE.Group(), tiles = [], R = .75;
+  cyl(g, R + .04, R + .06, .05, 0x2E2C38, 0, 0, 0, { seg: 48, line: .01 });                                // 검은 받침
+  for (let ring = 0; ring < 3; ring++) for (let k = 0, n = [6, 12, 18][ring]; k < n; k++) {   // 가운데부터 고리 셋으로 나눈 타일(사이는 검은 줄)
+    const r0 = ring * R / 3 + .015, r1 = (ring + 1) * R / 3 - .015, a0 = k / n * Math.PI * 2 + .02, a1 = (k + 1) / n * Math.PI * 2 - .02;
+    const m = new THREE.Mesh(new THREE.RingGeometry(r0, r1, 6, 1, a0, a1 - a0), new THREE.MeshBasicMaterial({ color: CLUB_COLORS[(k + ring) % CLUB_COLORS.length] }));
+    m.rotation.x = -Math.PI / 2; m.position.y = .052; g.add(m); tiles.push({ m, i: k + ring * 7 });
+  }
+  const glow = new THREE.Mesh(new THREE.RingGeometry(R + .06, R + .3, 48), new THREE.MeshBasicMaterial({ color: 0xFF5FA2, transparent: true, opacity: .35, depthWrite: false })); glow.rotation.x = -Math.PI / 2; glow.position.y = .02; g.add(glow);   // 둘레 빛
+  const ball = new THREE.Mesh(new THREE.IcosahedronGeometry(.22, 2), new THREE.MeshStandardMaterial({ color: 0xE8ECF5, metalness: .9, roughness: .12, flatShading: true })); ball.position.y = 2.35; g.add(ball);   // 미러볼
+  cyl(g, .03, .03, .05, 0x9EA3AA, 0, 2.56, 0, { line: 0, seg: 10 });   // 미러볼 꼭지
+  const beams = new THREE.Group(); beams.position.y = 2.35; g.add(beams);
+  for (let k = 0; k < 4; k++) { // 미러볼에서 비스듬히 아래로 퍼지는 색 조명(꼭짓점이 미러볼, 바닥 쪽이 넓다) · 닿는 자리의 빛 점
+    const c = CLUB_COLORS[k], a = k / 4 * Math.PI * 2, tilt = .55, len = 2.6, geo = new THREE.ConeGeometry(.34, len, 20, 1, true); geo.translate(0, -len / 2, 0);
+    const pivot = new THREE.Group(); pivot.rotation.order = "YXZ"; pivot.rotation.set(-tilt, a, 0); beams.add(pivot);
+    pivot.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: .16, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending })));
+    const d = (2.35 - .05) * Math.tan(tilt), spot = new THREE.Mesh(new THREE.CircleGeometry(.24, 20), new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: .45, depthWrite: false }));
+    spot.rotation.x = -Math.PI / 2; spot.position.set(Math.sin(a) * d, -2.33, Math.cos(a) * d); beams.add(spot);
+  }
+  g.userData.club = { tiles, glow, ball, beams }; clubSets.add(g); return g;
+}
+function tickClub(t) {
+  const beat = Math.floor(t * 128 / 60);
+  for (const g of clubSets) { const c = g.userData.club;
+    for (const { m, i } of c.tiles) m.material.color.setHex(CLUB_COLORS[(i + beat) % CLUB_COLORS.length]);   // 박자마다 타일 색이 한 칸씩 돈다
+    c.glow.material.color.setHex(CLUB_COLORS[beat % CLUB_COLORS.length]); c.glow.material.opacity = .25 + Math.abs(Math.sin(t * Math.PI * 128 / 60)) * .25;
+    c.ball.rotation.y = t * 1.2; c.beams.rotation.y = -t * .9; }
+}
+// 신나게 추는 몸: 박자마다 높이 통통, 좌우로 크게 흔들고, 여덟 박마다 한 바퀴 휙(원판 위라 조금 떠 있다)
+function clubDance(root, t, yaw) {
+  const b = t * 128 / 60, ph = b % 8, spin = ph > 7 ? (ph - 7) * Math.PI * 2 : Math.sin(b * Math.PI) * .45;
+  root.rotation.set(Math.abs(Math.sin(b * Math.PI)) * .12, yaw + spin, Math.sin(b * Math.PI / 2) * .18);
+  root.position.y += .055 + Math.abs(Math.sin(b * Math.PI)) * .16;
+}
+const makeOwnProp = (kind) => (kind === "lp" ? makeLpSet() : kind === "guitar" ? makeGuitarSet() : kind === "club" ? makeClubSet() : makeOwnBag());
+// 기타 연주 자세: 스툴에 앉아(setSeated h .42) 다리를 꼬고, 고개를 숙여 기타를 내려다보며 오른손은 팅팅 · 왼손은 넥(Avatar guitar)
+function guitarPose(doll, on) { doll.anim.guitar = on; doll.anim.cross = on; }
+function dropOwnProp(g) { if (!g) return; if (g.userData.disc) lpDiscs.delete(g.userData.disc); clubSets.delete(g); g.removeFromParent(); }
+// LP 감상 자세: 방석에 앉아(무릎은 앉은 자세) 오른손으로 헤드셋을 감싸고 왼손은 무릎에, 박자에 맞춰 끄덕(Avatar listen)
+const LISTEN_ARMS = [-2.35, -.55, .35, -.75];
+function listenPose(doll, on) {
+  doll.anim.listen = on;
+  if (on) doll.anim.arms = LISTEN_ARMS; else if (doll.anim.arms === LISTEN_ARMS) doll.anim.arms = null;
+}
+function bagEmote() { ownEmote("bag"); }
+// 개인 소품을 펼치는 감정표현(빈백 · LP): 서 있던 자리에 소품을 놓고 그 자세로. 움직이거나 F를 누르면 일어나며 소품도 사라진다
+// 소품이 차지할 바닥(보는 쪽 기준 [앞, 옆] 칸): 이 자리들이 모두 빈 평평한 바닥이어야 펼친다(가구 · 벽 · 난간 · 계단 위 · 공중이면 안 된다)
+const ring = (r, n = 10) => Array.from({ length: n }, (_, k) => [Math.cos(k / n * Math.PI * 2) * r, Math.sin(k / n * Math.PI * 2) * r]);
+const OWN_FOOT = {
+  bag: [[0, 0], ...ring(.62), ...ring(.35, 6)],                                    // 빈백 소파 지름 1.4m쯤
+  lp: [[0, 0], ...ring(.28, 6), [.38, 0], [.5, .24], [.5, -.24], [.68, .24], [.68, -.24], [.5, -.42]],   // 방석 + 앞의 레코드 상자 · 옆의 앨범
+  guitar: [[0, 0], ...ring(.35, 8), [.3, .5]],                                     // 스툴 + 무릎 위 기타(넥은 왼쪽 앞)
+  club: [[0, 0], ...ring(.66, 14), ...ring(.4, 8)],                                // LED 원판 지름 1.6m쯤
+};
+function roomFor(kind) {
+  if (me.up > .05 || me.jz > .05 || me.out) return false;   // 가구 위 · 공중이면 안 된다
+  const h0 = heightAt(floor, me.x, me.y), fx = Math.sin(me.h), fy = Math.cos(me.h);
+  return OWN_FOOT[kind].every(([f, sd]) => {
+    const x = me.x + fx * f + fy * sd, y = me.y + fy * f - fx * sd;
+    if (x < 0 || y < 0 || x >= W || y >= H || solid(floor, x, y)) return false;
+    if (floor.fine?.[Math.floor(y * FN) * NW + Math.floor(x * FN)]) return false;   // 가구 · 벽(정밀 충돌판)
+    return Math.abs(heightAt(floor, x, y) - h0) < .05;   // 계단 · 단 끝에 걸치지 않게
+  });
+}
+function ownEmote(kind) {
+  if (!roomFor(kind)) { showToast("여기는 펼칠 자리가 없어요", "가구나 벽에서 조금 떨어진 넓은 바닥에서 다시 해 보세요.", 2600); return; }
+  if (me.lie || me.seat) standUp();
+  if (me.act) endAct(me);
+  me.path = null; me.goal = null;
+  me.lie = { x: me.x, y: me.y, yaw: me.h, own: true, curl: kind === "bag", lp: kind === "lp", guitar: kind === "guitar", club: kind === "club" }; me.em = kind;
+  ownProp = makeOwnProp(kind); ownProp.position.set(wx(me.x), floorY(me.f) + heightAt(floor, me.x, me.y) + me.up, wz(me.y)); ownProp.rotation.y = me.h; scene.add(ownProp);
+  spawnFx(starTex, ownProp.position, 6, .9, .5); sendPresence(true);
+  showToast(kind === "lp" ? "LP를 걸었어요 🎧" : kind === "guitar" ? "스툴에 앉아 기타를 쳐요 🎸" : kind === "club" ? "파티 타임! 🪩" : "회색 빈백 의자에 쪼그려 앉았어요 💤", "움직이거나 F를 누르면 일어나요.", 2400);
+}
 function useSkill(name, style?: number) { if (!SKILLS[name]) return;   // style: 채팅 /춤으로 고른 춤 번호(없으면 Z처럼 켜고 끈다)
   if (name === "read") { // 책은 앉거나 빈백에 누워서만. 한 번 더 누르면 덮는다
     if (me.act?.name === "read") { endAct(me); sendPresence(true); return; }
     if (!me.seat && !me.lie) { showToast("앉아서 읽어요", "의자나 빈백 앞에서 F로 앉거나 누운 다음 인벤토리(Tab)에서 책을 골라요.", 2600); return; }
     me.path = null; startAct(me, "read"); me.ac++; me.an = "read"; me.as = me.act.seed; sendPresence(true); showToast("책을 펼쳤어요", "인벤토리에서 책을 다시 고르거나 일어나면 덮어요.", 2000); return;
   } if (name === "dance" && me.act?.name === "dance" && style === undefined) { endAct(me); sendPresence(true); return; } if (me.lie) standUp(); me.path = null; startAct(me, name, name === "dance" ? (style === undefined ? nextDance() : (lastDance = style)) : undefined); if (name === "dance") showToast(DANCES[me.act.style], "Z를 다시 누르거나 움직이면 멈춰요.", 1600); me.ac++; me.an = name; me.as = me.act.seed; sendPresence(true); }
-const dog = { x: ELEV_SPAWN[0] - 1, y: ELEV_SPAWN[1] + 1, moving: false, h: 0, doll: makePet() }; scene.add(dog.doll.root);
+// act: 주인이 시킨 것(sit 앉아 있다 · pet 쓰다듬는 중, actUntil까지) · after: 쓰다듬기가 끝나면 돌아갈 것(앉아 있다 쓰다듬었으면 다시 앉는다)
+const dog = { x: ELEV_SPAWN[0] - 1, y: ELEV_SPAWN[1] + 1, moving: false, h: 0, doll: makePet(), act: null as "sit" | "pet" | null, after: null as "sit" | null, actUntil: 0 }; scene.add(dog.doll.root);
 const peers = new Map();
 const setPos = (d, f, x, y) => d.root.position.set(wx(x), floorY(f) + heightAt(FLOORS[f], x, y), wz(y));
 
@@ -2847,7 +3143,13 @@ const keys = new Set();
 const MOVE = { KeyW: "w", KeyA: "a", KeyS: "s", KeyD: "d", ArrowUp: "arrowup", ArrowDown: "arrowdown", ArrowLeft: "arrowleft", ArrowRight: "arrowright" };
 const SKILL_KEY = { Digit1: "draw", Digit2: "wave", Digit3: "heart", Numpad1: "draw", Numpad2: "wave", Numpad3: "heart", KeyZ: "dance" };   // Z: 춤(한 번 누르면 계속, 다시 누르면 멈춤)
 addEventListener("keydown", (e) => {
-  if (inWorld) return;   // 14층 하루들 월드가 떠 있으면 캠퍼스 키는 쉰다
+  if (inWorld) return;
+  if (wheel.open && e.code === "Escape") { e.preventDefault(); closeWheel(false); return; }   // 감정표현 휠: Esc는 그냥 닫기
+  if (wheel.open && wheel.kind === "pet") { // 펫 휠(F를 꾹 누르는 동안): 떼면 고른 것(keyup), 1 · 2는 바로 그것
+    const n = { Digit1: 0, Digit2: 1, Numpad1: 0, Numpad2: 1 }[e.code];
+    if (e.code === "KeyF") { e.preventDefault(); return; }
+    if (n !== undefined) { e.preventDefault(); if (!e.repeat) { wheel.pick = n; closeWheel(true); } return; }
+  }   // 14층 하루들 월드가 떠 있으면 캠퍼스 키는 쉰다
   if (movie.el && !movie.el.hidden && (e.code === "Escape" || e.code === "KeyF")) { e.preventDefault(); standUp(); return; }   // 영화 보는 중: Esc·F로 일어난다(걷는 키도 일어난다)
   if (relockOnKey && e.code !== "Escape" && (e.target as HTMLElement).tagName !== "INPUT") { relockOnKey = false; if (inside() && !locked() && !uiOpen()) lockMouse(); }   // Esc로 설정창을 닫은 뒤 첫 키에서 다시 둘러보기
   if (!easelEd.hidden) { // 그림판이 열려 있으면 게임 키는 쉰다
@@ -2891,6 +3193,7 @@ addEventListener("keydown", (e) => {
   }
   if (!lb.hidden) return;
   if (duelUi?.key(e)) { e.preventDefault(); return; }   // 대결: 초대장 Y · N, 경기 중 종목 키
+  if (c === "KeyG") { e.preventDefault(); if (!e.repeat) openWheel(); return; }   // G를 꾹: 감정표현 휠(떼면 고른 것)
   if (c === "KeyC") { e.preventDefault(); if (!e.repeat) fireFirework(); return; }   // C: 앞으로 폭죽
   if (c === "Backslash") { e.preventDefault(); if (!e.repeat) tuckSide(!sideTucked); return; }   // \: 사이드바 접기/펼치기
   if (c === "Tab") { e.preventDefault(); if (!e.repeat) toggleInv(); return; }
@@ -2904,7 +3207,7 @@ addEventListener("keydown", (e) => {
   if (c === "KeyQ") { cam.yawT += Math.PI / 4; return; } if (c === "KeyE") { cam.yawT -= Math.PI / 4; return; }
   if (MOVE[c]) { keys.add(MOVE[c]); stopFollow(); me.path = null; me.goal = null; e.preventDefault(); }
 });
-addEventListener("keyup", (e) => { duelUi?.key(e); if (MOVE[e.code]) keys.delete(MOVE[e.code]); if (e.code === "ShiftLeft" || e.code === "ShiftRight" || e.key === "Shift") me.runHold = false; });
+addEventListener("keyup", (e) => { if ((e.code === "KeyG" && wheel.kind === "emote") || (e.code === "KeyF" && wheel.kind === "pet")) closeWheel(true); /* 감정표현은 G, 펫은 F를 떼면 고른 것 */ duelUi?.key(e); if (MOVE[e.code]) keys.delete(MOVE[e.code]); if (e.code === "ShiftLeft" || e.code === "ShiftRight" || e.key === "Shift") me.runHold = false; });
 $all(".skill[data-skill]").forEach((b) => (b.onclick = () => useSkill(b.dataset.skill)));
 // 인벤토리(Tab): 마인크래프트처럼 칸에 든 물건을 눌러 쓴다
 const ICON = { // 하루들 낙서체 아이콘(검은 선 + 노랑·하늘 포인트)
@@ -3001,6 +3304,8 @@ function lockMouse() {
   try { const r: any = (canvas as any).requestPointerLock({ unadjustedMovement: true }); if (r?.catch) r.catch((e) => { if (e?.name === "NotSupportedError") plain(); }); } catch { plain(); }
 }
 document.addEventListener("mousemove", (e) => {
+  mouseAt.x = e.clientX; mouseAt.y = e.clientY; mouseAt.on = e.target === canvas;   // 위에서 볼 때 펫 위에 마우스를 올렸는지(nearPet)
+  if (wheel.open) { if (locked()) steerWheel(e.movementX || 0, e.movementY || 0); else steerWheel(e.clientX, e.clientY, true); return; }   // 감정표현 휠: 시야는 그대로, 고르기만
   if (!locked() || !inside()) return;
   const sens = lerp(1, .58, duelMove.adsK), dx = clamp(e.movementX || 0, -200, 200) * sens, dy = clamp(e.movementY || 0, -200, 200) * sens;   // 고정 직후 튀는 값은 자른다 · 조준하면(화면이 당겨지니) 느리게 돈다
   cam.yawT -= dx * .0032;
@@ -3008,7 +3313,8 @@ document.addEventListener("mousemove", (e) => {
 });
 // 고정이 거절돼도(조작 없이 불렸거나 막 풀린 직후) 다음 클릭에 다시 시도한다. 아예 지원 안 하는 브라우저만 끄기(lockMouse 안에서)
 // 종이 총: 마우스 고정 중 왼쪽 버튼을 누르는 순간 바로 발사(눌렀다 떼는 클릭 판정을 기다리지 않는다)
-document.addEventListener("mousedown", (e) => { if (!uiOpen() && (locked() || e.target === canvas) && duelUi?.pointer(e)) { e.preventDefault(); return; } if (e.button === 0 && locked() && me.act?.name === "gun" && !uiOpen()) { e.preventDefault(); fireFirework(true); } });
+addEventListener("blur", () => closeWheel(false));   // G를 누른 채 창을 떠나면(떼는 신호를 못 받는다) 그냥 닫는다 · 휠이 떠 있을 때 마우스를 누르면 그것으로 고른다(아래 mousedown)
+document.addEventListener("mousedown", (e) => { if (wheel.open) { e.preventDefault(); closeWheel(true); return; } if (!uiOpen() && (locked() || e.target === canvas) && duelUi?.pointer(e)) { e.preventDefault(); return; } if (e.button === 0 && locked() && me.act?.name === "gun" && !uiOpen()) { e.preventDefault(); fireFirework(true); } });
 document.addEventListener("mouseup", (e) => { if (!uiOpen() && (locked() || e.target === canvas)) duelUi?.pointer(e); });
 document.addEventListener("contextmenu", (e) => { if (duelUi?.active() && (locked() || e.target === canvas)) e.preventDefault(); });   // 대결 중 오른쪽 클릭은 종목이 쓴다
 document.addEventListener("pointerlockerror", () => {});
@@ -3050,6 +3356,7 @@ function clickAt(cx, cy) {
   if (me.f === 12 && linkBoards.length) { const lh = ray.intersectObjects(linkBoards, false)[0]; if (lh) { if (lh.object.userData.gift) openGifts(); else if (lh.object.userData.shop) shopUi.open(); else if (lh.object.userData.welcome) welcomeSign(); else openLink(lh.object.userData.link); return; } }   // 바로가기 장치 · 선물 입간판 · 컷 상점 진열대를 눌렀다
   if (me.f === 14 && showSlots.length) { const sh = ray.intersectObjects(showSlots.flatMap((sl) => sl.mesh.userData.twin ? [sl.mesh, sl.mesh.userData.twin] : [sl.mesh]), false)[0]; if (sh) { openItem(showItem((sh.object.userData.of ?? sh.object).userData.show)); return; } }   // 14층 액자를 눌렀다
   if (me.f === 12 && ezBoards.length) { const eh = ray.intersectObjects(ezBoards, false)[0]; if (eh && eh.object.userData.wb) { if (nearWb(4)) { openEasel("wb"); return; } } else if (eh && nearFurn("painteasel", 3.2)) { tryEasel(); return; } }   // 이젤·화이트보드를 눌렀다   // 이젤을 눌렀다
+  if (dog.doll.root.visible && Math.hypot(dog.x - me.x, dog.y - me.y) < 4 && ray.intersectObject(dog.doll.root, true).some((h) => h.object !== dog.doll.blob)) { openPetWheel(); return; }   // 내 펫을 눌렀다(가까이 있을 때)
   const hit = ray.intersectObjects(NPCS.filter((n) => n.f === me.f && n.doll.root.visible).map((n) => n.doll.root), true).find((h) => h.object !== (h.object.parent as any)?.userData?.blob && !(h.object as any).isPoints);
   let npcIdx = -1; for (let q: THREE.Object3D | null = hit ? hit.object : null; q; q = q.parent) if (q.userData.npc !== undefined) { npcIdx = q.userData.npc; break; }
   if (hit && npcIdx >= 0) { const n = NPCS[npcIdx]; n.say = "반가워!"; n.sayAt = performance.now(); NPCS.forEach((o) => (o.talk = o === n)); openPanel(n.p); return; }
@@ -3153,7 +3460,9 @@ function standUp() {
   stopMovie();
   if (me.act?.name === "laptop" || me.act?.name === "read") endAct(me);   // 일어나면 노트북·책을 덮는다
   if (me.seat) { me.seat.taken = false; [me.x, me.y] = nearestFree(floor, me.x + Math.sin(me.seat.yaw) * .5, me.y + Math.cos(me.seat.yaw) * .5); me.seat = null; sendPresence(true); return; }
-  if (!me.lie) return; for (const o of floor.furn) if (o.taken === "me") o.taken = false; [me.x, me.y] = nearestFree(floor, me.x + Math.sin(me.lie.yaw) * 1.2, me.y + Math.cos(me.lie.yaw) * 1.2); me.lie = null; sendPresence(true);
+  if (!me.lie) return;
+  if (me.lie.own) { dropOwnProp(ownProp); ownProp = null; me.lie = null; me.em = ""; sendPresence(true); return; }   // 개인 소품(빈백 · LP): 그 자리에서 일어나고 소품은 사라진다
+  for (const o of floor.furn) if (o.taken === "me") o.taken = false; [me.x, me.y] = nearestFree(floor, me.x + Math.sin(me.lie.yaw) * 1.2, me.y + Math.cos(me.lie.yaw) * 1.2); me.lie = null; sendPresence(true);
 }
 const atCall = () => floor.calls.some((k) => inRect({ x: k.x - .2, y: k.y - .3, w: k.w + .4, h: k.h + .6 }, me.x, me.y));
 const nearStartrackScreen = () => !me.lie && !me.seat && me.f === 13 && me.x >= 11.2 && me.x <= 14.6 && Math.abs(me.y - 24.5) <= 5 && canControlStartrack({ f: me.f, x: me.x, y: me.y, rm: roomKeyAt(me.f, me.x, me.y) });
@@ -3165,7 +3474,7 @@ function interact() {
   if (nearStartrackScreen()) { startrack.openSettings(); return; }
   { const fr = nearFridge(); if (fr) { fr.want = !fr.want; return; } }   // 냉장고 앞: 문 열기·닫기
   if (me.act?.name === "gun" && !me.lie && !me.seat && !atCall()) { fireFirework(true); return; }   // 종이 총을 들었으면 F도 발사(엘리베이터 앞만 예외)
-  if (me.lie || me.seat) { standUp(); return; } const st = nearSeat(); if (st && !(nearNPC() && Math.hypot(st.x - me.x, st.y - me.y) > .55)) { sitDown(st); return; } const n = nearNPC(); if (n) { n.say = "반가워!"; n.sayAt = performance.now(); NPCS.forEach((o) => (o.talk = o === n)); openPanel(n.p); return; } const bag = nearBag(); if (bag) { lieDown(bag); return; } if (atCall()) { openPicker(); return; } }   // 폭죽은 C
+  if (me.lie || me.seat) { standUp(); return; } const st = nearSeat(); if (st && !(nearNPC() && Math.hypot(st.x - me.x, st.y - me.y) > .55)) { sitDown(st); return; } const n = nearNPC(); if (n) { n.say = "반가워!"; n.sayAt = performance.now(); NPCS.forEach((o) => (o.talk = o === n)); openPanel(n.p); return; } const bag = nearBag(); if (bag) { lieDown(bag); return; } if (atCall()) { openPicker(); return; } if (nearPet()) { openPetWheel(); return; } }   // 폭죽은 C
 let openP = null;
 function openPanel(p) {
   if (locked()) document.exitPointerLock();
@@ -3253,7 +3562,7 @@ const TOUR = [
     kb: "<kbd>V</kbd>를 누를 때마다 위에서 보기 → 들어가서 보기 → 1인칭으로 바뀌어요. 들어가서 볼 때는 마우스로 둘러보고, <kbd>Esc</kbd>로 커서를 꺼내요.", touch: "오른쪽 아래 시점 버튼으로 위에서·들어가서·1인칭을 오가요. 화면을 끌어서 둘러봐요." },
   { title: "Tab으로 가방 열기", art: `<div class="tart tart-tab"><div class="tbar"><span class="tslot"><i>1</i>${ICON.laptop}</span><span class="tslot"><i>2</i>${ICON.coffee}</span><span class="tslot vacant"></span><span class="tslot vacant"></span></div><kbd class="tkey wide">Tab</kbd></div>`,
     kb: "<kbd>Tab</kbd>을 누르면 인벤토리가 열려요. 칸을 누르거나 숫자키로 써요. 노트북은 의자에 앉아서 펼치고, 아이스 아메리카노는 언제든 한 모금!", touch: "🎒 버튼으로 인벤토리를 열고 칸을 눌러 써요. 노트북은 앉아서 펼치고, 아이스 아메리카노는 언제든 한 모금!" },
-  { title: "조작 한눈에 보기", art: `<div class="tart tkeys">${[["WASD", "걷기"], ["Shift", "달리기"], ["Space", "점프 · 두 번 더블"], ["F", "상호작용"], ["C", "폭죽"], ["Enter", "채팅"], ["Tab", "인벤토리"], ["1 2 3", "네 컷 · 인사 · 하트"], ["Z", "춤 켜고 끄기"], ["클릭", "종이 총 발사"], ["V", "시점 바꾸기"], ["Q E", "화면 돌리기"], ["\\", "사이드바 접기"], ["Esc", "설정"]].map(([k, t]) => `<span><kbd>${k}</kbd>${t}</span>`).join("")}</div>`,
+  { title: "조작 한눈에 보기", art: `<div class="tart tkeys">${[["WASD", "걷기"], ["Shift", "달리기"], ["Space", "점프 · 두 번 더블"], ["F", "상호작용"], ["C", "폭죽"], ["Enter", "채팅"], ["Tab", "인벤토리"], ["1 2 3", "네 컷 · 인사 · 하트"], ["Z", "춤 켜고 끄기"], ["G", "감정표현 휠(꾹)"], ["클릭", "종이 총 발사"], ["V", "시점 바꾸기"], ["Q E", "화면 돌리기"], ["\\", "사이드바 접기"], ["Esc", "설정"]].map(([k, t]) => `<span><kbd>${k}</kbd>${t}</span>`).join("")}</div>`,
     kb: "왼쪽 위 ⚙️(또는 Esc) 설정창의 <b>조작법</b> 탭에서 언제든 다시 볼 수 있어요. 채팅과 같이 있는 크루는 오른쪽 💬 👥 버튼으로 열어요.", touch: "왼쪽 조이스틱으로 걷고, 오른쪽 버튼으로 점프·표현·채팅을 해요. 화면을 끌면 둘러봐요. 설정과 조작법은 왼쪽 위 ⚙️에서 봐요." },
 ];
 // 연동할 수 있고 아직 안 했으면 맨 끝에 한 장 더: 연동하면 캐릭터가 저장된다
@@ -3447,7 +3756,7 @@ function openHarudle() { leaveForTab(); window.open("https://www.harudle.com/dia
 let lastSettleAt = 0;
 function resettle() { if (!account.user || Date.now() - lastSettleAt < 20_000) return; lastSettleAt = Date.now(); void loadWallet(300).then(() => shopUi.load()); }
 addEventListener("focus", () => { if (shopUi.takeWentOut()) { lastSettleAt = 0; resettle(); } else if (Date.now() - lastSettleAt > 10 * 60_000) resettle(); });   // 오래 떠 있다 돌아와도 한 번
-const shopUi = createShopUi({ showToast, requireLogin, showCuts, setGear: setMyGear, preview: tryGear, openHarudle, onOpen: () => { if (locked()) document.exitPointerLock(); gifts.hidden = true; }, onClose: () => syncCursor() });
+const shopUi = createShopUi({ showToast, requireLogin, showCuts, setEmotes: (ids) => { myEmotes = new Set(ids); if (wheel.open && wheel.kind === "emote") renderWheel(); }, setGear: setMyGear, preview: tryGear, openHarudle, onOpen: () => { if (locked()) document.exitPointerLock(); gifts.hidden = true; }, onClose: () => syncCursor() });
 walletChip.onclick = () => shopUi.open();   // 서버가 상점을 꺼 두었으면 open이 "지금은 상점을 쓸 수 없어요"만 띄운다
 async function loadAccount() {
   const q = new URLSearchParams(location.search), result = q.get("login");
@@ -3592,7 +3901,7 @@ let wasMoving = false, myVoice = 0;   // 음성 상태(vc): 0 미연결 · 1 마
 document.addEventListener("visibilitychange", () => { if (document.hidden && me.moving) { me.moving = false; wasMoving = false; sendPresence(true); } });
 function sendPresence(force) {
   if (!room) return; const now = performance.now(); if (!force && now - lastSent < 90) return; lastSent = now;
-  room.presence({ f: me.f, x: Math.round(me.x * 100) / 100, y: Math.round(me.y * 100) / 100, u: Math.round(me.up * 100) / 100, h: Math.round(me.h * 100) / 100, lp: me.act?.name === "laptop" ? 1 : 0, rd: me.act?.name === "read" ? 1 : 0, gn: me.act?.name === "gun" ? 1 : 0, br: me.brush ? 1 : 0, bc: ezPen.c, fk: me.fk, hc: me.hc, hd: Math.round(me.hd * 100) / 100, fc: me.fc, fl: me.out && !me.out.dead ? 1 : 0, ox: me.out ? Math.round(me.x * 100) / 100 : 0, oz: me.out ? Math.round(me.out.z * 100) / 100 : 0, fh: Math.round(me.fh * 1000) / 1000, ...(me.fp === null || me.fp === undefined ? {} : { fp: Math.round(me.fp * 1000) / 1000 }), dn: me.act?.name === "dance" ? me.act.style + 1 : 0, m: me.moving ? 1 : 0, r: running() ? 1 : 0, l: me.lie ? 1 : 0, st: me.seat ? 1 : 0, ly: me.lie ? Math.round(me.lie.yaw * 100) / 100 : 0, jc: me.jc, ac: me.ac, an: me.an, as: me.as, look: 0, av: avEncode(myAv), rm: roomKey(), vc: myVoice, ar: duelUi?.ar() || undefined }).catch(() => { });
+  room.presence({ f: me.f, x: Math.round(me.x * 100) / 100, y: Math.round(me.y * 100) / 100, u: Math.round(me.up * 100) / 100, h: Math.round(me.h * 100) / 100, lp: me.act?.name === "laptop" ? 1 : 0, rd: me.act?.name === "read" ? 1 : 0, gn: me.act?.name === "gun" ? 1 : 0, br: me.brush ? 1 : 0, bc: ezPen.c, fk: me.fk, hc: me.hc, hd: Math.round(me.hd * 100) / 100, fc: me.fc, em: me.em || "", fl: me.out && !me.out.dead ? 1 : 0, ox: me.out ? Math.round(me.x * 100) / 100 : 0, oz: me.out ? Math.round(me.out.z * 100) / 100 : 0, fh: Math.round(me.fh * 1000) / 1000, ...(me.fp === null || me.fp === undefined ? {} : { fp: Math.round(me.fp * 1000) / 1000 }), dn: me.act?.name === "dance" ? me.act.style + 1 : 0, m: me.moving ? 1 : 0, r: running() ? 1 : 0, l: me.lie ? 1 : 0, st: me.seat ? 1 : 0, ly: me.lie ? Math.round(me.lie.yaw * 100) / 100 : 0, jc: me.jc, ac: me.ac, an: me.an, as: me.as, look: 0, av: avEncode(myAv), rm: roomKey(), vc: myVoice, pt: dog.act === "sit" ? 1 : dog.act === "pet" ? 2 : 0, ar: duelUi?.ar() || undefined }).catch(() => { });
   updateMediaWorld();
 }
 // EC2에서는 직접 만든 WebSocket 서버가 room 역할을 한다
@@ -3666,6 +3975,7 @@ function wsRoom() {
       if (m.t === "startrack:clock") { startrack.syncClock(m.sentAt, m.serverTime); duelUi?.clock(m.sentAt, m.serverTime); }
       if (m.t === "ez") easelNet(m);
       if (m.t === "glass") glassNet(m);
+      if (m.t === "emotes" && Array.isArray(m.list) && !shopUi.isMock()) { myEmotes = new Set(m.list.filter((x) => typeof x === "string")); if (wheel.open) renderWheel(); }   // 가진 감정표현(개발 서버 가짜 상점이면 그 상점에서 산 것만)
       if (m.t === "chat") chatNet(m);
       if (typeof m.t === "string" && m.t.startsWith("duel:")) duelUi?.net(m);
       if (m.t === "bye") { retry = 150; media.setNetwork(false); } /* 서버가 새 버전으로 바뀌는 중: 곧바로 다시 붙는다(음성은 끊긴 것으로 치지 않고 다시 붙으면 이어 간다) */ if (m.t === "peers" && handler) handler({ peers: m.peers.map((p) => ({ ...p, kind: "viewer", sameTab: p.peer === myId })) }); };
@@ -3681,7 +3991,7 @@ async function joinRoom() {
       room.onPeers((ch) => {
         peerList = [...ch.peers.filter((p) => !p.sameTab), ...mockPeers];
         updateMediaWorld();
-        for (const [k, v] of peers) if (!peerList.some((p) => p.peer === k)) { endAct(v); holdBrush(v, false); dropDoll(v.doll); dropDoll(v.pet?.doll); v.tag.remove(); v.bub.remove(); v.zzz.remove(); peers.delete(k); }
+        for (const [k, v] of peers) if (!peerList.some((p) => p.peer === k)) { endAct(v); holdBrush(v, false); dropDoll(v.doll); dropDoll(v.pet?.doll); dropOwnProp(v.pbag); v.tag.remove(); v.bub.remove(); v.zzz.remove(); peers.delete(k); }
         online.textContent = peerList.length ? `같이 있는 크루 ${peerList.length + 1}명` : "혼자 둘러보는 중";
       });
       sendPresence(true); return;
@@ -3691,7 +4001,7 @@ async function joinRoom() {
     room.onPeers(async (ch) => {
       peerList = ch.peers.filter((p) => !p.sameTab && p.kind === "viewer");
       const ids = peerList.map((p) => p.by).filter(Boolean); if (user && ids.length) { const ps = await user.profiles(ids); for (const id of ids) names[id] = ps[id]?.name || ""; }
-      for (const [k, v] of peers) if (!peerList.some((p) => p.peer === k)) { endAct(v); holdBrush(v, false); dropDoll(v.doll); dropDoll(v.pet?.doll); v.tag.remove(); v.bub.remove(); v.zzz.remove(); peers.delete(k); }
+      for (const [k, v] of peers) if (!peerList.some((p) => p.peer === k)) { endAct(v); holdBrush(v, false); dropDoll(v.doll); dropDoll(v.pet?.doll); dropOwnProp(v.pbag); v.tag.remove(); v.bub.remove(); v.zzz.remove(); peers.delete(k); }
       online.textContent = peerList.length ? `같이 있는 크루 ${peerList.length + 1}명` : "혼자 둘러보는 중";
     }, () => { });
     sendPresence(true);
@@ -3738,7 +4048,12 @@ function syncPeers(dt, t) {
     else if (!s.dn && v.act?.name === "dance") endAct(v);
     v.jz = v.jz || 0; v.jv = v.jv || 0; if (v.jz > 0 || v.jv > 0) { v.jv -= 15 * dt; v.jz += v.jv * dt; if (v.jz <= 0) { v.jz = 0; v.jv = 0; } }
     // 같은 층이거나, 뚫린 자리(라이브러리·계단 구멍) 너머 위·아래층이면 보인다(그 사람의 폭죽·노트북·춤도 같이)
-    const vis = (s.f === me.f || (Math.abs(s.f - me.f) === 1 && nearRects(voidsOf(FLOORS[Math.max(s.f, me.f)]), s.x, s.y, s.x, s.y))) && !duelUi?.hides(s); v.doll.root.visible = vis; setPos(v.doll, s.f, v.x, v.y); v.doll.root.position.y += (+s.u || 0) + v.jz; v.doll.blob.position.y = .012 - v.jz; applyLie(v.doll, s.l ? { yaw: +s.ly || 0 } : null); v.doll.setSeated(s.st ? v.seat || true : null);
+    const vis = (s.f === me.f || (Math.abs(s.f - me.f) === 1 && nearRects(voidsOf(FLOORS[Math.max(s.f, me.f)]), s.x, s.y, s.x, s.y))) && !duelUi?.hides(s); v.doll.root.visible = vis; setPos(v.doll, s.f, v.x, v.y); v.doll.root.position.y += (+s.u || 0) + v.jz; v.doll.blob.position.y = .012 - v.jz; const curl = !!s.l && s.em === "bag", lp = !!s.l && s.em === "lp", gt = !!s.l && s.em === "guitar"; applyLie(v.doll, s.l ? { yaw: +s.ly || 0, curl, lp, guitar: gt } : null); v.doll.setSeated(s.st ? v.seat || true : gt ? { h: GUITAR_SEAT } : curl || lp ? true : null); curlPose(v.doll, curl); listenPose(v.doll, lp); guitarPose(v.doll, gt); const club = !!s.l && s.em === "club"; v.doll.anim.party = club; if (club) clubDance(v.doll.root, t, +s.ly || 0);
+    // 개인 소품 감정표현 중인 크루(em bag · lp, 누운/앉은 채): 그 사람 자리에 빈백 · LP 세트를 펼쳐 그린다
+    { const pk = s.l && (s.em === "bag" || s.em === "lp" || s.em === "guitar" || s.em === "club") ? s.em : "";
+      if (v.pkind !== pk) { dropOwnProp(v.pbag); v.pbag = pk ? makeOwnProp(pk) : null; v.pkind = pk; if (v.pbag) scene.add(v.pbag); }
+      if (v.pbag) { v.pbag.visible = vis; v.pbag.position.set(wx(v.x), floorY(s.f) + heightAt(FLOORS[s.f], v.x, v.y) + (+s.u || 0), wz(v.y)); v.pbag.rotation.y = +s.ly || 0;
+        if ((pk === "lp" || pk === "guitar" || pk === "club") && vis && Math.floor(t * .8) !== Math.floor((t - dt) * .8)) spawnFx(noteTex, v.doll.root.position, 1, .5, 1.3); } }   // LP: 음표가 퐁퐁
     if (s.fl) { // 13층 창밖에 나가 있는 크루: 건물 밖 자리(ox)와 공중 높이(oz)로 그린다
       const k = Math.min(1, dt * 12); v.ox = v.ox === undefined ? +s.ox : lerp(v.ox, +s.ox, k); v.oz = v.oz === undefined ? +s.oz : lerp(v.oz, +s.oz, k);
       v.doll.root.position.x = wx(v.ox); v.doll.root.position.y = v.oz;
@@ -3746,11 +4061,18 @@ function syncPeers(dt, t) {
     // 그 크루가 데리고 다니는 펫
     const pk = petOfSku(g?.pet);
     if (pk !== (v.pet?.kind ?? null)) { dropDoll(v.pet?.doll); v.pet = pk ? { kind: pk, x: v.x - .6, y: v.y + .4, moving: false, h: 0, doll: makePet(pk) } : null; if (v.pet) scene.add(v.pet.doll.root); }
-    if (v.pet) { followPet(v.pet, v.x, v.y, typeof s.h === "number" ? s.h : 0, dt); v.pet.doll.root.visible = vis; setPos(v.pet.doll, s.f, v.pet.x, v.pet.y); v.pet.doll.update(dt, t, v.pet.moving, v.pet.h); }
+    if (v.pet) { // 그 크루가 펫을 앉혔거나 쓰다듬는 중(pt)이면 펫은 그 자리에서 주인을 본다
+      const pa = s.pt === 1 ? "sit" : s.pt === 2 ? "pet" : null;
+      if (pa) { v.pet.moving = false; v.pet.h = Math.atan2(v.x - v.pet.x, v.y - v.pet.y); } else followPet(v.pet, v.x, v.y, typeof s.h === "number" ? s.h : 0, dt);
+      v.pet.doll.root.visible = vis; setPos(v.pet.doll, s.f, v.pet.x, v.pet.y); v.pet.doll.update(dt, t, v.pet.moving, v.pet.h); v.pet.doll.anim.petAct = pa;
+      if (pa === "pet" && v.lastPt !== 2 && vis) spawnFx(heartTex, v.pet.doll.root.position, 3, .3, .7);
+    }
+    if (!isArena(s.f)) { if (s.pt === 2) { v.doll.anim.arms = patArms(t); v.patArms = true; } else if (v.patArms) { v.doll.anim.arms = null; v.patArms = false; } }   // 쓰다듬는 팔
+    v.lastPt = s.pt;
     // 받는 쪽 안전장치: "걷는 중"이라고 와도 위치가 0.5초 넘게 그대로면 멈춘 것으로 본다(멈춤 신호가 빠졌거나 그 사람이 다른 탭으로 갔을 때)
     if (s.x !== v.sx || s.y !== v.sy) { v.sx = s.x; v.sy = s.y; v.movedAt = t; }
     const walking = (v.walking = !!s.m && t - (v.movedAt ?? -9) < .5);
-    holdBrush(v, !!s.br && vis, typeof s.bc === "string" && /^#[0-9a-f]{6}$/i.test(s.bc) ? s.bc : undefined); applyWobble(v); v.doll.update(dt, t, walking, typeof s.h === "number" ? s.h : null, 0, false, tickAct(v, dt), v.jz > .01, walking && !!s.r);
+    holdBrush(v, !!s.br && vis, typeof s.bc === "string" && /^#[0-9a-f]{6}$/i.test(s.bc) ? s.bc : undefined); applyWobble(v); v.doll.update(dt, t, walking, s.l ? 0 : typeof s.h === "number" ? s.h : null, 0, false, tickAct(v, dt), v.jz > .01, walking && !!s.r);
     v.tag.textContent = p.name || (p.by && names[p.by]) || "크루";
     const vc = s.vc === 0 || s.vc === 1 || s.vc === 2 ? String(s.vc) : null;   // 이름표 앞 음성 아이콘(예전 버전이라 안 보내면 없음)
     if ((v.tag.dataset.vc ?? null) !== vc) { if (vc) v.tag.dataset.vc = vc; else delete v.tag.dataset.vc; v.tag.title = vc ? ["음성 연결 안 함", "마이크 꺼짐", "마이크 켜짐"][+vc] : ""; }
@@ -3758,7 +4080,7 @@ function syncPeers(dt, t) {
     if (vis && !duelMove.noTags) project(v.tag, rp.x, rp.y - .05, rp.z, true); else v.tag.style.display = "none";   // 대결 사격장: 이름표를 숨긴다
     const say = v.chatSay && Date.now() - v.chatAt < 6000 ? v.chatSay : "";   // 받은 근처·전체 채팅만 말풍선으로
     v.bub.hidden = !(vis && say); if (!v.bub.hidden) { v.bub.textContent = say; project(v.bub, rp.x, rp.y + DOLL, rp.z); }
-    showZzz(v.zzz, v.doll, vis && !!s.l && !say);   // 말풍선이 떠 있는 동안은 잠깐 깬다
+    showZzz(v.zzz, v.doll, vis && !!s.l && s.em !== "lp" && s.em !== "guitar" && s.em !== "club" && !say);   // LP 감상은 앉아서 듣는 중이라 zzz 없이   // 말풍선이 떠 있는 동안은 잠깐 깬다
   }
 }
 
@@ -3834,7 +4156,8 @@ setInterval(() => { if (chatTab === "near") renderChat(); }, 1000);   // 방을 
 /* ───── 같이 있는 크루 목록: 나 · 근처(채팅 · 음성이 닿는 크루) · 같은 층 · 다른 층 순, 이름 옆에 층, 따라가기 ───── */
 const plistBody = document.getElementById("plistBody");
 function esc(v) { return String(v).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch])); }   // 함수 선언: 위쪽 채팅 코드가 먼저 불러도 된다
-const actIcon = (s2) => (s2.dr === 1 ? "⚔️ 대결 중" : s2.dr === 2 ? "👀 관전 중" : s2.br ? "🖌️ 그리는 중" : s2.dn ? "💃 춤추는 중" : s2.lp ? "💻 코딩 중" : s2.rd ? "📖 책 읽는 중" : s2.gn ? "🎉 종이 총" : s2.l ? "💤 쉬는 중" : s2.st ? "🪑 앉아 있음" : s2.m ? "🚶 걷는 중" : "");
+const EM_ICON = { bag: "💤 빈백에서 자는 중", lp: "🎧 LP 감상 중", guitar: "🎸 기타 치는 중", club: "🪩 파티 중" };
+const actIcon = (s2) => (s2.dr === 1 ? "⚔️ 대결 중" : s2.dr === 2 ? "👀 관전 중" : s2.l && EM_ICON[s2.em] ? EM_ICON[s2.em] : s2.br ? "🖌️ 그리는 중" : s2.dn ? "💃 춤추는 중" : s2.lp ? "💻 코딩 중" : s2.rd ? "📖 책 읽는 중" : s2.gn ? "🎉 종이 총" : s2.l ? "💤 쉬는 중" : s2.st ? "🪑 앉아 있음" : s2.m ? "🚶 걷는 중" : "");
 const dotColor = (av, seed) => { const c = avDecode(av); return c?.headColor || ["#B39DDB", "#FFD43B", "#7DB3F0", "#7FCFAE", "#F7A6A0"][hash(seed) % 5]; };
 let plistKey = "";
 function renderPlist() {
@@ -3849,7 +4172,7 @@ function renderPlist() {
   $("plistTitle").textContent = all.length ? `캠퍼스에 ${all.length + 1}명` : "아직 혼자 둘러보는 중이에요"; $("plistCnt").textContent = $("sideShowCnt").textContent = String(all.length + 1);   // 사이드바를 접어도 오른쪽 위에 접속 인원
   const ini = (n) => esc([...String(n).trim()][0] || "?");
   const line = (id, name, f, col, icon, mine, near = false, vc = null) => `<li class="${mine ? "mine" : near ? `same near${talkingPeers.has(id) ? " talking" : ""}` : f === me.f ? "same" : ""}"><span class="av" style="background:${col}">${ini(name)}</span><span class="who"><span class="nm">${esc(name)}${mine ? "<em>나</em>" : ""}</span><span class="sub"><span class="fl ${f === me.f ? "here" : ""}">${isArena(f) ? "⚔️" : `${f}F`}</span>${near ? voiceBadges(vc) : ""}${icon ? `<span>${icon}</span>` : ""}</span></span>${mine ? "" : `${uidOf(id) ? `<button type="button" class="dm" data-id="${esc(id)}" title="개인 메시지">💬</button>` : ""}<button type="button" class="fw" data-id="${esc(id)}" aria-pressed="${me.follow === id}">${me.follow === id ? "따라가는 중" : "따라가기"}</button>`}</li>`;
-  const html = line("", myNameNow() || "나", me.f, myAv.headColor || "#B39DDB", actIcon({ dr: duelUi?.role(), br: me.brush, dn: me.act?.name === "dance", lp: me.act?.name === "laptop", rd: me.act?.name === "read", gn: me.act?.name === "gun", l: me.lie, st: me.seat }), true)
+  const html = line("", myNameNow() || "나", me.f, myAv.headColor || "#B39DDB", actIcon({ dr: duelUi?.role(), br: me.brush, dn: me.act?.name === "dance", lp: me.act?.name === "laptop", rd: me.act?.name === "read", gn: me.act?.name === "gun", l: me.lie, em: me.em, st: me.seat }), true)
     + (near.length ? `<li class="pgrp near">근처 · 채팅 · 음성이 닿는 크루 <b>${near.length}</b></li>` + near.map((r) => line(r.id, r.name, r.s.f, dotColor(r.s.av, r.id), actIcon(r.s), false, true, r.s.vc)).join("") : "")
     + (far.length ? (near.length ? `<li class="pgrp">다른 크루</li>` : "") + far.map((r) => line(r.id, r.name, r.s.f, dotColor(r.s.av, r.id), actIcon(r.s), false)).join("") : near.length ? "" : `<li class="empty">다른 크루가 들어오면 여기에 보여요</li>`);
   if (html === plistKey) return; plistKey = html; plistBody.innerHTML = html;
@@ -3987,7 +4310,11 @@ function step(dt, t) {
   npcSkillTimer -= dt; if (npcSkillTimer <= 0) { npcSkillTimer = 8 + Math.random() * 12; const idle = NPCS.filter((n) => n.f === me.f && !n.moving && !n.act && !n.talk && !n.lie); const n = idle[Math.floor(Math.random() * idle.length)]; if (n) startAct(n, ["draw", "draw", "wave", "heart"][Math.floor(Math.random() * 4)]); }
   if (t * 1000 - lastPortal > 1400) for (const p of floor.portals) if (inRect(p, me.x, me.y)) { lastPortal = t * 1000; goFloor(p.to, p.spawn); break; }
   // 강아지는 내 옆을 졸졸
-  followPet(dog, me.x, me.y, me.h, dt);
+  { const now = performance.now();   // 내 펫: 쓰다듬기가 끝났나 · 앉아 있는데 주인이 멀어졌나 · 걸으면 쓰다듬기를 멈춘다
+    if (me.moving && me.patUntil > now) { me.patUntil = 0; dog.actUntil = 0; }
+    if (dog.act === "pet" && now > dog.actUntil) { dog.act = dog.after; dog.after = null; sendPresence(true); }
+    if (dog.act === "sit" && Math.hypot(me.x - dog.x, me.y - dog.y) > 5) { dog.act = null; sendPresence(true); }
+    if (dog.act) { dog.moving = false; dog.h = Math.atan2(me.x - dog.x, me.y - dog.y); } else followPet(dog, me.x, me.y, me.h, dt); }
   // 크루들은 제자리 근처를 서성인다
   for (const n of NPCS) {
     if (n.f !== me.f) continue; const fl = FLOORS[n.f];
@@ -4000,7 +4327,8 @@ function step(dt, t) {
   checkZone();
   const near = nearNPC(), call = atCall(), bag = nearBag(), seat = nearSeat();
   const ez0 = !me.lie && !me.seat && nearFurn("painteasel", 2.1), cup = !(me.brush && ez0) && !me.lie && !me.seat && nearFurn("brushcup", 1.7), ez = !cup && ez0, site = !cup && !ez && nearFurn("linkkiosk", 1.7), insta = !cup && !ez && !site && nearFurn("instaboard", 1.7), gift = !cup && !ez && !site && !insta && !me.lie && !me.seat && nearFurn("giftsign", 1.6), shopShow = !cup && !ez && !site && !insta && !gift && !me.lie && !me.seat && nearShop(), welcomeNear = !cup && !ez && !site && !insta && !gift && !shopShow && !me.lie && !me.seat && nearFurn("hbwelcome", 1.4), wb = !me.lie && !me.seat && nearWb(2.4), fr = nearFridge(), scoop = nearScoop(), shown = !scoop && nearShow(), screenNear = !scoop && !shown && nearStartrackScreen();   // 하루들 부스
-  actBtn.hidden = !(me.lie || me.seat || near || bag || call || seat || cup || ez || site || insta || gift || shopShow || welcomeNear || wb || fr || scoop || shown || screenNear); actBtn.textContent = screenNear ? "스타트랙 영상 설정" : scoop ? scoop.action ?? "오늘의 특종 보기" : shown ? showItem(shown).action : wb ? "화이트보드에 쓰기" : fr ? (fr.want ? "냉장고 닫기" : "냉장고 열기") : cup ? (me.brush ? "붓 꽂기" : "붓 들기") : ez ? "함께 그리기" : site ? "하루들 바로가기" : insta ? "인스타 바로가기" : gift ? "아이템 받는 법" : shopShow ? "컷 상점 들어가기" : welcomeNear ? (account.user ? "연동 선물 보기" : `연동하고 ${WELCOME_CUTS}컷 받기`) : me.lie || me.seat ? "일어나기" : seat && !(near && Math.hypot(seat.x - me.x, seat.y - me.y) > .55) ? "앉기" : near ? `${withJosa(near.p.nick, "와", "과")} 대화하기` : bag ? "빈백에 눕기" : "엘리베이터 타기";
+  const petNear = !(me.lie || me.seat || near || bag || call || seat) && !wheel.open && nearPet();   // 아무것도 없을 때 내 펫을 보고 있으면 "펫과 놀기"
+  actBtn.hidden = !(petNear || me.lie || me.seat || near || bag || call || seat || cup || ez || site || insta || gift || shopShow || welcomeNear || wb || fr || scoop || shown || screenNear); actBtn.textContent = screenNear ? "스타트랙 영상 설정" : scoop ? scoop.action ?? "오늘의 특종 보기" : shown ? showItem(shown).action : wb ? "화이트보드에 쓰기" : fr ? (fr.want ? "냉장고 닫기" : "냉장고 열기") : cup ? (me.brush ? "붓 꽂기" : "붓 들기") : ez ? "함께 그리기" : site ? "하루들 바로가기" : insta ? "인스타 바로가기" : gift ? "아이템 받는 법" : shopShow ? "컷 상점 들어가기" : welcomeNear ? (account.user ? "연동 선물 보기" : `연동하고 ${WELCOME_CUTS}컷 받기`) : petNear ? `${withJosa(petName(), "와", "과")} 놀기` : me.lie || me.seat ? "일어나기" : seat && !(near && Math.hypot(seat.x - me.x, seat.y - me.y) > .55) ? "앉기" : near ? `${withJosa(near.p.nick, "와", "과")} 대화하기` : bag ? "빈백에 눕기" : "엘리베이터 타기";
   if (me.say && Date.now() - me.sayAt > 6000) { me.say = ""; sendPresence(true); }
 }
 const tgt = new THREE.Vector3();
@@ -4021,25 +4349,28 @@ function render(dt, t) {
   const sx = inside() ? 18 : 40, sz = inside() ? 18 : 28, sc = sun.shadow.camera;
   if (sc.right !== sx || sc.top !== sz) { Object.assign(sc, { left: -sx, right: sx, top: sz, bottom: -sz }); sc.updateProjectionMatrix(); }
   adaptQuality(dt);
-  setPos(meDoll, me.f, me.x, me.y); meDoll.root.position.y += me.up + me.jz; meDoll.blob.position.y = .012 - me.jz; meDoll.blob.scale.setScalar(1 - Math.min(.5, me.jz)); applyLie(meDoll, me.lie); meDoll.setSeated(me.seat); meDoll.root.visible = VIEW.mode === "top" || (VIEW.mode === "third" && !cam.close); meDoll.anim.noHead = false;   // 1인칭: 몸·팔은 숨기고 든 물건(노트북·커피·종이 총·네 컷)만 보인다(tickAct가 화면 앞에 붙인다)
+  setPos(meDoll, me.f, me.x, me.y); meDoll.root.position.y += me.up + me.jz; meDoll.blob.position.y = .012 - me.jz; meDoll.blob.scale.setScalar(1 - Math.min(.5, me.jz)); applyLie(meDoll, me.lie); meDoll.setSeated(me.seat || (me.lie?.guitar ? { h: GUITAR_SEAT } : me.lie?.curl || me.lie?.lp ? true : null)); curlPose(meDoll, !!me.lie?.curl); listenPose(meDoll, !!me.lie?.lp); guitarPose(meDoll, !!me.lie?.guitar); meDoll.anim.party = !!me.lie?.club; if (me.lie?.club) clubDance(meDoll.root, t, me.lie.yaw); meDoll.root.visible = VIEW.mode === "top" || (VIEW.mode === "third" && !cam.close); meDoll.anim.noHead = false;   // 1인칭: 몸·팔은 숨기고 든 물건(노트북·커피·종이 총·네 컷)만 보인다(tickAct가 화면 앞에 붙인다)
   if (me.out) { meDoll.root.position.y = me.out.z; if (me.out.dead) meDoll.root.visible = false;   // 13층 창밖: 공중 높이 그대로. 트램펄린에서 튀면 앞으로 한 바퀴
     const fl = me.out.flip; meDoll.root.rotation.order = "YXZ"; meDoll.root.rotation.x = fl >= 0 && fl < .7 ? -fl / .7 * Math.PI * 2 : 0; }
   meDoll.update(dt, t, me.moving, me.lie ? 0 : me.seat ? me.seat.yaw : me.h, 0, !!(me.say && Date.now() - me.sayAt < 2500), tickAct(me, dt), me.jz > .01 || !!me.out, running() && me.moving);
   applyWobble(me);
   if (me.brush && !inBooth()) { me.brush = false; if (!easelEd.hidden) closeEasel(); showToast("붓은 부스 안에서만 써요", "붓 꽂이에 돌려놨어요.", 2200); sendPresence(true); }
   holdBrush(me, me.brush, ezPen.c);
-  setPos(dog.doll, me.f, dog.x, dog.y); dog.doll.update(dt, t, dog.moving, dog.h);
+  setPos(dog.doll, me.f, dog.x, dog.y); dog.doll.update(dt, t, dog.moving, dog.h); dog.doll.anim.petAct = dog.act;
+  if (me.patUntil > performance.now()) { meDoll.anim.arms = patArms(t); me.patArms = true; } else if (me.patArms) { meDoll.anim.arms = null; me.patArms = false; }   // 쓰다듬는 팔(대결 팔 자세는 건드리지 않게 내가 둔 것만 푼다)
   for (const n of NPCS) if (n.doll.root.visible) { setPos(n.doll, n.f, n.x, n.y); applyLie(n.doll, n.lie); n.doll.setSeated(n.seat); n.doll.update(dt, t, n.moving, n.lie ? 0 : n.seat ? n.seat.yaw : n.talk ? Math.atan2(me.x - n.x, me.y - n.y) : n.h, n.seed, performance.now() - n.sayAt < 2500, tickAct(n, dt));  applyWobble(n); }
   environment.frame(dt); updateTraffic(dt); tickFx(dt); tickMeteors(dt, environment.nightVisibility()); tickFireworks(dt);
   for (const s of spinners) s.rotation.y += dt * .9;
   tickGlass(dt); tickRange(dt, performance.now() / 1000);
+  for (const d of lpDiscs) d.rotation.y -= dt * 3.5; tickClub(t);   // LP가 33⅓rpm쯤으로 돈다
+  if ((me.lie?.lp || me.lie?.guitar || me.lie?.club) && meDoll.root.visible && Math.floor(t * .8) !== Math.floor((t - dt) * .8)) spawnFx(noteTex, meDoll.root.position, 1, .5, 1.3);
   tickFridges(dt);
   syncPeers(dt, t);
   duelUi?.frame(dt, t);
   const mp = meDoll.root.position;
   if (duelMove.noTags || VIEW.mode === "first" || (VIEW.mode === "third" && cam.close)) myTag.style.display = "none"; else project(myTag, mp.x, mp.y - .05, mp.z, true);
   myBub.hidden = !(me.say && Date.now() - me.sayAt < 6000); if (!myBub.hidden) { myBub.textContent = me.say; project(myBub, mp.x, mp.y + DOLL, mp.z); }
-  showZzz(myZzz, meDoll, !!me.lie && myBub.hidden && meDoll.root.visible && VIEW.mode !== "first");
+  showZzz(myZzz, meDoll, !!me.lie && !me.lie.lp && !me.lie.guitar && !me.lie.club && myBub.hidden && meDoll.root.visible && VIEW.mode !== "first");
   for (const { n, tag, bub, zzz } of npcTags) {
     if (n.f !== me.f) { tag.style.display = "none"; bub.hidden = true; zzz.hidden = true; continue; }
     const p = n.doll.root.position; const d = Math.hypot(n.x - me.x, n.y - me.y);

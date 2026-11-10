@@ -190,10 +190,11 @@ export function mountMediaControls({ requestJoin, requestRenew, requestCloudflar
         if (!wanted || !network || !position || areaOf(position) !== area) { await closeProvider(wanted); queued = true; continue; }
         connected = true;
         candidate.setAllowedPeers(allowedPeers());
-        if (microphone) await candidate.setMicrophone(true);
+        let micFailed = false;
+        if (microphone) await candidate.setMicrophone(true).catch(() => { microphone = false; micFailed = true; });   // 마이크 권한이 없어도 듣기는 이어간다
         const expiresAt = Number(join.connection.expiresAt || 0);
         if (expiresAt) scheduleLease(expiresAt, candidate, join.provider === "livekit" && join.connection.renewable === "1");
-        message = interruptedShare ? "음성을 다시 연결했어요. 화면 공유를 다시 시작해 주세요." : "";
+        message = interruptedShare ? "음성을 다시 연결했어요. 화면 공유를 다시 시작해 주세요." : micFailed ? "마이크를 켜지 못했어요. 브라우저의 마이크 권한을 확인해 주세요. 듣기는 연결됐어요." : "";
       } catch (error: any) {
         if (provider === candidate) await closeProvider();
         if (!wanted) { /* 사용자가 연결을 닫았다. */ }
@@ -209,9 +210,11 @@ export function mountMediaControls({ requestJoin, requestRenew, requestCloudflar
     reconciling = false;
   }
 
+  // 음성 연결을 누르면 마이크도 켠 채로 시작한다(끄려면 마이크 버튼)
   voice.onclick = () => {
     wanted = !wanted; message = "";
-    if (!wanted) { microphone = false; sharing = false; provider?.setAllowedPeers([]); }
+    if (wanted) microphone = true;
+    else { microphone = false; sharing = false; provider?.setAllowedPeers([]); }
     queue(); render();
   };
   mic.onclick = async () => {

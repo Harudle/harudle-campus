@@ -1,9 +1,17 @@
-// 컷 상점 창: 펫 · 만화 효과 · 착용 장식을 컷으로 사고, 가진 것을 쓰거나 벗는다
+// 컷 상점 창: 펫 · 만화 효과 · 착용 장식 · 감정표현을 컷으로 사고, 가진 것을 쓰거나 벗는다(감정표현은 쓰는 게 아니라 G 감정표현 휠에서 고른다)
 // 상품 · 가격 · 가진 것 · 쓰는 것은 모두 서버(/api/shop)가 알려 준 값만 쓴다. 엔진과는 넘겨받은 함수로만 이어진다.
 // 컷이 모자란 상품을 누르면 거절하지 않고 "컷 모으는 법" 카드로 하루들 서비스에 네컷만화를 올리러 가게 안내한다.
 import type { GearState } from "../scene/Gear";
+import { CATALOG as REAL_CATALOG, EMOTES } from "../../server/auth/catalog.js";
 
-type Item = { sku: string; slot: keyof GearState; name: string; price: number; rare?: boolean };
+// 개발용 가짜 상점(vite 개발 서버에서만, ?nomock이면 끈다): 서버 상점이 꺼져 있거나 하루들과 연동하지 않았으면
+// 서버 대신 이 브라우저에 가진 것 · 쓰는 것 · 컷 999를 두고 사고 입어 본다. 내 화면에서만 바뀌고 서버 · DB는 건드리지 않는다
+const MOCK_SHOP = import.meta.env.DEV && !new URLSearchParams(location.search).has("nomock"), MOCK_KEY = "ww.mockShop";
+type MockState = { owned: string[]; gear: GearState; balance: number };
+const mockRead = (): MockState => { try { const v = JSON.parse(localStorage.getItem(MOCK_KEY) || "null"); if (v && Array.isArray(v.owned)) return v; } catch { } return { owned: [], gear: {}, balance: 999 }; };
+const mockSave = (v: MockState) => { try { localStorage.setItem(MOCK_KEY, JSON.stringify(v)); } catch { } };
+
+type Item = { sku: string; slot: keyof GearState | "emote"; name: string; price: number; rare?: boolean };
 type Deps = {
   showToast: (h: string, p: string, ms?: number) => void;
   requireLogin: (reason: string) => boolean;
@@ -11,6 +19,7 @@ type Deps = {
   setGear: (g: GearState) => void;
   preview: (slot: string, sku: string) => void;   // 잠깐 입어 보기(내 화면에서만)
   openHarudle: () => void;                        // 하루들 서비스를 새 탭으로
+  setEmotes: (ids: string[]) => void;   // 가짜 상점: 가진 감정표현(G 휠). 개발 서버는 서버가 다 열어 주니 이것으로 덮는다
   onOpen: () => void;    // 커서 풀기
   onClose: () => void;   // 커서 되돌리기
 };
@@ -18,7 +27,8 @@ type Deps = {
 const TABS: [string, string, (it: Item) => boolean][] = [
   ["pet", "펫", (it) => it.slot === "pet"],
   ["fx", "만화 효과", (it) => it.slot === "fx"],
-  ["wear", "착용", (it) => it.slot !== "pet" && it.slot !== "fx"],
+  ["wear", "착용", (it) => it.slot !== "pet" && it.slot !== "fx" && it.slot !== "emote"],
+  ["emote", "감정표현", (it) => it.slot === "emote"],
 ];
 const TIP: Record<string, string> = {
   pet_cat: "새침하게 꼬리를 세우고 따라와요. 멈추면 옆에 엎드려요.", pet_panda: "대나무 잎을 물고 통통통 따라와요.", pet_fox: "풍성한 꼬리를 흔들며 따라와요.",
@@ -27,6 +37,10 @@ const TIP: Record<string, string> = {
   fx_bubble: "머리 위 말풍선에서 점이 톡톡 튀어요.", fx_bang: "머리 위에서 느낌표가 번쩍!", fx_sparkle: "반짝이가 머리 위를 빙글 돌아요.",
   fx_heart: "머리 위에서 하트가 두근두근 뛰어요.", fx_sweat: "만화처럼 땀방울이 또르르 흘러요.",
   head_gradcap: "수료를 꿈꾸는 학사모예요. 술이 달랑거려요.", head_headband: "이번엔 꼭! 합격 머리띠예요.",
+  emote_beanbag: "어디서든 폭신한 내 빈백을 펼치고 누워 쿨쿨 자요. G를 꾹 눌러 골라요.",
+  emote_club: "발밑에 반짝이는 LED 원판이 깔리고 머리 위로 미러볼이 떠올라요. 그 위에서 미친 듯이 춤춰요. G를 꾹 눌러 골라요.",
+  emote_lp: "내 앞에 턴테이블을 놓고 방석에 앉아, 헤드셋을 꽂고 LP를 들으며 고개를 까딱여요. G를 꾹 눌러 골라요.",
+  emote_guitar: "통기타를 메고 줄을 튕기며 박자에 맞춰 몸을 흔들어요. G를 꾹 눌러 골라요.",
   neck_idcard: "출근한 느낌이 나는 하루들 사원증이에요.", held_manuscript: "막 그린 네컷 원고를 들고 다녀요.", held_coffee: "오늘도 아아 한 잔 들고 출근해요.",
 };
 const S = `fill="none" stroke="#111118" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"`;
@@ -47,6 +61,10 @@ const ICON: Record<string, string> = {
   head_headband: `<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M30 20l7-5M30 22l6 4" ${S}/><rect x="3" y="14" width="29" height="12" rx="3" fill="#fff" stroke="#111118" stroke-width="2.2"/><circle cx="8.500" cy="20" r="2.600" fill="#E5484D"/><circle cx="26.500" cy="20" r="2.600" fill="#E5484D"/><path d="M14 17.500h7M17.500 17.500v5.500M14 23h7" ${S.replace('2.2', '1.8')}/></svg>`,
   neck_idcard: `<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M13 3l7 11 7-11" fill="none" stroke="#8B6FE8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><rect x="9" y="13" width="22" height="23" rx="3" fill="#fff" stroke="#111118" stroke-width="2.2"/><rect x="9" y="13" width="22" height="6" rx="3" fill="#8B6FE8"/><circle cx="20" cy="25" r="3.2" fill="#111118"/><path d="M14 32h12" ${S}/></svg>`,
   held_manuscript: `<svg viewBox="0 0 40 40" aria-hidden="true"><rect x="7" y="4" width="26" height="32" rx="2.500" fill="#FFFDF7" stroke="#111118" stroke-width="2.2"/><rect x="10" y="7" width="9" height="12" fill="#D9CEFC"/><rect x="21" y="21" width="9" height="12" fill="#D9CEFC"/><path d="M20 6v28M9 20h22" ${S}/></svg>`,
+  emote_beanbag: `<svg viewBox="0 0 40 40" aria-hidden="true"><ellipse cx="20" cy="27" rx="16" ry="8" fill="#C9B8F0" stroke="#111118" stroke-width="2.2"/><path d="M8 25c0-8 6-12 12-12s10 3 11 8" fill="#B39DDB" stroke="#111118" stroke-width="2.2" stroke-linejoin="round"/><text x="27" y="12" font-size="9" font-weight="800" fill="#111118">z</text><text x="32" y="7" font-size="7" font-weight="800" fill="#111118">z</text></svg>`,
+  emote_club: `<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M20 2v5" stroke="#111118" stroke-width="2"/><circle cx="20" cy="14" r="8" fill="#D9DCE2" stroke="#111118" stroke-width="2.2"/><path d="M13 12h14M14 17h12M20 6v16M16 7c-2 4-2 10 0 14M24 7c2 4 2 10 0 14" stroke="#9EA3AA" stroke-width="1.2" fill="none"/><ellipse cx="20" cy="33" rx="15" ry="5" fill="#B9A6EC" stroke="#111118" stroke-width="2.2"/><path d="M10 33h4M18 33h4M26 33h4" stroke="#FFD43B" stroke-width="2.4" stroke-linecap="round"/><path d="M8 22l-3 3M32 22l3 3" stroke="#FF8FB1" stroke-width="2.2" stroke-linecap="round"/></svg>`,
+  emote_lp: `<svg viewBox="0 0 40 40" aria-hidden="true"><rect x="4" y="12" width="32" height="24" rx="3" fill="#C99A62" stroke="#111118" stroke-width="2.2"/><circle cx="18" cy="24" r="9" fill="#2B2733" stroke="#111118" stroke-width="2"/><circle cx="18" cy="24" r="3" fill="#FF8FB1"/><path d="M31 15v11l-6 3" fill="none" stroke="#111118" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 9c0-6 16-6 16 0" fill="none" stroke="#7B5BD6" stroke-width="2.4"/></svg>`,
+  emote_guitar: `<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M24 6l6-3 3 3-3 6-5 1Z" fill="#7A5236" stroke="#111118" stroke-width="2" stroke-linejoin="round"/><path d="M25 12 16 21" stroke="#7A5236" stroke-width="3.4" stroke-linecap="round"/><path d="M16 17c-4-4-11-1-11 6s4 12 11 12 10-6 7-10c-1-2-3-2-4-4s0-3-3-4Z" fill="#E8B26A" stroke="#111118" stroke-width="2.2" stroke-linejoin="round"/><circle cx="13" cy="26" r="2.8" fill="#3A2A20"/></svg>`,
   held_coffee: `<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M23 3l-2 8" stroke="#B9A6EC" stroke-width="2.6" stroke-linecap="round"/><path d="M11 13h18l-2.500 22h-13Z" fill="#7A5236" stroke="#111118" stroke-width="2.2" stroke-linejoin="round"/><rect x="9" y="9.500" width="22" height="4.500" rx="2" fill="#fff" stroke="#111118" stroke-width="2.2"/><path d="M12.300 21h15.400l-.800 7H13.100Z" fill="#FFFDF7"/></svg>`,
 };
 const esc = (v: unknown) => String(v).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]!);
@@ -55,7 +73,7 @@ export function createShopUi(d: Deps) {
   const $ = (id: string) => document.getElementById(id)!;
   const modal = $("shop"), list = $("shopList"), tabs = $("shopTabs"), cuts = $("shopCuts"), entry = $("giftsShop"), earnBox = $("shopEarn");
   let available = false, loggedIn = false, catalog: Item[] = [], owned: string[] = [], gear: GearState = {}, balance = 0, tab = "pet", busy = false;
-  let earn = { reward: 0, today: false, welcome: 0 }, short = 0, wentOut = false;   // short: 방금 누른 상품에 모자란 컷(0이면 안내 카드를 그냥 "모으는 법"으로)
+  let earn = { reward: 0, today: false, welcome: 0 }, short = 0, wentOut = false, mock = false;   // short: 방금 누른 상품에 모자란 컷(0이면 안내 카드를 그냥 "모으는 법"으로)
 
   function renderEarn(show: boolean) {
     earnBox.hidden = !show; if (!show) return;
@@ -67,14 +85,15 @@ export function createShopUi(d: Deps) {
   }
 
   function render() {
-    cuts.innerHTML = loggedIn ? `내 컷 <b>${balance.toLocaleString("ko-KR")}</b>컷 <button type="button" class="linkbtn" data-earn="how">모으는 법</button>` : `지금은 구경만 할 수 있어요. 하루들과 ${earn.welcome ? `처음 연동하면 ${earn.welcome}컷 선물!` : "연동하면 컷을 모아 살 수 있어요."}`;
+    cuts.innerHTML = (mock ? `<b class="mockTag">🧪 개발용 가짜 상점</b> <button type="button" class="linkbtn" data-mock="reset">처음으로</button><br>` : "") + (loggedIn ? `내 컷 <b>${balance.toLocaleString("ko-KR")}</b>컷 <button type="button" class="linkbtn" data-earn="how">모으는 법</button>` : `지금은 구경만 할 수 있어요. 하루들과 ${earn.welcome ? `처음 연동하면 ${earn.welcome}컷 선물!` : "연동하면 컷을 모아 살 수 있어요."}`);
     tabs.innerHTML = TABS.map(([k, label]) => `<button type="button" role="tab" class="dbtn${k === tab ? " on" : ""}" aria-selected="${k === tab}" data-tab="${k}">${label}</button>`).join("");
     const pick = TABS.find(([k]) => k === tab)![2];
     list.innerHTML = catalog.filter(pick).map((it) => {
-      const got = owned.includes(it.sku), on = gear[it.slot] === it.sku, pet = it.slot === "pet", lack = loggedIn && !got && balance < it.price, off = busy ? " disabled" : "";
+      const got = owned.includes(it.sku), emote = it.slot === "emote", on = !emote && gear[it.slot as keyof GearState] === it.sku, pet = it.slot === "pet", lack = loggedIn && !got && balance < it.price, off = busy ? " disabled" : "";
       // 컷이 모자라고 오늘 보상을 아직 안 받았으면: 버튼이 곧 "네컷만화 만들러 가기"다(누르면 하루들 만들기 화면이 열린다)
       const buyLabel = !loggedIn ? `🔒 연동하고 ${pet ? "데려오기" : "사기"}` : lack && !earn.today ? `네컷만화 만들고 ${pet ? "데려오기" : "사기"} ↗` : `${it.price}컷으로 ${pet ? "데려오기" : "사기"}`;
-      const act = !got ? `<button type="button" class="btn${lack ? (earn.today ? " lack" : " lav") : ""}" data-buy="${esc(it.sku)}"${off}>${buyLabel}</button><button type="button" class="btn ghost" data-try="${esc(it.slot)}" data-sku="${esc(it.sku)}"${off}>${pet ? "미리 만나기" : "입어 보기"}</button>`
+      const act = emote ? (got ? `<button type="button" class="btn ghost" disabled>G를 꾹 눌러 골라요</button>` : `<button type="button" class="btn${lack ? (earn.today ? " lack" : " lav") : ""}" data-buy="${esc(it.sku)}"${off}>${buyLabel}</button>`)   // 감정표현은 입어 보기 · 쓰기가 없다
+        : !got ? `<button type="button" class="btn${lack ? (earn.today ? " lack" : " lav") : ""}" data-buy="${esc(it.sku)}"${off}>${buyLabel}</button><button type="button" class="btn ghost" data-try="${esc(it.slot)}" data-sku="${esc(it.sku)}"${off}>${pet ? "미리 만나기" : "입어 보기"}</button>`
         : on ? `<button type="button" class="btn ghost" data-wear="${esc(it.slot)}" data-sku=""${off}>${pet ? "쉬게 하기" : "벗기"}</button>`
         : `<button type="button" class="btn" data-wear="${esc(it.slot)}" data-sku="${esc(it.sku)}"${off}>${pet ? "데리고 다니기" : "쓰기"}</button>`;
       return `<li class="${got ? "got" : ""}${it.rare ? " rare" : ""}"><span class="gicon">${ICON[it.sku] || ""}</span><div><b>${esc(it.name)}${it.rare ? `<i class="rare">레어</i>` : ""}<em>${on ? (pet ? "함께 있어요" : "쓰는 중") : got ? "가졌어요 ✓" : lack ? `${it.price - balance}컷 모자라요` : `${it.price}컷`}</em></b><p>${esc(TIP[it.sku] || "")}</p><div class="gacts">${act}</div></div></li>`;
@@ -83,7 +102,7 @@ export function createShopUi(d: Deps) {
 
   function apply(data: any) {
     if (Array.isArray(data.catalog)) catalog = data.catalog;
-    if (Array.isArray(data.owned)) owned = data.owned;
+    if (Array.isArray(data.owned)) { owned = data.owned; if (mock) d.setEmotes(Object.keys(EMOTES).filter((id) => owned.includes(EMOTES[id]))); }
     if (data.gear && typeof data.gear === "object") { gear = data.gear; d.setGear(gear); }
     if (typeof data.balance === "number") { balance = data.balance; d.showCuts(balance); }
     if (data.earn && typeof data.earn === "object") earn = { reward: Number(data.earn.reward) || 0, today: !!data.earn.today, welcome: Number(data.earn.welcome) || 0 };
@@ -92,9 +111,15 @@ export function createShopUi(d: Deps) {
   // 들어올 때 한 번: 상점이 켜져 있는지, (연동했으면) 가진 것 · 쓰는 것 · 잔액
   async function load() {
     try {
-      const r = await fetch("/api/shop", { credentials: "same-origin", cache: "no-store" });
-      if (!r.ok) return;
-      const data = await r.json();
+      const r = await fetch("/api/shop", { credentials: "same-origin", cache: "no-store" }).catch(() => null);
+      const data = r?.ok ? await r.json() : null;
+      if (MOCK_SHOP && (!data || !data.loggedIn)) { // 개발 서버: 서버 상점이 없거나 연동 전이면 가짜 상점으로
+        const m = mockRead(); mock = available = loggedIn = true; entry.hidden = false;
+        apply({ catalog: data?.catalog ?? REAL_CATALOG, owned: m.owned, gear: m.gear, balance: m.balance, earn: { reward: 10, today: false } });
+        if (!modal.hidden) render();
+        return;
+      }
+      if (!data) return;
       available = true; loggedIn = !!data.loggedIn; apply(data);
       entry.hidden = false;
       if (!modal.hidden) { render(); if (!earnBox.hidden) renderEarn(true); }
@@ -109,8 +134,22 @@ export function createShopUi(d: Deps) {
   // 컷이 모자라면: 거절 대신 얼마가 모자란지와 하루들에서 모으는 법을 보여 준다
   function guide(lack: number) { short = Math.max(0, lack); renderEarn(true); earnBox.scrollIntoView({ block: "nearest" }); (earnBox.querySelector("button") as HTMLElement | null)?.focus(); }
 
+  // 가짜 상점에서 사고 쓰기: 브라우저에만 남긴다
+  function mockBuy(it: Item) {
+    const m = mockRead(); if (m.owned.includes(it.sku)) return;
+    if (m.balance < it.price) { guide(it.price - m.balance); return; }
+    m.balance -= it.price; m.owned.push(it.sku); if (it.slot !== "emote") m.gear = { ...m.gear, [it.slot]: it.sku }; mockSave(m);
+    apply({ owned: m.owned, gear: m.gear, balance: m.balance }); renderEarn(false); render();
+    d.showToast(`${it.name}를 샀어요 (개발용)`, "이 브라우저에서만 바뀌어요. 상점 위 '처음으로'로 되돌려요.", 3200);
+  }
+  function mockWear(slot: string, sku: string | null) {
+    const m = mockRead(); m.gear = { ...m.gear }; if (sku) m.gear[slot] = sku; else delete m.gear[slot]; mockSave(m);
+    apply({ gear: m.gear }); render();
+  }
+
   async function buy(sku: string) {
     const it = catalog.find((c) => c.sku === sku); if (!it || busy) return;
+    if (mock) return mockBuy(it);
     if (!d.requireLogin("컷은 하루들과 연동한 크루만 모으고 쓸 수 있어요.")) { close(); return; }
     if (balance < it.price) { guide(it.price - balance); if (!earn.today) { wentOut = true; d.openHarudle(); } return; }   // 오늘 받을 컷이 남았으면 바로 만들기 화면으로
     busy = true; render();
@@ -118,6 +157,7 @@ export function createShopUi(d: Deps) {
       const r = await send("POST", "/api/shop/buy", { sku });
       if (r.ok) {
         apply(r.data); renderEarn(false);
+        if (it.slot === "emote") { d.showToast(`${it.name}를 샀어요`, "G를 꾹 누르면 나오는 감정표현 휠에서 마우스로 골라요.", 4200); busy = false; render(); return; }
         // 산 것은 바로 써 본다
         const w = await send("PUT", "/api/me/gear", { slot: it.slot, sku });
         if (w.ok) apply(w.data);
@@ -132,6 +172,7 @@ export function createShopUi(d: Deps) {
 
   async function wear(slot: string, sku: string | null) {
     if (busy) return;
+    if (mock) return mockWear(slot, sku);
     busy = true; render();
     try {
       const r = await send("PUT", "/api/me/gear", { slot, sku });
@@ -159,6 +200,7 @@ export function createShopUi(d: Deps) {
   modal.addEventListener("click", (e) => {
     if (e.target === modal) return close();
     const b = (e.target as HTMLElement).closest("button"); if (!b) return;
+    if (b.dataset.mock === "reset") { mockSave({ owned: [], gear: {}, balance: 999 }); apply({ owned: [], gear: {}, balance: 999 }); render(); d.showToast("가짜 상점을 처음으로 되돌렸어요", "컷 999, 가진 것 없음", 2200); return; }
     if (b.dataset.tab) { tab = b.dataset.tab; render(); }
     else if (b.dataset.earn === "how") { short = 0; renderEarn(!!earnBox.hidden); }
     else if (b.dataset.earn === "go") { wentOut = true; d.openHarudle(); }
@@ -168,7 +210,7 @@ export function createShopUi(d: Deps) {
   });
 
   return {
-    open, close, load, isOpen: () => !modal.hidden, isAvailable: () => available,
+    open, close, load, isOpen: () => !modal.hidden, isAvailable: () => available, isMock: () => mock,
     /** 하루들에 다녀왔는지(한 번 읽으면 지워진다): 돌아오면 엔진이 바로 정산한다 */
     takeWentOut: () => { const v = wentOut; wentOut = false; return v; },
   };

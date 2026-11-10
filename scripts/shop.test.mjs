@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createAuth, sha256 } from "../server/auth/index.js";
 import { createMemoryStore, createSupabaseStore } from "../server/auth/store.js";
-import { CATALOG, SLOTS, cleanGear, itemOf } from "../server/auth/catalog.js";
+import { CATALOG, SLOTS, EMOTES, cleanGear, itemOf } from "../server/auth/catalog.js";
 
 const ORIGIN = "http://localhost:8090";
 const ME = "6d64421d-6a44-48fa-b917-c1d20f5e5883";
@@ -30,10 +30,11 @@ async function setup({ env = ENV, cuts = 0 } = {}) {
   return { auth, store, request, gearEvents };
 }
 
-test("카탈로그: 펫 7(레어 2) · 효과 5 · 착용 5, sku는 겹치지 않고 슬롯은 아는 것만", () => {
-  assert.equal(CATALOG.length, 17);
-  assert.equal(new Set(CATALOG.map((it) => it.sku)).size, 17);
-  for (const it of CATALOG) { assert.ok(SLOTS.includes(it.slot)); assert.ok(Number.isInteger(it.price) && it.price > 0); assert.match(it.sku, /^[a-z_]{1,40}$/); }
+test("카탈로그: 펫 7(레어 2) · 효과 5 · 착용 5 · 감정표현 4, sku는 겹치지 않고 슬롯은 아는 것만(감정표현은 쓰는 자리가 아니다)", () => {
+  assert.equal(CATALOG.length, 21);
+  assert.equal(new Set(CATALOG.map((it) => it.sku)).size, 21);
+  assert.deepEqual(CATALOG.filter((it) => it.slot === "emote").map((it) => it.sku), Object.values(EMOTES)); assert.ok(!SLOTS.includes("emote"));
+  for (const it of CATALOG) { assert.ok(SLOTS.includes(it.slot) || it.slot === "emote"); assert.ok(Number.isInteger(it.price) && it.price > 0); assert.match(it.sku, /^[a-z_]{1,40}$/); }
   assert.deepEqual(CATALOG.filter((it) => it.slot === "pet").map((it) => it.name), ["고양이", "판다", "여우", "얼룩말", "에뮤", "호랑이", "불곰"]);
   assert.deepEqual(CATALOG.filter((it) => it.rare).map((it) => [it.sku, it.price]), [["pet_tiger", 30], ["pet_bear", 30]]);
   assert.equal(CATALOG.filter((it) => it.slot === "fx").length, 5);
@@ -58,7 +59,7 @@ test("게스트는 상품 목록만 보고, 사거나 쓰지 못한다", async (
   const s = await setup({ cuts: 50 });
   const guest = { cookie: "" };
   const list = await s.request("GET", "/api/shop", undefined, guest);
-  assert.equal(list.status, 200); assert.equal(list.body.loggedIn, false); assert.equal(list.body.catalog.length, 17); assert.deepEqual(list.body.earn, { reward: 10, welcome: 15 }); assert.equal("balance" in list.body, false);
+  assert.equal(list.status, 200); assert.equal(list.body.loggedIn, false); assert.equal(list.body.catalog.length, 21); assert.deepEqual(list.body.earn, { reward: 10, welcome: 15 }); assert.equal("balance" in list.body, false);
   assert.equal((await s.request("POST", "/api/shop/buy", { sku: "pet_cat" }, guest)).status, 401);
   assert.equal((await s.request("PUT", "/api/me/gear", { slot: "pet", sku: "pet_cat" }, guest)).status, 401);
   assert.equal((await s.request("POST", "/api/shop/buy", { sku: "pet_cat" }, { origin: "https://evil.example" })).status, 403);
@@ -161,4 +162,11 @@ test("상점 응답의 earn.today: 오늘 피드 보상을 받았으면 true", a
   assert.equal((await s.request("GET", "/api/shop")).body.earn.today, false, "어제 것은 오늘이 아니다");
   await s.store.grantReward({ userId: ME, kind: "feed_daily", refKey: "2026-11-10", amount: 10, at: T0 });
   assert.equal((await s.request("GET", "/api/shop")).body.earn.today, true);
+});
+
+test("감정표현은 살 수 있지만 쓰는 자리가 아니라 gear로는 못 쓴다", async () => {
+  const s = await setup({ cuts: 50 });
+  assert.equal((await s.request("POST", "/api/shop/buy", { sku: "emote_beanbag" })).status, 200);
+  assert.equal((await s.request("PUT", "/api/me/gear", { slot: "emote", sku: "emote_beanbag" })).body.error, "slot");
+  assert.ok((await s.auth.ownedOf(ME)).includes("emote_beanbag"), "가진 것으로 남는다(서버가 em을 받아 줄 때 본다)");
 });
