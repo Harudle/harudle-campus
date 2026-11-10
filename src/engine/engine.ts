@@ -1869,8 +1869,10 @@ const fwDot = canvasTex(32, 32, (g) => { const r = g.createRadialGradient(16, 16
 function fireFirework(paper = false, aim: number | null = null) {
   if (paper && (me.act?.name !== "gun" || duelMove.noFire)) return;
   const now = performance.now(); if (now < fwReady) return; fwReady = now + (paper ? duelMove.fireGap : 600);
-  const fh = aim ?? (inside() ? cam.yaw + Math.PI : me.h); me.fh = Math.atan2(Math.sin(fh), Math.cos(fh)); me.fc++; me.fk = paper ? 1 : 0;   // fh는 -π~π로: 카메라를 여러 바퀴 돌리면 서버(±50으로 자른다)와 방향이 어긋난다
-  if (me.fk) { me.h = me.fh; me.kickAt = now / 1000; shootPaper(me.f, me.x, me.y, me.fh, me.up + me.jz, me); duelUi?.fired(me.fh, me.up + me.jz); } else launchFirework(me.f, me.x, me.y, me.fh, me.up + me.jz);
+  // 종이 총을 들어가서 볼 때(1 · 3인칭)는 FPS처럼 조준점이 가리키는 곳으로: 방향(fh)과 위아래(fp)를 그곳에서 정한다. 위에서 볼 땐 예전처럼 누른 쪽 · 몸 쪽으로 수평
+  const sight = paper && aim === null && inside() ? aimShot(me.up + me.jz) : null;
+  const fh = sight ? sight.fh : aim ?? (inside() ? cam.yaw + Math.PI : me.h); me.fh = Math.atan2(Math.sin(fh), Math.cos(fh)); me.fp = sight ? sight.fp : null; me.fc++; me.fk = paper ? 1 : 0;   // fh는 -π~π로: 카메라를 여러 바퀴 돌리면 서버(±50으로 자른다)와 방향이 어긋난다
+  if (me.fk) { me.h = me.fh; me.kickAt = now / 1000; shootPaper(me.f, me.x, me.y, me.fh, me.up + me.jz, me, me.fp); duelUi?.fired(me.fh, me.up + me.jz, me.fp); } else launchFirework(me.f, me.x, me.y, me.fh, me.up + me.jz);
   sendPresence(true);
 }
 // 게더타운처럼: 손 앞에서 부채꼴(좌우 약 70도)로 색종이 불꽃이 팍! 퍼져 나가고, 흩날리며 떨어진다
@@ -1901,12 +1903,12 @@ function tickFireworks(dt) {
         // 빠른 총알이 한 프레임에 사람을 건너뛰지 않게 8cm씩 나눠 움직이며 맞았는지 본다
         const steps = Math.max(1, Math.ceil(w.v.length() * dt / .08)), sdt = dt / steps;
         for (let st = 0; st < steps && !w.hit; st++) {
-        w.v.y -= 3 * sdt; pos.addScaledVector(w.v, sdt);
-        const gx = tX(pos.x), gy = tY(pos.z), y0 = pos.y - floorY(w.f);
-        let hitWall = solid(fl, gx, gy) && (fl.wgrid[Math.floor(gy) * W + Math.floor(gx)] || y0 < (fl.top[Math.floor(gy) * W + Math.floor(gx)] || 1.2) + .05);
+        w.v.y -= (w.g ?? 3) * sdt; pos.addScaledVector(w.v, sdt);   // 조준해 쏜 총알(g 0)은 곧게
+        const gx = tX(pos.x), gy = tY(pos.z);
+        let hitWall = bulletWall(fl, w.f, pos);
         const pane = w.f === 13 && gx < 1 ? paneAt(gy) : null;   // 13층 스타트랙 뒤 창문: 깨진 창은 뚫고 날아가고, 내 총알이 맞으면 서버에 알린다
         if (pane && pane.until > performance.now()) hitWall = false; else if (pane && hitWall && w.shooter === me) netSend({ t: "glass", w: pane.i });
-        const hitDoll = [me, ...NPCS, ...peers.values()].find((a: any) => a !== w.shooter && a.doll?.root.visible && (a.f ?? w.f) === w.f && Math.hypot(a.doll.root.position.x - pos.x, a.doll.root.position.z - pos.z) < .3 && y0 > a.doll.root.position.y - floorY(w.f) && y0 < a.doll.root.position.y - floorY(w.f) + 1.15);
+        const hitDoll = bulletDoll(w.f, pos, w.shooter);
         const hitGame = !hitWall && !hitDoll && !!duelUi?.bullet(w, pos);   // 대결 종목이 그린 것(과녁 등)에 맞았다
         if (hitWall || hitDoll || hitGame || pos.y <= ground || w.t > 1.6) { w.hit = true; w.t = 0; const hd = Math.atan2(w.v.x, w.v.z); paperPuff(pos.clone(), w.f, hd);
           // 맞은 사람이 휘청: 내가 맞았으면 내가 정해서 모두에게 알린다(hc). NPC는 각자 화면에서. 다른 크루는 그 사람이 보낸 hc로 휘청인다
@@ -2060,12 +2062,43 @@ function makePaperGun() { // 종이 총(파티 팡팡 총): 노란 몸통, 분�
 }
 // 종이 총 발사: 총구에서 구겨 뭉친 종이 총알 한 발이 앞으로 쭉 날아간다(살짝 떨어진다). 벽·가구·사람·바닥에 맞으면 종이 부스러기가 톡 튀고 굴러 떨어진다
 const BULLET_GEO = new THREE.IcosahedronGeometry(.075, 0), SCRAP_GEO = new THREE.PlaneGeometry(.04, .03);
-function shootPaper(f, x, y, dir, lift = 0, shooter = null) {
+// pitch(위아래, 라디안)가 있으면 조준해 쏜 총알: 총구(muzzle)에서 그 방향으로 중력 없이 곧게(FPS). 없으면(위에서 보기 · 예전 버전) 허리에서 살짝 떠올라 떨어진다
+function shootPaper(f, x, y, dir, lift = 0, shooter = null, pitch: number | null = null) {
   const fx = Math.sin(dir), fz = Math.cos(dir), rx = Math.cos(dir), rz = -Math.sin(dir);
   const m = solidMesh(BULLET_GEO, 0xFAF8F2, { line: .01, cast: false });
-  m.position.set(wx(x) - rx * .2 + fx * .6, floorY(f) + heightAt(FLOORS[f], x, y) + lift + .6, wz(y) + rz * .2 + fz * .6); scene.add(m);
   const sp = duelMove.bulletSpeed && f === me.f ? duelMove.bulletSpeed : 19.5;   // 대결 사격장 AK는 더 빠르다
+  if (pitch !== null && Number.isFinite(pitch)) {
+    m.position.copy(muzzle(f, x, y, dir, lift)); scene.add(m);
+    const c = Math.cos(pitch); fireworks.push({ kind: "bullet", m, v: new THREE.Vector3(fx * c * sp, Math.sin(pitch) * sp, fz * c * sp), g: 0, spin: new THREE.Vector3(9, 4, 7), t: 0, f, shooter, hit: false }); return;
+  }
+  m.position.set(wx(x) - rx * .2 + fx * .6, floorY(f) + heightAt(FLOORS[f], x, y) + lift + .6, wz(y) + rz * .2 + fz * .6); scene.add(m);
   fireworks.push({ kind: "bullet", m, v: new THREE.Vector3(fx * sp, .6, fz * sp), spin: new THREE.Vector3(9, 4, 7), t: 0, f, shooter, hit: false });
+}
+// 총구: 눈보다 조금 아래 · 오른쪽 · 앞(1인칭 눈높이 .92). 쏜 사람도 보는 사람도 같은 셈이라 같은 길로 날아간다
+const MUZZLE = { up: .82, right: .14, fwd: .35 };
+function muzzle(f, x, y, dir, lift) {
+  const fx = Math.sin(dir), fz = Math.cos(dir), rx = Math.cos(dir), rz = -Math.sin(dir);
+  return new THREE.Vector3(wx(x) - rx * MUZZLE.right + fx * MUZZLE.fwd, floorY(f) + heightAt(FLOORS[f], x, y) + lift + MUZZLE.up, wz(y) + rz * MUZZLE.right + fz * MUZZLE.fwd);
+}
+// 총알이 이 자리에서 무엇에 막히는지(날아가는 총알과 조준점 찾기가 같이 쓴다): 벽 · 가구, 사람(shooter 빼고)
+function bulletWall(fl, f, pos) {
+  const gx = tX(pos.x), gy = tY(pos.z), y0 = pos.y - floorY(f), i = Math.floor(gy) * W + Math.floor(gx);
+  return solid(fl, gx, gy) && (fl.wgrid[i] || y0 < (fl.top[i] || 1.2) + .05);
+}
+const bulletDoll = (f, pos, shooter) => { const y0 = pos.y - floorY(f); return [me, ...NPCS, ...peers.values()].find((a: any) => a !== shooter && a.doll?.root.visible && (a.f ?? f) === f && Math.hypot(a.doll.root.position.x - pos.x, a.doll.root.position.z - pos.z) < .3 && y0 > a.doll.root.position.y - floorY(f) && y0 < a.doll.root.position.y - floorY(f) + 1.15); };
+// 조준점이 가리키는 곳: 카메라에서 화면 가운데 쪽으로 광선을 따라가 처음 막히는 자리(없으면 60m 앞). 총구에서 그곳을 향하는 방향(fh)과 위아래(fp)
+const sightDir = new THREE.Vector3(), sightAt = new THREE.Vector3();
+function aimShot(lift) {
+  camera.getWorldDirection(sightDir); const fl = FLOORS[me.f], mz = muzzle(me.f, me.x, me.y, cam.yaw + Math.PI, lift);
+  // 총구와 같은 거리부터 본다: 3인칭 카메라는 내 뒤에 있어, 그 사이 바닥 · 가구에 먼저 닿으면 총구 뒤를 겨누게 된다
+  for (let t = Math.max(.3, mz.clone().sub(camera.position).dot(sightDir)); t <= 60; t += .1) {
+    sightAt.copy(camera.position).addScaledVector(sightDir, t);
+    const gx = tX(sightAt.x), gy = tY(sightAt.z); if (gx < 0 || gy < 0 || gx >= W || gy >= H) break;
+    if (sightAt.y <= floorY(me.f) + heightAt(fl, gx, gy) + .02 || bulletWall(fl, me.f, sightAt) || bulletDoll(me.f, sightAt, me)) break;
+  }
+  const dx = sightAt.x - mz.x, dy = sightAt.y - mz.y, dz = sightAt.z - mz.z, flat = Math.hypot(dx, dz);
+  if (flat < .6) return { fh: Math.atan2(sightDir.x, sightDir.z), fp: Math.asin(clamp(sightDir.y, -1, 1)) };   // 코앞(벽에 붙어 쏠 때): 총구가 그 너머에 있어 카메라가 보는 쪽 그대로
+  return { fh: Math.atan2(dx, dz), fp: Math.atan2(dy, flat) };
 }
 // 맞으면 머리가 맞은 방향으로 휙 젖혀졌다가 두세 번 흔들리며 돌아온다(0.8초)
 function hitReact(a, dir) { a.hitAt = performance.now() / 1000; a.hitDir = dir || 0; }
@@ -2721,7 +2754,7 @@ function tryEasel() {
 // 내 캐릭터: 하루들 월드와 같은 부위·색 조합. 이 브라우저에 저장
 let myAv = (() => { try { return avDecode(LS.get("ww.avatar")) || { ...DEFAULT_AV }; } catch { return { ...DEFAULT_AV }; } })();
 const lookOf = (i) => ({ hair: HAIRS[i % HAIRS.length], acc: ACC[Math.floor(i / HAIRS.length) % ACC.length], prop: "bag" });
-const me = { jumps: 0, out: null as null | { z: number; vx: number; vy: number; vz: number; flip: number; dead: boolean }, prop: null, goal: null, lie: null, seat: null, f: 12, x: ELEV_SPAWN[0], y: ELEV_SPAWN[1], h: Math.PI / 2, follow: null as string | null, followAt: 0, rideAt: 0, brush: false, brushMesh: null, fc: 0, fh: 0, fk: 0, kickAt: -9, hc: 0, hd: 0, up: 0, jz: 0, jv: 0, jc: 0, ac: 0, an: null, as: 0, act: null, board: null, runHold: false, runToggle: false, moving: false, say: "", sayAt: 0, path: null };
+const me = { jumps: 0, out: null as null | { z: number; vx: number; vy: number; vz: number; flip: number; dead: boolean }, prop: null, goal: null, lie: null, seat: null, f: 12, x: ELEV_SPAWN[0], y: ELEV_SPAWN[1], h: Math.PI / 2, follow: null as string | null, followAt: 0, rideAt: 0, brush: false, brushMesh: null, fc: 0, fh: 0, fp: null as null | number, fk: 0, kickAt: -9, hc: 0, hd: 0, up: 0, jz: 0, jv: 0, jc: 0, ac: 0, an: null, as: 0, act: null, board: null, runHold: false, runToggle: false, moving: false, say: "", sayAt: 0, path: null };
 let floor = FLOORS[12];   // 처음 들어오면 12층 엘리베이터 앞
 let myGear: GearState | null = null, shownGear: GearState | null = null;   // 컷 상점에서 사서 쓰고 있는 것(서버가 알려 준 값만) · 지금 그려진 것
 let meDoll = makeChar(myAv); scene.add(meDoll.root);
@@ -3522,7 +3555,7 @@ let wasMoving = false, myVoice = 0;   // 음성 상태(vc): 0 미연결 · 1 마
 document.addEventListener("visibilitychange", () => { if (document.hidden && me.moving) { me.moving = false; wasMoving = false; sendPresence(true); } });
 function sendPresence(force) {
   if (!room) return; const now = performance.now(); if (!force && now - lastSent < 90) return; lastSent = now;
-  room.presence({ f: me.f, x: Math.round(me.x * 100) / 100, y: Math.round(me.y * 100) / 100, u: Math.round(me.up * 100) / 100, h: Math.round(me.h * 100) / 100, lp: me.act?.name === "laptop" ? 1 : 0, rd: me.act?.name === "read" ? 1 : 0, gn: me.act?.name === "gun" ? 1 : 0, br: me.brush ? 1 : 0, bc: ezPen.c, fk: me.fk, hc: me.hc, hd: Math.round(me.hd * 100) / 100, fc: me.fc, fl: me.out && !me.out.dead ? 1 : 0, ox: me.out ? Math.round(me.x * 100) / 100 : 0, oz: me.out ? Math.round(me.out.z * 100) / 100 : 0, fh: Math.round(me.fh * 100) / 100, dn: me.act?.name === "dance" ? me.act.style + 1 : 0, m: me.moving ? 1 : 0, r: running() ? 1 : 0, l: me.lie ? 1 : 0, st: me.seat ? 1 : 0, ly: me.lie ? Math.round(me.lie.yaw * 100) / 100 : 0, jc: me.jc, ac: me.ac, an: me.an, as: me.as, look: 0, av: avEncode(myAv), rm: roomKey(), vc: myVoice, ar: duelUi?.ar() || undefined }).catch(() => { });
+  room.presence({ f: me.f, x: Math.round(me.x * 100) / 100, y: Math.round(me.y * 100) / 100, u: Math.round(me.up * 100) / 100, h: Math.round(me.h * 100) / 100, lp: me.act?.name === "laptop" ? 1 : 0, rd: me.act?.name === "read" ? 1 : 0, gn: me.act?.name === "gun" ? 1 : 0, br: me.brush ? 1 : 0, bc: ezPen.c, fk: me.fk, hc: me.hc, hd: Math.round(me.hd * 100) / 100, fc: me.fc, fl: me.out && !me.out.dead ? 1 : 0, ox: me.out ? Math.round(me.x * 100) / 100 : 0, oz: me.out ? Math.round(me.out.z * 100) / 100 : 0, fh: Math.round(me.fh * 1000) / 1000, ...(me.fp === null || me.fp === undefined ? {} : { fp: Math.round(me.fp * 1000) / 1000 }), dn: me.act?.name === "dance" ? me.act.style + 1 : 0, m: me.moving ? 1 : 0, r: running() ? 1 : 0, l: me.lie ? 1 : 0, st: me.seat ? 1 : 0, ly: me.lie ? Math.round(me.lie.yaw * 100) / 100 : 0, jc: me.jc, ac: me.ac, an: me.an, as: me.as, look: 0, av: avEncode(myAv), rm: roomKey(), vc: myVoice, ar: duelUi?.ar() || undefined }).catch(() => { });
   updateMediaWorld();
 }
 // EC2에서는 직접 만든 WebSocket 서버가 room 역할을 한다
@@ -3651,7 +3684,7 @@ function syncPeers(dt, t) {
     if (v.key !== key) { const vis0 = v.doll.root.visible; dropDoll(v.doll); v.doll = makeChar(l, g); v.doll.root.visible = vis0; scene.add(v.doll.root); v.key = key; }
     v.x = lerp(v.x, s.x, Math.min(1, dt * 10)); v.y = lerp(v.y, s.y, Math.min(1, dt * 10));
     if (s.jc !== v.jc) { if (v.jc !== undefined) { const air = (v.jz || 0) > .05; v.jv = air ? 4.2 : 4.6; if (air && v.doll.root.visible) spawnFx(starTex, v.doll.root.position, 3, .5, .2); } v.jc = s.jc; }   // 공중에서 또 뛰면 더블 점프(별)
-    if (s.fc !== v.fc) { if (v.fc !== undefined && v.doll.root.visible) { if (s.fk) { v.kickAt = performance.now() / 1000; shootPaper(s.f, v.x, v.y, +s.fh || 0, +s.u || 0, v); } else launchFirework(s.f, v.x, v.y, +s.fh || 0, +s.u || 0); } v.fc = s.fc; }   // 다른 크루의 폭죽
+    if (s.fc !== v.fc) { if (v.fc !== undefined && v.doll.root.visible) { if (s.fk) { v.kickAt = performance.now() / 1000; shootPaper(s.f, v.x, v.y, +s.fh || 0, (+s.u || 0) + (s.fp === undefined ? 0 : v.jz || 0), v, s.fp === undefined ? null : +s.fp); } else launchFirework(s.f, v.x, v.y, +s.fh || 0, +s.u || 0); } v.fc = s.fc; }   // 다른 크루의 폭죽
     if (s.hc !== v.hc) { if (v.hc !== undefined) hitReact(v, +s.hd || 0); v.hc = s.hc; }   // 그 크루가 종이 총알에 맞았다
     if (s.ac !== v.ac) { if (v.ac !== undefined && typeof s.an === "string") startAct(v, s.an, s.as | 0); v.ac = s.ac; }
     if (((s.m && v.act?.name !== "gun") || (!s.st && v.act?.name === "laptop")) && v.act) endAct(v);
