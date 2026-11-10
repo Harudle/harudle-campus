@@ -1,5 +1,6 @@
 // 컷 상점 상품. 이름 · 가격은 서버가 정한다(브라우저가 보낸 가격은 쓰지 않는다)
 //   slot: 한 번에 하나만 쓰는 자리. pet(따라다니는 펫) · fx(머리 위 만화 효과) · head · neck · held(외형 위에 덧씌우는 장식)
+//   emote: 감정표현(쓰는 자리가 아니라 가지면 G 감정표현 휠에서 고른다. SLOTS에 없어서 "쓰기"는 안 된다)
 //   sku는 한 번 정하면 바꾸지 않는다(보유 기록 · 거래 기록이 이것으로 남는다). 그리는 코드는 src/scene/Pets.tsx · Gear.tsx
 export const SLOTS = ["pet", "fx", "head", "neck", "held"];
 export const CATALOG = [
@@ -20,7 +21,13 @@ export const CATALOG = [
   { sku: "neck_idcard", slot: "neck", name: "사원증", price: 4 },
   { sku: "held_manuscript", slot: "held", name: "네컷 원고", price: 4 },
   { sku: "held_coffee", slot: "held", name: "아아 한 잔", price: 4 },
+  { sku: "emote_beanbag", slot: "emote", name: "개인 빈백에서 잠자기", price: 15 },
+  { sku: "emote_guitar", slot: "emote", name: "기타 연주", price: 15 },
+  { sku: "emote_lp", slot: "emote", name: "LP 감상", price: 15 },
+  { sku: "emote_club", slot: "emote", name: "클럽 파티", price: 15 },
 ];
+// 감정표현: 화면 · 위치 정보(em)에서 쓰는 짧은 이름 → 상품. 가진 사람의 em만 서버가 받아 준다(app.js)
+export const EMOTES = { bag: "emote_beanbag", guitar: "emote_guitar", lp: "emote_lp", club: "emote_club" };
 const BY_SKU = new Map(CATALOG.map((it) => [it.sku, it]));
 export const itemOf = (sku) => (typeof sku === "string" ? BY_SKU.get(sku) || null : null);
 

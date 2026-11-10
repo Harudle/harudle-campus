@@ -38,7 +38,7 @@ test("신청 → 수락이면 둘 다 같은 경기 방에 앉고, 3초 뒤 시�
   assert.equal(va.seat, 0); assert.equal(vb.seat, 1); assert.equal(va.floor, 21); assert.equal(va.ar, vb.ar);
   assert.deepEqual(s.duel.arenaOf(UA), { ar: m.ar, floor: 21, role: 1 });
   s.advance(DUEL.MOVE + DUEL.COUNTDOWN - 100); assert.equal(m.phase, "countdown");
-  s.advance(200); assert.equal(m.phase, "playing"); assert.equal(m.endsAt, m.startAt + 180000);
+  s.advance(200); assert.equal(m.phase, "playing"); assert.equal(m.endsAt, m.startAt + 240000);
 });
 
 test("거절 · 만료 · 취소 · 바쁨 · 자기 자신 · 쿨다운 · 받지 않기", () => {
@@ -146,22 +146,28 @@ test("점프맵: 순서 · 최소 시간 · 위치를 확인하고, 먼저 도�
 test("점프맵: 시간이 다 되면 더 멀리 간 쪽이 이기고, 같으면 무승부", () => {
   const s = setup(); const m = startMatch(s); s.advance(DUEL.MOVE + DUEL.COUNTDOWN + 100);
   runTo(s, "pb", 1); assert.equal(m.state.cp[1], 1);
-  s.advance(180000); const end = s.last("pa", "duel:end"); assert.equal(end.reason, "timeout"); assert.equal(end.winner, UB); assert.deepEqual(end.summary.cp, [0, 1]);
-  const s2 = setup(); const m2 = startMatch(s2); s2.advance(DUEL.MOVE + DUEL.COUNTDOWN + 100 + 180000);
+  s.advance(240000); const end = s.last("pa", "duel:end"); assert.equal(end.reason, "timeout"); assert.equal(end.winner, UB); assert.deepEqual(end.summary.cp, [0, 1]);
+  const s2 = setup(); const m2 = startMatch(s2); s2.advance(DUEL.MOVE + DUEL.COUNTDOWN + 100 + 240000);
   assert.equal(m2.phase, "result"); assert.equal(s2.last("pb", "duel:end").winner, null);
   assert.equal(s2.duel.records.users[UA].d, 1);
 });
 
-test("점프맵 코스는 모두 깰 수 있게 생겼다(오를 높이 · 틈)", () => {
+test("점프맵 탑은 모두 깰 수 있게 생겼다(밟는 순서대로 오를 높이 · 틈, 겹치지 않음)", () => {
   const RISE = .705 + .59 + .26, BOUNCE = JUMP_BOUNCE ** 2 / 30 + .59 + .26;   // 더블 점프 + 걸어서 넘는 턱 · 트램펄린 + 더블 점프
+  const gap = (a, b) => Math.hypot(Math.max(0, b.x - (a.x + a.w), a.x - (b.x + b.w)), Math.max(0, b.y - (a.y + a.h), a.y - (b.y + b.h)));   // 두 사각형 가장자리 사이(칸)
   for (const c of JUMP_COURSES) {
-    const all = [...c.pads, ...c.blocks].sort((a, b) => a.x - b.x);
-    for (let i = 1; i < all.length; i++) {
-      const a = all[i - 1], b = all[i], gap = b.x - (a.x + a.w), reach = a.kind === "t" ? a.top + BOUNCE : a.top + RISE;
-      assert.ok(gap >= 0 && gap <= 4, `${c.name} ${b.x}: 틈 ${gap}`);
-      assert.ok(b.top <= reach - .05, `${c.name} ${b.x}: ${a.top} → ${b.top}`);
-      assert.ok(b.y >= c.y0 + 1 && b.y + b.h <= c.y0 + 8 && b.x + b.w <= 54, `${c.name} ${b.x}: 띠 안`);
+    assert.equal(c.path.length, c.pads.length + c.blocks.length); assert.equal(c.path[0], c.pads[0]); assert.equal(c.path.at(-1), c.pads.at(-1));
+    for (let i = 1; i < c.path.length; i++) {
+      const a = c.path[i - 1], b = c.path[i], reach = a.kind === "t" ? a.top + BOUNCE : a.top + RISE;
+      assert.ok(gap(a, b) <= 3, `${c.name} ${i}: 틈 ${gap(a, b)}`);
+      assert.ok(b.top <= reach - .05, `${c.name} ${i}: ${a.top} → ${b.top}`);
     }
+    const cells = new Set(), [qx, qy] = c.quad;
+    for (const o of c.path) for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) {
+      assert.ok(!cells.has(`${x},${y}`), `${c.name}: ${x},${y} 겹침`); cells.add(`${x},${y}`);
+      assert.ok(x >= qx && x < qx + 25 && y >= qy && y < qy + 17, `${c.name}: ${x},${y} 사분면 밖`);
+    }
+    assert.ok(c.pads.at(-1).top > 20, `${c.name}: 탑이 충분히 높다`);
     assert.equal(c.minT.length, c.pads.length); assert.ok(c.pads.length >= 3);
   }
 });

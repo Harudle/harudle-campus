@@ -1,5 +1,5 @@
 // 점프맵 서버 규칙: 코스를 고르고, 브라우저가 보낸 발판 도착(pad)을 순서 · 구간 최소 시간 · 최근 위치로 확인한다
-// 먼저 도착대에 닿으면 승리. 3분 안에 아무도 못 오면 발판을 더 많이 지난 쪽이 이기고, 같으면 무승부
+// 먼저 도착대에 닿으면 승리. 4분 안에(미니 온리업이라 3분에서 늘렸다) 아무도 못 오면 발판을 더 많이 지난 쪽이 이기고, 같으면 무승부
 import { JUMP_COURSES } from "../../../src/duel/arena/jump.mjs";
 import { rectDist } from "../../../src/duel/arena/kit.mjs";
 
@@ -7,7 +7,7 @@ const NEAR = 2.5;   // 발판 사각형에서 이만큼(칸) 안에 최근 위�
 
 export default {
   id: "jump",
-  duration: 180000,
+  duration: 240000,
   setup(m, api) {
     const c = JUMP_COURSES[Math.floor(api.random() * JUMP_COURSES.length)];
     m.state = { course: c.k, cp: [0, 0], pads: c.pads.length };   // cp: 선수마다 마지막으로 밟은 발판 번호(0 출발대)

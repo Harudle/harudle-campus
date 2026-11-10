@@ -17,6 +17,12 @@ export type DollAnim = {
   style: number   // 춤 번호(0~9)
   actT: number    // 동작을 시작한 뒤 흐른 시간(춤 팔을 엔진의 박자에 맞춘다)
   noHead: boolean // 1인칭의 내 캐릭터: 카메라가 머리 안에 있으니 머리만 숨긴다
+  sleep?: boolean // 쿨쿨 자는 중(개인 빈백): 눈을 감고 고개를 숙인다
+  listen?: boolean // LP 감상 중: 헤드셋을 쓰고 박자에 맞춰 고개를 끄덕인다
+  guitar?: boolean // 기타 연주 중: 기타를 내려다보며 오른손은 줄을 튕기고 왼손은 넥을 짚는다
+  cross?: boolean  // 앉아서 다리 꼬기
+  party?: boolean  // 클럽 파티: 두 팔을 번갈아 마구 흔들고 고개를 신나게 흔든다
+  petAct: 'sit' | 'pet' | null // 펫(dog)만: 주인이 앉혔다 · 쓰다듬는 중
   arms: number[] | null // 대결 종목이 정한 팔 자세 [오른팔 x, z, 왼팔 x, z](라디안). 있으면 다른 팔 동작보다 먼저(복싱 주먹 · 가드)
 }
 
@@ -57,7 +63,7 @@ export function makeDoll(kind: Doll['kind'], config: AvatarConfig | null, blob: 
   let heading = 0
   const doll: Doll = {
     id: nextId++, kind, config, root, turn, blob, look: config, pet: extra.pet ?? 'doodle', gear: extra.gear ?? null,
-    anim: { moving: false, run: false, air: false, seated: false, act: null, waving: false, style: 0, actT: 0, noHead: false, arms: null },
+    anim: { moving: false, run: false, air: false, seated: false, act: null, waving: false, style: 0, actT: 0, noHead: false, arms: null, petAct: null },
     update(dt, _t, moving, wantHeading, _seed = 0, waving = false, act = null, air = false, run = false) {
       if (wantHeading !== undefined && wantHeading !== null) heading = wantHeading
       turn.rotation.y += turnTo(turn.rotation.y, heading) * Math.min(1, dt * (kind === 'dog' ? 10 : 12))

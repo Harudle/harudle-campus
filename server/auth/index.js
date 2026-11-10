@@ -208,5 +208,5 @@ export function createAuth(env = process.env, opts = {}) {
     return () => { clearTimeout(first); clearInterval(timer); };
   }
 
-  return { enabled, origin, handle, userFromRequest, userFromUpgrade, startCleanup, walletEnabled: wallet.enabled, gearOf: shop.gearOf, onGear: shop.onGear };
+  return { enabled, origin, handle, userFromRequest, userFromUpgrade, startCleanup, walletEnabled: wallet.enabled, gearOf: shop.gearOf, onGear: shop.onGear, ownedOf: shop.ownedOf, onOwned: shop.onOwned };
 }

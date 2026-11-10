@@ -12,10 +12,21 @@ const HEAD_Y = 1.3
 const HEAD_RADIUS = 0.34
 const CURLS = [-1.15, -0.72, -0.3, 0.14, 0.58, 1.02]
 
-function FaceFeatures({ face }: { face: AvatarConfig['face'] }) {
+// 기타 연주(소품 감정표현): 경쾌한 100BPM. 오른손(armL)은 울림구멍 앞에서 한 박에 한 번 부드럽게 내렸다 올리고(박마다 세기를 조금씩 달리),
+// 왼손(armR)은 넥을 짚은 채 두 마디마다 다음 코드로 스르르 옮긴다
+const GUITAR_BPM = 100
+function guitarArms(t: number) {   // [armL x, z, armR x, z]
+  const beat = t * GUITAR_BPM / 60, accent = [1, .55, .8, .55][Math.floor(beat) % 4]
+  const strum = Math.sin(beat * Math.PI * 2) * 0.07 * accent                       // 손목으로 살살(±4도쯤)
+  const bar = beat / 8, ci = Math.floor(bar) % 3, k = Math.min(1, (bar % 1) * 8 / 0.5), e = k * k * (3 - 2 * k)   // 코드 바꿀 땐 반 박 동안
+  const pos = [0, 0.07, 0.03], shift = pos[(ci + 2) % 3] + (pos[ci] - pos[(ci + 2) % 3]) * e
+  return [-1.42 + strum, 0.42 + strum * 0.3, -1.3 - shift, 0.78 + shift * 0.8]
+}
+
+function FaceFeatures({ face, pose }: { face: AvatarConfig['face']; pose?: RefObject<AvatarPose> }) {
   const eyes = useRef<THREE.Group>(null)
   useFrame(({ clock }) => {
-    eyes.current?.scale.setY(clock.elapsedTime % 3.6 < 0.12 ? 0.15 : 1)
+    eyes.current?.scale.setY(pose?.current?.sleep || clock.elapsedTime % 3.6 < 0.12 ? 0.15 : 1)   // 자는 중이면 눈을 꼭 감는다
   })
   const z = HEAD_RADIUS * 0.95
   const eyeX = HEAD_RADIUS * 0.36
@@ -504,7 +515,7 @@ function BrushArm({ color, motion }: { color: string; motion?: RefObject<WalkMot
 }
 
 /** 우테코 캠퍼스 확장: 스킬과 점프 자세. 원본 Avatar의 모양은 그대로 두고 팔·소품만 바꾼다. */
-export type AvatarPose = { act: 'draw' | 'wave' | 'heart' | 'laptop' | 'coffee' | 'dance' | 'gun' | 'read' | null; waving: boolean; air: boolean; style?: number; actT?: number; noHead?: boolean; arms?: number[] | null }
+export type AvatarPose = { act: 'draw' | 'wave' | 'heart' | 'laptop' | 'coffee' | 'dance' | 'gun' | 'read' | null; waving: boolean; air: boolean; style?: number; actT?: number; noHead?: boolean; sleep?: boolean; listen?: boolean; guitar?: boolean; party?: boolean; arms?: number[] | null }
 
 type AvatarProps = {
   config: AvatarConfig
@@ -528,14 +539,15 @@ export function Avatar({ config: look, motion, pose, gear }: AvatarProps) {
   const heldItem = useRef<THREE.Group>(null)
   const armL = useRef<THREE.Group>(null)
   const armR = useRef<THREE.Group>(null)
-  const head = useRef<THREE.Group>(null)
+  const head = useRef<THREE.Group>(null), phones = useRef<THREE.Group>(null)
   const restR = holdingSide ? 1 : 0.35
   const actRef = useRef<{ act: string | null; t0: number }>({ act: null, t0: 0 })   // 동작이 시작된 시각(단계가 있는 동작용)
 
   // 네 컷 그리기는 그림판을 들고, 인사·하트·점프는 팔을 든다. 그림판을 원래 든 캐릭터는 팔을 들 때 잠깐 내려놓는다.
   useFrame(({ clock }) => {
     const p = pose?.current
-    if (head.current) head.current.visible = !p?.noHead
+    if (head.current) { head.current.visible = !p?.noHead; head.current.rotation.x = p?.party ? Math.abs(Math.sin(clock.elapsedTime * Math.PI * 128 / 60)) * .22 - .05 : p?.sleep ? .32 : p?.guitar ? .38 + Math.sin(clock.elapsedTime * Math.PI * GUITAR_BPM / 60) * .025 : p?.listen ? .08 + Math.sin(clock.elapsedTime * 2 * Math.PI * 127 / 60) * .1 : 0 }   // 자는 중이면 고개를 숙이고, LP 감상 중이면 박자(127BPM)에 맞춰 끄덕인다
+    if (phones.current) phones.current.visible = !!p?.listen && config.ear !== 'headset'   // LP 감상: 헤드셋(이미 끼고 있으면 그대로)   // 자는 중이면 고개를 숙여 웅크린다
     const armsUp = !!p && (p.act === 'wave' || p.act === 'heart' || p.act === 'dance' || p.waving || p.air)
     const busy = p?.act === 'laptop' || p?.act === 'coffee' || p?.act === 'gun' || p?.act === 'read' || !!p?.arms   // 노트북·커피를 쓰는 동안엔 원래 든 것을 내려놓는다(대결 팔 자세도: 복싱 글러브)
     // 1인칭(noHead)에선 그림판·옆에 든 소품을 생략한다: 눈앞을 통째로 가린다(특히 앉으면). 팔과 노트북·커피·총은 그대로
@@ -549,6 +561,12 @@ export function Avatar({ config: look, motion, pose, gear }: AvatarProps) {
     l.rotation.x = 0; r.rotation.x = 0
     if (p?.act !== 'coffee' && actRef.current.act) actRef.current = { act: null, t0: 0 }
     if (p?.arms) { l.rotation.x = p.arms[0]; l.rotation.z = p.arms[1]; r.rotation.x = p.arms[2]; r.rotation.z = p.arms[3] }   // 대결 종목이 정한 팔(armL이 캐릭터의 오른팔)
+    else if (p?.party) { // 클럽 파티: 두 팔을 번갈아 하늘로 찌르고 휘두르다, 네 박마다 양팔을 머리 위로 크게 돌린다(약 128BPM)
+      const b = clock.elapsedTime * 2 * Math.PI * 128 / 60, big = Math.floor(clock.elapsedTime * 128 / 60 / 4) % 2 === 1
+      if (big) { l.rotation.z = -2.5 + Math.sin(b) * 0.55; r.rotation.z = 2.5 + Math.sin(b) * 0.55; l.rotation.x = Math.cos(b) * 0.5; r.rotation.x = Math.cos(b) * 0.5 }
+      else { l.rotation.z = -1.4 - Math.max(0, Math.sin(b)) * 1.3; r.rotation.z = 1.4 + Math.max(0, -Math.sin(b)) * 1.3; l.rotation.x = -0.4 - Math.sin(b * 2) * 0.35; r.rotation.x = -0.4 + Math.sin(b * 2) * 0.35 }
+    }
+    else if (p?.guitar) { const [lx, lz, rx, rz] = guitarArms(clock.elapsedTime); l.rotation.x = lx; l.rotation.z = lz; r.rotation.x = rx; r.rotation.z = rz }   // 기타 연주
     else if (p?.act === 'read') { l.rotation.z = -0.32; r.rotation.z = 0.32; l.rotation.x = -1.05; r.rotation.x = -1.05 + Math.max(0, Math.sin(clock.elapsedTime * 1.6) - 0.97) * 4 }   // 두 손을 앞으로(빈백에선 책을 받쳐 들고, 책상에선 독서대 양옆에 손을 얹는다)
     else if (p?.act === 'laptop') { // 두 손을 앞으로 뻗어 자판을 번갈아 톡톡
       const tt = clock.elapsedTime * 14
@@ -632,10 +650,11 @@ export function Avatar({ config: look, motion, pose, gear }: AvatarProps) {
           <sphereGeometry args={[HEAD_RADIUS, 24, 18]} />
           <Skin color={config.skinColor} />
         </mesh>
-        <FaceFeatures face={config.face} />
+        <FaceFeatures face={config.face} pose={pose} />
         <Eyewear kind={config.eyewear} />
         <Headwear kind={config.head} color={config.headColor} skinColor={config.skinColor} />
         <Earwear kind={config.ear} />
+        <group ref={phones} visible={false}><AirPodsMax /></group>
         <GearHead sku={gear?.head} />
         <GearFx sku={gear?.fx} />
       </group>

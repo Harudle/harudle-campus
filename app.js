@@ -25,6 +25,7 @@ import { createStartrack } from "./server/startrack.js";
 import { canControlStartrack } from "./src/startrack/shared.mjs";
 import { CHAT_CMDS, rollText, pickText } from "./src/chat/shared.mjs";
 import { createDuel, TESTER } from "./server/duel/index.js";
+import { EMOTES } from "./server/auth/catalog.js";
 import { DUEL } from "./src/duel/shared.mjs";
 
 const PORT = Number(process.env.PORT || 80);
@@ -157,6 +158,11 @@ server.on("upgrade", (req, socket, head) => {
 });
 const peers = new Map();   // id -> { ws, name, presence }
 // 연동 크루가 상점에서 펫 · 장식을 쓰거나 벗으면 접속 중인 그 크루의 gear를 바로 바꾼다
+// 감정표현(컷 상점): 가진 것만 쓴다. 개발 서버(NODE_ENV가 production이 아닐 때)는 모두 열어 둔다(상점 DB 없이 시험)
+const ALL_EMOTES = process.env.NODE_ENV !== "production";
+const emoteOk = (p, em) => typeof em === "string" && Object.hasOwn(EMOTES, em) && (ALL_EMOTES || !!p.owned?.has(EMOTES[em]));
+const sendEmotes = (p) => { if (p.ws.readyState === 1) p.ws.send(JSON.stringify({ t: "emotes", list: Object.keys(EMOTES).filter((em) => emoteOk(p, em)) })); };
+auth.onOwned((userId, owned) => { const uid = `h_${userId}`; for (const p of peers.values()) if (p.uid === uid) { p.owned = new Set(owned); sendEmotes(p); } });
 auth.onGear((userId, gear) => { const uid = `h_${userId}`; for (const p of peers.values()) if (p.uid === uid) { if (Object.keys(gear).length) p.gear = gear; else delete p.gear; dirty = true; } });
 const startrack = createStartrack({ onChange: (state) => ezAll({ t: "startrack", state }) });
 // 1:1 대결: 경기 · 관전 자리는 공개 주소(uid)에 묶는다. 100ms마다 시간을 흘려 보낸다(카운트다운 · 시간 제한 · 끊김 기다림)
@@ -223,7 +229,7 @@ function sanitize(p, arena = null) {
   return {
     f, x: num(p.x, 0, 56), y: num(p.y, 0, 40), u: num(p.u, 0, inArena ? 12 : 2), h: num(p.h, -7, 7),
     m: p.m ? 1 : 0, r: p.r ? 1 : 0, look: Math.floor(num(p.look, 0, 99)), jc: Math.floor(num(p.jc, 0, 1e9)), ac: Math.floor(num(p.ac, 0, 1e9)),
-    br: p.br ? 1 : 0, bc: typeof p.bc === "string" && /^#[0-9a-f]{6}$/i.test(p.bc) ? p.bc : null, l: p.l ? 1 : 0, ly: num(p.ly, -7, 7), st: p.st ? 1 : 0, av: typeof p.av === "string" && /^[0-9a-z]{7}([0-9A-F]{6}){6}[0-9a-z]?$/.test(p.av) ? p.av : null, an: ["draw", "wave", "heart", "laptop", "coffee", "dance", "gun"].includes(p.an) ? p.an : null, lp: p.lp ? 1 : 0, gn: p.gn ? 1 : 0, fk: p.fk ? 1 : 0, fl: p.fl ? 1 : 0, ox: num(p.ox, -20, 2), oz: num(p.oz, -40, 20), hc: Math.floor(num(p.hc, 0, 1e9)), hd: num(p.hd, -50, 50), dn: Math.floor(num(p.dn, 0, 10)), fc: Math.floor(num(p.fc, 0, 1e9)), fh: num(p.fh, -50, 50), fp: num(p.fp, -1.6, 1.6), as: Math.floor(num(p.as, 0, 1e7)), vc: [0, 1, 2].includes(p.vc) ? p.vc : 0,
+    br: p.br ? 1 : 0, bc: typeof p.bc === "string" && /^#[0-9a-f]{6}$/i.test(p.bc) ? p.bc : null, l: p.l ? 1 : 0, ly: num(p.ly, -7, 7), st: p.st ? 1 : 0, av: typeof p.av === "string" && /^[0-9a-z]{7}([0-9A-F]{6}){6}[0-9a-z]?$/.test(p.av) ? p.av : null, an: ["draw", "wave", "heart", "laptop", "coffee", "dance", "gun"].includes(p.an) ? p.an : null, lp: p.lp ? 1 : 0, gn: p.gn ? 1 : 0, fk: p.fk ? 1 : 0, fl: p.fl ? 1 : 0, ox: num(p.ox, -20, 2), oz: num(p.oz, -40, 20), hc: Math.floor(num(p.hc, 0, 1e9)), hd: num(p.hd, -50, 50), dn: Math.floor(num(p.dn, 0, 10)), fc: Math.floor(num(p.fc, 0, 1e9)), fh: num(p.fh, -50, 50), fp: num(p.fp, -1.6, 1.6), as: Math.floor(num(p.as, 0, 1e7)), vc: [0, 1, 2].includes(p.vc) ? p.vc : 0, pt: [0, 1, 2].includes(p.pt) ? p.pt : 0,
     // 대결장의 방 이름은 경기 방: 근처 채팅과 음성이 그 경기(선수 + 관전자) 안에서만 오간다. 회의실이 아니라 화면 공유는 꺼진다. dr: 1 선수 · 2 관전
     rm: inArena ? `duel:${arena.ar}` : roomKeyAt(f, num(p.x, 0, 56), num(p.y, 0, 40)), ...(inArena ? { ar: arena.ar, ...(arena.role ? { dr: arena.role } : {}) } : {}),
   };
@@ -324,6 +330,7 @@ wss.on("connection", (ws, request) => {
   ws.send(JSON.stringify({ t: "hello", id, v: VERSION, meetingTest: !!meetings }));
   ws.send(JSON.stringify({ t: "startrack", state: startrack.snapshot() }));
   ws.send(glassState());
+  if (ALL_EMOTES) sendEmotes(peers.get(id));
   for (const b of EZ_BOARDS) ws.send(JSON.stringify({ t: "ez", b, k: "all", strokes: ez[b].strokes }));   // 들어오자마자 판마다 그림 전체
   dirty = true;
   const sendHistory = (me) => { const dms = Object.entries(chatDm).filter(([k]) => k.split("|").includes(me.uid)).flatMap(([, v]) => v); ws.send(JSON.stringify({ t: "chat", k: "history", all: chatAll, dm: dms })); };
@@ -333,6 +340,7 @@ wss.on("connection", (ws, request) => {
     me.uid = `h_${user.id}`; me.name = user.nickname; me.verified = true; dirty = true;
     // 산 펫 · 장식(gear)은 서버가 DB에서 읽어 붙인다. 브라우저가 보내는 값은 받지 않는다
     auth.gearOf(user.id).then((gear) => { const p = peers.get(id); if (p && Object.keys(gear).length) { p.gear = gear; dirty = true; } }, () => {});
+    auth.ownedOf(user.id).then((owned) => { const p = peers.get(id); if (p) { p.owned = new Set(owned); sendEmotes(p); } }, () => {});   // 가진 감정표현
     ws.send(JSON.stringify({ t: "me", u: me.uid, verified: true, name: user.nickname }));
     sendHistory(me);
   }, () => {});
@@ -344,7 +352,8 @@ wss.on("connection", (ws, request) => {
     if (msg.t === "p" && !me.uid && +msg.p?.f >= 21) return;   // 다시 붙자마자 오는 대결장 위치: 누구인지(uid) 정해진 뒤 다시 온다(먼저 받으면 11층으로 튀어 보인다)
     if (msg.t === "p") {
       const previousArea = me.presence && mediaArea(me.presence);
-      me.presence = sanitize(msg.p, duel.arenaOf(me.uid)); duel.presence(id, me.presence);
+      me.presence = sanitize(msg.p, duel.arenaOf(me.uid)); if (me.presence) { me.presence.em = emoteOk(me, msg.p?.em) ? msg.p.em : 0; }   // 감정표현은 가진 사람 것만
+      duel.presence(id, me.presence);
       startrack.setPresent(id, canControlStartrack(me.presence));
       if (meetings && previousArea && (!me.presence || mediaArea(me.presence) !== previousArea)) {
         me.meetingId = null; me.meetingArea = null; me.dailyReady = false;

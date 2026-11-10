@@ -14,7 +14,7 @@ export const DOLL = 1.12;
 // 들어가서 볼 때 천장 높이. 12층은 13층과 계단·오픈 천장으로 이어져 13층 바닥 밑까지 탁 트여 있다
 export const CEIL = { 11: 4.4, 12: 4.4, 13: 4.4, 14: 3.8 };   // 11층 큰 강의실·13층 스타트랙 큰 화면이 들어가게 높게
 export const CAMPUS = [11, 12, 13, 14];   // 걸어서 다니는 캠퍼스 층. 21~24층은 하늘에 떠 있는 대결장(src/duel/arena)
-for (const a of ARENAS) CEIL[a.f] = 9;   // 대결장은 천장 없이 하늘이 트였다(카메라만 이 높이 아래에 둔다)
+for (const a of ARENAS) CEIL[a.f] = a.ceil ?? 9;   // 대결장은 천장 없이 하늘이 트였다(카메라만 이 높이 아래에 둔다. 점프맵은 높이 올라가서 더 높게)
 export const VIEW = { mode: "top" };            // top 위에서 · third 들어가서(뒤에서) · first 1인칭
 export const inside = () => VIEW.mode !== "top";             // 말풍선을 띄울 키
 export const INK = 0x111118, BRAND = "#FFD43B", NAVY = "#0E1E46", WEAK = "#FFF6C7";
@@ -218,6 +218,7 @@ export function makeFloor(f) {
     // 객석 바깥(서쪽 창가): 이끼·디딤돌·작은 나무 띠와 그 위 1인용 흰 테이블·의자 셋(12층 창가와 같은 것, 창을 등지고 객석 쪽을 본다)
     F("pebbles", 1, 16, 2, 9, { turn: Math.PI / 2, raw: true });
     for (const y of [17, 20, 23]) F("windowseat", 1, y, 2, 1, { turn: Math.PI / 2, raw: true });
+    F("mcsign", 2, 28, 1, 1, { raw: true });   // 깨지는 창 두 칸(24~32) 사이 앞: 마인크래프트 표지판으로 이스터에그 힌트만(객석 쪽 동쪽을 본다)
     Z(1, 29, 13, 10, "스타트랙", "", { npc: false, tint: "#F2F4E2", raw: true });   // 늘어난 객석 남쪽 끝까지 바닥색
     Z(1, 11, 30, 1, "스타트랙 가는 길", "", { npc: false, tint: "#E4E3E0" });
     F("pillar", 9, 12, 1, 1);
@@ -481,10 +482,18 @@ export function heightAt(fl, x, y) {
 export const R_ME = .28;
 export const bagSpot = (o) => ({ x: o.x + o.w / 2, y: o.y + o.h / 2, yaw: o.yaw || 0 });
 // 누운 자세: 몸 전체를 뒤로 눕히고 빈백 위로 올린다(머리는 등받이 쪽)
+// 회전 곱(사원수 [x, y, z, w]). world.ts는 서버용으로도 묶이므로 three.js 없이 직접 셈한다
+const qmul = (a, b) => [a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1], a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0], a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3], a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2]];
+const qy = (t) => [0, Math.sin(t / 2), 0, Math.cos(t / 2)], qx = (t) => [Math.sin(t / 2), 0, 0, Math.cos(t / 2)];
 export function applyLie(doll, lie) {
   const r = doll.root; r.rotation.order = "YXZ";
+  if (lie?.lp || lie?.guitar || lie?.club) { r.rotation.set(0, lie.yaw, 0); return; }   // 클럽 파티는 서서(엔진 clubDance가 흔든다)   // LP 감상 · 기타 연주: 방석 · 스툴에 앞을 보고 똑바로 앉는다(무릎 · 앉는 높이는 엔진 setSeated)   // LP 감상: 방석(높이 .26, 보통 의자 높이)에 앞을 보고 앉는다. 무릎은 앉은 자세(엔진 setSeated)
+  if (lie?.curl) { // 개인 빈백 소파: 앉는 자리에 몸을 묻고 감싸는 등받이에 비스듬히 기대, 옆으로 돌아 무릎을 당겨 쪼그려 잔다(무릎은 앉은 자세, 팔은 엔진이 감싸 안게)
+    const q = qmul(qmul(qy(lie.yaw), qx(-.7)), qy(1.15)); r.quaternion.set(q[0], q[1], q[2], q[3]);   // 보는 쪽으로 돌고 → 40°쯤 뒤로 기대고 → 옆으로 돌아앉는다
+    r.position.x += Math.sin(lie.yaw) * .22; r.position.z += Math.cos(lie.yaw) * .22; r.position.y += .22; doll.blob.visible = false; return;   // 작은 빈백 소파의 앉는 자리 높이 · 등받이 앞
+  }
   if (lie) { r.rotation.set(-Math.PI / 2 + .3, lie.yaw, 0); r.position.x += Math.sin(lie.yaw) * .42; r.position.z += Math.cos(lie.yaw) * .42; r.position.y += .5; doll.blob.visible = false; }   // 빈백 위에 등을 기대고 비스듬히
-  else if (r.rotation.x) { r.rotation.set(0, 0, 0); doll.blob.visible = true; }
+  else if (r.rotation.x || r.rotation.y || r.rotation.z) { r.rotation.set(0, 0, 0); doll.blob.visible = true; }
 }
 export const fits = (fl, x, y) => {
   if (fl.fine) { let ok = true; bodyCells(x, y, (i) => { if (i < 0 || fl.fine[i]) ok = false; }); return ok; }
