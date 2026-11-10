@@ -1,4 +1,5 @@
 // 층 격자 · 배치 · 길찾기 · 끼임 탈출 (three.js·DOM 없이 돈다: 배포 전 검사도 이 파일을 쓴다)
+import { ARENAS } from "../duel/arena/index.mjs";
 export type Floor = { f: number; rooms: any[]; furn: any[]; zones: any[]; portals: any[]; calls: any[]; [k: string]: any };
 /* ════════════════ 1. 설정 · 유틸 ════════════════ */
 export const W = 56, H = 40;          // 층 격자(칸)
@@ -12,6 +13,8 @@ export const WALL = 0.9;              // 벽 높이(인형의 집처럼 낮게)
 export const DOLL = 1.12;
 // 들어가서 볼 때 천장 높이. 12층은 13층과 계단·오픈 천장으로 이어져 13층 바닥 밑까지 탁 트여 있다
 export const CEIL = { 11: 4.4, 12: 4.4, 13: 4.4, 14: 3.8 };   // 11층 큰 강의실·13층 스타트랙 큰 화면이 들어가게 높게
+export const CAMPUS = [11, 12, 13, 14];   // 걸어서 다니는 캠퍼스 층. 21~24층은 하늘에 떠 있는 대결장(src/duel/arena)
+for (const a of ARENAS) CEIL[a.f] = 9;   // 대결장은 천장 없이 하늘이 트였다(카메라만 이 높이 아래에 둔다)
 export const VIEW = { mode: "top" };            // top 위에서 · third 들어가서(뒤에서) · first 1인칭
 export const inside = () => VIEW.mode !== "top";             // 말풍선을 띄울 키
 export const INK = 0x111118, BRAND = "#FFD43B", NAVY = "#0E1E46", WEAK = "#FFF6C7";
@@ -29,6 +32,7 @@ export const floorY = (f) => (f - 11) * FH;
 
 /* ════════════════ 2. 층 데이터 (우테코 11·12·13층 공간 선택 도면 + 14층 놀이터와 하루들 월드) ════════════════ */
 export const FLOOR_INFO = { 11: "배움이 시작되는 공간", 12: "함께, 또 따로 학습의 공간", 13: "몰입하고 발표하는 공간", 14: "하루들 월드" };
+for (const a of ARENAS) FLOOR_INFO[a.f] = a.info;
 // 12층 ㄱ자 계단: 동쪽으로 한 단, 층계참, 남쪽으로 한 단. 12층 바닥(0)에서 13층 바닥(FH)까지
 export const DECK_H = 0.25;   // 12층 라이브러리 벽돌 단 높이
 const STEP_LAND = FH * 6 / 27;
@@ -339,7 +343,9 @@ export function makeFloor(f) {
   }
   return { f, rooms, furn, zones, portals, calls };
 }
-export const FLOORS: Record<number, Floor> = {}; for (const f of [11, 12, 13, 14]) FLOORS[f] = makeFloor(f);
+export const FLOORS: Record<number, Floor> = {}; for (const f of CAMPUS) FLOORS[f] = makeFloor(f);
+// 대결장 층: 엘리베이터 · 포털 없이 배치만. arena에 대결장 정보(부활 자리 등), starts는 걸어서 닿는 칸을 셀 출발점(엘리베이터 대신)
+for (const a of ARENAS) FLOORS[a.f] = { f: a.f, rooms: a.rooms, furn: a.furn, zones: a.zones, portals: [], calls: [], arena: a, starts: a.starts };
 
 /* 충돌 격자 · 단 높이 */
 // 점프로 올라설 수 있는 가구의 윗면 높이(m). 점프는 0.7m쯤까지 닿는다. 여기 없는 가구(책장·냉장고·벽 같은 것)는 못 올라간다
@@ -349,6 +355,10 @@ export const TOPS: Record<string, number> = {
   counter: .58, kitchenrow: .62, lowcounter: .62, island: .56, hightable: .66, mcdesk: .5, lectern: .66, pingpong: .66,
   greenbox: .55, planter: .3, plant: .36, crates: .5,
 };
+// 윗면 높이: 배치에 top을 적으면 그 높이(대결장 발판처럼 높이가 제각각인 것). 단 위에 올린 것(lift)은 올라서지 않는다
+export const topOf = (o) => (o.lift ? 0 : o.top ?? TOPS[o.kind] ?? 0);
+// 밟고 지나가는 것(바닥 무늬 · 벽 장식): 종류로 정하거나 배치에 walk: true
+export const walkThrough = (o) => WALK_THROUGH.has(o.kind) || !!o.walk;
 // 가구 하나가 막는 칸(격자). 들어가서 볼 때의 정밀 충돌(engine)도 이 칸 안에서만 모양을 깎는다
 export function furnCells(fl, o, set) {
   if (o.kind === "screenwall") { // 16:9 화면은 높이에 맞춰 폭이 정해진다(engine screen169와 같은 셈): 보이는 폭만큼만 막는다
@@ -358,7 +368,7 @@ export function furnCells(fl, o, set) {
   if (o.kind === "pairbooth") { for (let i = 0; i < 3; i++) set(o.x + i, o.y); set(o.x, o.y + 1); return; }   // 책상 줄과 칸막이 옆 한 칸만 막는다(의자 자리는 열어 둔다)
   if (o.kind === "booth4") { for (let i = 0; i < 2; i++) { set(o.x, o.y + i); set(o.x + 3, o.y + i); } set(o.x + 1, o.y); set(o.x + 2, o.y); return; }   // 벤치·테이블만 막고 부스 입구는 들어간다
   if (o.kind === "stadium") { for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) if (stadiumWall(o, x + .5, y + .5)) set(x, y); return; }
-  if (WALK_THROUGH.has(o.kind)) return; for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) set(x, y);
+  if (walkThrough(o)) return; for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) set(x, y);
 }
 export const WALK_THROUGH = new Set(["hbmat", "runway", "neonsign", "marquee", "floaters", "wallsign", "poster", "walldeco", "linelight", "bleacher", "arcbleacher", "flight", "brickdeck", "pebbles", "redsteps", "mirrorball", "trampoline", "ballpit"]);
 export const ELEV_SPAWN: [number, number] = [32.5, 15.5];   // 엘리베이터에서 내리는 자리(칸 한가운데)
@@ -375,14 +385,15 @@ for (const fl of Object.values(FLOORS)) {
   fl.grid = g;
   // 점프해서 올라설 수 있는 가구: 칸마다 윗면 높이. 올라설 수 없는 것과 겹친 칸은 0(벽처럼 막힌다)
   const top = new Float32Array(W * H);
-  for (const o of fl.furn) { const h = TOPS[o.kind]; if (!h || o.lift) continue; for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) if (x >= 0 && y >= 0 && x < W && y < H) top[y * W + x] = Math.max(top[y * W + x], h); }
-  for (const o of fl.furn) { if (TOPS[o.kind] || WALK_THROUGH.has(o.kind)) continue; for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) if (x >= 0 && y >= 0 && x < W && y < H && g[y * W + x]) top[y * W + x] = 0; }
+  for (const o of fl.furn) { const h = topOf(o); if (!h) continue; for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) if (x >= 0 && y >= 0 && x < W && y < H) top[y * W + x] = Math.max(top[y * W + x], h); }
+  for (const o of fl.furn) { if (topOf(o) || o.lift && TOPS[o.kind] || walkThrough(o)) continue; for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) if (x >= 0 && y >= 0 && x < W && y < H && g[y * W + x]) top[y * W + x] = 0; }
   for (let i = 0; i < W * H; i++) if (fl.wgrid[i]) top[i] = 0;
   fl.top = top;
 }
-// 엘리베이터에서 걸어서 갈 수 있는 칸: 크루 배치와 끼임 탈출에 쓴다
+// 엘리베이터(대결장은 starts)에서 걸어서 갈 수 있는 칸: 크루 배치와 끼임 탈출에 쓴다
+const startCells = (fl) => (fl.starts || [ELEV_SPAWN]).map(([x, y]) => Math.floor(y) * W + Math.floor(x));
 for (const fl of Object.values(FLOORS)) {
-  const reach = new Uint8Array(W * H), q = [Math.floor(ELEV_SPAWN[1]) * W + Math.floor(ELEV_SPAWN[0])]; reach[q[0]] = 1;
+  const reach = new Uint8Array(W * H), q = startCells(fl); for (const i of q) reach[i] = 1;
   for (let i = 0; i < q.length; i++) { const x = q[i] % W, y = (q[i] / W) | 0; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const nx = x + dx, ny = y + dy, ni = ny * W + nx; if (nx < 0 || ny < 0 || nx >= W || ny >= H || fl.grid[ni] || reach[ni]) continue; reach[ni] = 1; q.push(ni); } }
   fl.reach = reach;
 }
@@ -519,7 +530,7 @@ export function buildNav(fl) {
     if (y + 1 < H && walk[i + W]) ey[i] = fl.fine ? +sweep(fl, x + .5, y + .5, x + .5, y + 1.5) : 1;
   }
   Object.assign(fl, { walk, ex, ey });
-  const q = [Math.floor(ELEV_SPAWN[1]) * W + Math.floor(ELEV_SPAWN[0])]; nreach[q[0]] = 1;
+  const q = startCells(fl); for (const i of q) nreach[i] = 1;
   for (let k = 0; k < q.length; k++) for (const n of navNext(fl, q[k])) if (!nreach[n]) { nreach[n] = 1; q.push(n); }
   fl.nreach = nreach;
 }

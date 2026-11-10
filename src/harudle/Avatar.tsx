@@ -504,7 +504,7 @@ function BrushArm({ color, motion }: { color: string; motion?: RefObject<WalkMot
 }
 
 /** 우테코 캠퍼스 확장: 스킬과 점프 자세. 원본 Avatar의 모양은 그대로 두고 팔·소품만 바꾼다. */
-export type AvatarPose = { act: 'draw' | 'wave' | 'heart' | 'laptop' | 'coffee' | 'dance' | 'gun' | 'read' | null; waving: boolean; air: boolean; style?: number; actT?: number; noHead?: boolean }
+export type AvatarPose = { act: 'draw' | 'wave' | 'heart' | 'laptop' | 'coffee' | 'dance' | 'gun' | 'read' | null; waving: boolean; air: boolean; style?: number; actT?: number; noHead?: boolean; arms?: number[] | null }
 
 type AvatarProps = {
   config: AvatarConfig
@@ -548,7 +548,8 @@ export function Avatar({ config: look, motion, pose, gear }: AvatarProps) {
     if (!l || !r) return
     l.rotation.x = 0; r.rotation.x = 0
     if (p?.act !== 'coffee' && actRef.current.act) actRef.current = { act: null, t0: 0 }
-    if (p?.act === 'read') { l.rotation.z = -0.32; r.rotation.z = 0.32; l.rotation.x = -1.05; r.rotation.x = -1.05 + Math.max(0, Math.sin(clock.elapsedTime * 1.6) - 0.97) * 4 }   // 두 손을 앞으로(빈백에선 책을 받쳐 들고, 책상에선 독서대 양옆에 손을 얹는다)
+    if (p?.arms) { l.rotation.x = p.arms[0]; l.rotation.z = p.arms[1]; r.rotation.x = p.arms[2]; r.rotation.z = p.arms[3] }   // 대결 종목이 정한 팔(armL이 캐릭터의 오른팔)
+    else if (p?.act === 'read') { l.rotation.z = -0.32; r.rotation.z = 0.32; l.rotation.x = -1.05; r.rotation.x = -1.05 + Math.max(0, Math.sin(clock.elapsedTime * 1.6) - 0.97) * 4 }   // 두 손을 앞으로(빈백에선 책을 받쳐 들고, 책상에선 독서대 양옆에 손을 얹는다)
     else if (p?.act === 'laptop') { // 두 손을 앞으로 뻗어 자판을 번갈아 톡톡
       const tt = clock.elapsedTime * 14
       l.rotation.z = -0.22; r.rotation.z = 0.22

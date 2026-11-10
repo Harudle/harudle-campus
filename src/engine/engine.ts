@@ -16,6 +16,9 @@ import { drawFrame as drawEaselFrame, drawPaper as drawEaselPaper } from "../../
 import { createCityscape } from "./cityscape";
 import { mountMediaControls } from "../media/controller";
 import { runCommand, mountCommandHints, type CommandHost } from "../chat/commands";
+import { mountDuel, type DuelUi } from "../duel/client";
+import { drawFurn, setFurnKit } from "../duel/furniture";
+import { isArena } from "../duel/shared.mjs";
 import { CHAT_CMDS, rollText, pickText } from "../chat/shared.mjs";
 import { canHear } from "../media/policy.mjs";
 import { mountStartrack } from "../startrack/controller";
@@ -28,7 +31,7 @@ import comicCastellaUrl from "../assets/booth/comic-castella.jpg";
 import comicDanceUrl from "../assets/booth/comic-dance.jpg";
 import comicPassUrl from "../assets/booth/comic-pass.jpg";
 import boothBannerUrl from "../assets/booth/banner.jpg";
-import { W, H, S, FH, WALL, DOLL, CEIL, VIEW, inside, INK, BRAND, NAVY, WEAK, HAND, narrow, clamp, lerp, rng, hash, wx, wz, tX, tY, floorY, FLOOR_INFO, makeFloor, FLOORS, WALK_THROUGH, ELEV_SPAWN, solid, inRect, roomKeyAt, STEP, ARC_STEP, bleacherLevel, flightSteps, DECK_H, heightAt, topAt, canStand, R_ME, bagSpot, applyLie, fits, nearestFree, furnCells, TOPS, FN, NW, NH, navNext, sweep, buildNav } from "./world";
+import { W, H, S, FH, WALL, DOLL, CEIL, VIEW, inside, INK, BRAND, NAVY, WEAK, HAND, narrow, clamp, lerp, rng, hash, wx, wz, tX, tY, floorY, FLOOR_INFO, makeFloor, FLOORS, WALK_THROUGH, ELEV_SPAWN, solid, inRect, roomKeyAt, STEP, ARC_STEP, bleacherLevel, flightSteps, DECK_H, heightAt, topAt, canStand, R_ME, bagSpot, applyLie, fits, nearestFree, furnCells, TOPS, FN, NW, NH, navNext, sweep, buildNav, topOf } from "./world";
 
 // 아티팩트 런타임(window.claude)과 가벼운 DOM 도우미
 declare global { interface Window { claude?: any } }
@@ -270,6 +273,7 @@ function refreshEasel() {
 
 /* ════════════════ 4. 월드 빌더: 층 하나 = 종이 디오라마 한 판 ════════════════ */
 const C = { white: 0xffffff, wood: 0xEBD3AE, woodD: 0xC99E6B, gray: 0xCFCBD6, grayD: 0x9A97A3, dark: 0x2E2C38, brick: 0xE2A08A, leaf: 0x8FCFA3, olive: 0xB9C27A, sofa: 0xD9A877, mint: 0xD7E4DD, lav: 0xFFE27A, glass: 0xBFD9F0, red: 0xE46F6F, coffee: 0x8C6A4F };
+setFurnKit({ THREE, box, cyl, ball, board, toon, solidMesh, canvasTex, signTex, C, S, wx, wz, HAND, INK });   // 대결 종목이 등록한 가구(src/duel/furniture.ts)도 같은 도구로 그린다
 function floorTexture(fl) {
   const P = 32;
   return canvasTex(W * P, H * P, (g) => {
@@ -308,9 +312,11 @@ function wallSegs(r) {
 function buildFloor(fl) {
   const G = new THREE.Group(); G.position.y = floorY(fl.f);
   // 바닥판: 오픈 천장 자리는 구멍
-  const shape = new THREE.Shape(); shape.moveTo(wx(0), -wz(0)); shape.lineTo(wx(W), -wz(0)); shape.lineTo(wx(W), -wz(H)); shape.lineTo(wx(0), -wz(H)); shape.closePath();
+  // 대결장(21~24층)은 방들을 두른 만큼만, 두꺼운 판으로 하늘에 떠 있다
+  const B = fl.arena ? fl.rooms.reduce((b, r) => ({ x0: Math.min(b.x0, r.x - .5), y0: Math.min(b.y0, r.y - .5), x1: Math.max(b.x1, r.x + r.w + .5), y1: Math.max(b.y1, r.y + r.h + .5) }), { x0: W, y0: H, x1: 0, y1: 0 }) : { x0: 0, y0: 0, x1: W, y1: H }, slabD = fl.arena ? 1.4 : .18;
+  const shape = new THREE.Shape(); shape.moveTo(wx(B.x0), -wz(B.y0)); shape.lineTo(wx(B.x1), -wz(B.y0)); shape.lineTo(wx(B.x1), -wz(B.y1)); shape.lineTo(wx(B.x0), -wz(B.y1)); shape.closePath();
   for (const v of fl.furn.filter((o) => o.kind === "void")) { const hole = new THREE.Path(); hole.moveTo(wx(v.x), -wz(v.y)); hole.lineTo(wx(v.x), -wz(v.y + v.h)); hole.lineTo(wx(v.x + v.w), -wz(v.y + v.h)); hole.lineTo(wx(v.x + v.w), -wz(v.y)); hole.closePath(); shape.holes.push(hole); }
-  const fg = new THREE.ExtrudeGeometry(shape, { depth: 0.18, bevelEnabled: false }); fg.rotateX(-Math.PI / 2); fg.translate(0, -0.18, 0);
+  const fg = new THREE.ExtrudeGeometry(shape, { depth: slabD, bevelEnabled: false }); fg.rotateX(-Math.PI / 2); fg.translate(0, -slabD, 0);
   const pos = fg.attributes.position, uv = fg.attributes.uv;
   for (let i = 0; i < pos.count; i++) uv.setXY(i, tX(pos.getX(i)) / W, 1 - tY(pos.getZ(i)) / H);
   const slab = new THREE.Mesh(fg, new THREE.MeshToonMaterial({ map: floorTexture(fl), gradientMap: gradient })); slab.receiveShadow = true; G.add(slab);
@@ -321,7 +327,8 @@ function buildFloor(fl) {
   const WG = new THREE.Group(); G.add(WG); fl.walls = WG;   // 들어가서 볼 때 천장까지 늘린다
   { const G = WG;
   const sides = [[L, .1, 0, wz(0.5), true], [L, .1, 0, wz(H - 0.5), true], [.1, D, wx(W - 0.5), 0, false], [.1, D, wx(0.5), 0, false]] as [number, number, number, number, boolean][];
-  if (fl.f === 14) for (const [w, d, x, z] of sides) box(G, w, WALL, d, C.white, x, 0, z);
+  if (fl.arena) { }   // 대결장: 바깥 유리벽 없이 하늘이 트였다(난간은 방 벽이 두른다)
+  else if (fl.f === 14) for (const [w, d, x, z] of sides) box(G, w, WALL, d, C.white, x, 0, z);
   else for (const [w, d, x, z, horiz] of sides) { // 바닥부터 천장까지 통유리 + 얇은 창틀
     box(G, w, .06, d, 0x2E3A5C, x, 0, z, { line: .008 });
     box(G, horiz ? w : .03, WALL - .1, horiz ? .03 : d, C.glass, x, .06, z, { mat: toon(C.glass, { opacity: .14 }), line: 0, cast: false });
@@ -357,7 +364,7 @@ function buildFloor(fl) {
     for (const sd of [-1, 1]) board(SG, bw - .04, bh - .04, tex, px + (horizWall ? sd * .028 : 0), y0 + bh / 2, pz + (horizWall ? 0 : sd * .028), horizWall ? sd * Math.PI / 2 : (sd < 0 ? Math.PI : 0));
   }
   // 천장: 들어가서 볼 때만. 오픈 천장 자리는 뚫려 있고, 12층은 천장 없이 13층 바닥 밑까지 높다
-  if (fl.f !== 12) {
+  if (fl.f !== 12 && !fl.arena) {
     const cs = new THREE.Shape(); cs.moveTo(wx(0), wz(0)); cs.lineTo(wx(W), wz(0)); cs.lineTo(wx(W), wz(H)); cs.lineTo(wx(0), wz(H)); cs.closePath();
     const up = FLOORS[fl.f + 1]?.furn || [];   // 천장 구멍은 위층 바닥이 뚫린 자리
     for (const v of up.filter((o) => o.kind === "void")) { const h = new THREE.Path(); h.moveTo(wx(v.x), wz(v.y)); h.lineTo(wx(v.x + v.w), wz(v.y)); h.lineTo(wx(v.x + v.w), wz(v.y + v.h)); h.lineTo(wx(v.x), wz(v.y + v.h)); h.closePath(); cs.holes.push(h); }
@@ -1411,6 +1418,7 @@ function buildFurn(G, o, fl) {
       { const be = solidMesh(new THREE.SphereGeometry(.34, 16, 10), 0xFFD43B, { line: .015 }); be.scale.set(1, .35, 1); be.position.set(x - .12, 1.45, z - .05); be.rotation.z = .25; G.add(be); } break; }
     case "parasol": cyl(G, .02, .02, 1.5, C.grayD, x, 0, z, { line: 0 }); { const c = solidMesh(new THREE.ConeGeometry(.75, .3, 8), 0xFFD43B, { line: .015 }); c.position.set(x, 1.55, z); G.add(c); }
       cyl(G, .32, .32, .04, C.white, x, .42, z); for (let k = 0; k < 2; k++) chair(G, x + (k ? .5 : -.5), z, k ? -Math.PI / 2 : Math.PI / 2); break;
+    default: drawFurn(G, o, fl);   // 대결 종목이 등록한 가구(src/duel/furniture.ts)
   }
 }
 function buildPortal(G, p, fl) {
@@ -1559,10 +1567,10 @@ const fireworks = []; let fwReady = 0;
 const fwDot = canvasTex(32, 32, (g) => { const r = g.createRadialGradient(16, 16, 0, 16, 16, 16); r.addColorStop(0, "rgba(255,255,255,1)"); r.addColorStop(.45, "rgba(255,255,255,.9)"); r.addColorStop(1, "rgba(255,255,255,0)"); g.fillStyle = r; g.fillRect(0, 0, 32, 32); });
 // F: 폭죽 / 좌클릭: 종이 총(꺼내 들었을 때). aim은 위에서 볼 때 누른 곳 쪽 방향
 function fireFirework(paper = false, aim: number | null = null) {
-  if (paper && me.act?.name !== "gun") return;
+  if (paper && (me.act?.name !== "gun" || duelMove.noFire)) return;
   const now = performance.now(); if (now < fwReady) return; fwReady = now + (paper ? 250 : 600);
   me.fh = aim ?? (inside() ? cam.yaw + Math.PI : me.h); me.fc++; me.fk = paper ? 1 : 0;
-  if (me.fk) { me.h = me.fh; me.kickAt = now / 1000; shootPaper(me.f, me.x, me.y, me.fh, me.up + me.jz, me); } else launchFirework(me.f, me.x, me.y, me.fh, me.up + me.jz);
+  if (me.fk) { me.h = me.fh; me.kickAt = now / 1000; shootPaper(me.f, me.x, me.y, me.fh, me.up + me.jz, me); duelUi?.fired(me.fh, me.up + me.jz); } else launchFirework(me.f, me.x, me.y, me.fh, me.up + me.jz);
   sendPresence(true);
 }
 // 게더타운처럼: 손 앞에서 부채꼴(좌우 약 70도)로 색종이 불꽃이 팍! 퍼져 나가고, 흩날리며 떨어진다
@@ -1597,9 +1605,11 @@ function tickFireworks(dt) {
         const gx = tX(pos.x), gy = tY(pos.z), y0 = pos.y - floorY(w.f);
         const hitWall = solid(fl, gx, gy) && (fl.wgrid[Math.floor(gy) * W + Math.floor(gx)] || y0 < (fl.top[Math.floor(gy) * W + Math.floor(gx)] || 1.2) + .05);
         const hitDoll = [me, ...NPCS, ...peers.values()].find((a: any) => a !== w.shooter && a.doll?.root.visible && (a.f ?? w.f) === w.f && Math.hypot(a.doll.root.position.x - pos.x, a.doll.root.position.z - pos.z) < .3 && y0 > a.doll.root.position.y - floorY(w.f) && y0 < a.doll.root.position.y - floorY(w.f) + 1.15);
-        if (hitWall || hitDoll || pos.y <= ground || w.t > 1.6) { w.hit = true; w.t = 0; const hd = Math.atan2(w.v.x, w.v.z); paperPuff(pos.clone(), w.f, hd);
+        const hitGame = !hitWall && !hitDoll && !!duelUi?.bullet(w, pos);   // 대결 종목이 그린 것(과녁 등)에 맞았다
+        if (hitWall || hitDoll || hitGame || pos.y <= ground || w.t > 1.6) { w.hit = true; w.t = 0; const hd = Math.atan2(w.v.x, w.v.z); paperPuff(pos.clone(), w.f, hd);
           // 맞은 사람이 휘청: 내가 맞았으면 내가 정해서 모두에게 알린다(hc). NPC는 각자 화면에서. 다른 크루는 그 사람이 보낸 hc로 휘청인다
-          if (hitDoll === me) { me.hc++; me.hd = hd; hitReact(me, hd); sendPresence(true); } else if (NPCS.includes(hitDoll)) hitReact(hitDoll, hd);
+          if (hitDoll && duelUi?.bulletHit(w, hitDoll, pos)) { }   // 대결 종목이 맞힘을 정한다(서버 판정)
+          else if (hitDoll === me) { me.hc++; me.hd = hd; hitReact(me, hd); sendPresence(true); } else if (NPCS.includes(hitDoll)) hitReact(hitDoll, hd);
           w.v.set(-w.v.x * .12, 0, -w.v.z * .12); }
         }
       } else { // 맞은 뒤: 툭 떨어져 바닥에 잠깐 남았다 사라진다
@@ -1967,7 +1977,7 @@ function bakeCollision(fl, G) {
   for (const o of fl.furn) {
     if (o.kind === "void") { for (let j = o.y * FN; j < (o.y + o.h) * FN; j++) for (let i = o.x * FN; i < (o.x + o.w) * FN; i++) { fine[j * NW + i] = 1; hard[j * NW + i] = 1; } continue; }   // 뚫린 바닥은 통째로 막는다
     const cells = new Set(); furnCells(fl, o, (x, y) => cells.add(y * W + x)); if (!cells.size && !SHAPE_ONLY.has(o.kind)) continue;
-    const allow = SHAPE_ONLY.has(o.kind) ? (x, y) => inRect(o, x + .5, y + .5) : (x, y) => cells.has(y * W + x), h = TOPS[o.kind] && !o.lift ? TOPS[o.kind] : 0;
+    const allow = SHAPE_ONLY.has(o.kind) ? (x, y) => inRect(o, x + .5, y + .5) : (x, y) => cells.has(y * W + x), h = topOf(o);
     stamp(fl.furnRoots.get(o) || [], allow, (i) => { fine[i] = 1; if (h) ftop[i] = Math.max(ftop[i], h); else hard[i] = 1; });
   }
   for (let i = 0; i < NW * NH; i++) if (hard[i]) ftop[i] = 0;
@@ -2051,7 +2061,7 @@ const nearRects = (rects, x0, y0, x1, y1) => rects.some((r) => x1 > r.x - CULL_P
 function setCull(fl, rects) { for (const { o, b } of fl.cull || []) o.visible = !rects || nearRects(rects, b[0], b[1], b[2], b[3]); }
 function showFloors() {
   for (const n of NPCS) endAct(n);
-  for (const f of [11, 12, 13, 14]) if (floorGroups[f]) floorGroups[f].visible = false;
+  for (const g of Object.values(floorGroups) as THREE.Group[]) g.visible = false;   // 대결장 층까지 모두 숨기고 지금 층만
   groupOf(me.f).visible = true;
   const below = FLOORS[me.f].furn.some((o) => o.kind === "void") && FLOORS[me.f - 1];
   if (below) groupOf(me.f - 1).visible = true;   // 오픈 천장 아래층이 내려다보인다
@@ -2063,10 +2073,12 @@ function showFloors() {
   const holes = below ? voidsOf(FLOORS[me.f]) : above ? voidsOf(FLOORS[13]) : null;
   for (const f of [11, 12, 13, 14]) if (floorGroups[f]) setCull(FLOORS[f], f === me.f ? null : holes);
   for (const n of NPCS) n.doll.root.visible = n.f === me.f || (((below && n.f === me.f - 1) || (above && n.f === 13)) && nearRects(holes, n.x, n.y, n.x, n.y));
-  if (campusTower) { const low = Math.min(...[11, 12, 13, 14].filter((f) => floorGroups[f]?.visible)), top = floorY(low) - .2; campusTower.scale.y = (top - GROUND) / (-GROUND - .2); campusTower.position.y = GROUND + (top - GROUND) / 2; }
+  if (campusTower) { const low = isArena(me.f) ? 15 : Math.min(...[11, 12, 13, 14].filter((f) => floorGroups[f]?.visible)),   /* 대결장(하늘)에서는 건물이 14층 지붕까지 서 있고 그 위로 떠 있다 */ top = floorY(low) - .2; campusTower.scale.y = (top - GROUND) / (-GROUND - .2); campusTower.position.y = GROUND + (top - GROUND) / 2; }
 }
 
 /* ════════════════ 8. 나 · 강아지 · 다른 크루 ════════════════ */
+let duelUi: DuelUi | null = null;   // 1:1 대결(src/duel/client.ts). 아래 cmdHost 앞에서 붙인다
+const duelMove = { lock: false, speed: 1, noFire: false };   // 대결 종목이 정하는 것: 걷기 · 점프 잠금, 걷기 빠르기, 종이 총 막기
 const LS = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch { } } };
 
 /* ════════════════ 하루들 부스: 함께 그리는 이젤 · 붓 ════════════════
@@ -2320,6 +2332,7 @@ Object.defineProperty(me, "doll", { get: () => meDoll });
 const running = () => me.runHold || me.runToggle;
 function jump() { // 땅에서 한 번, 공중에서 한 번 더(더블 점프)
   if (me.lie || me.seat) { standUp(); return; }
+  if (duelMove.lock) return;
   const air = me.jz > .001 || me.jv > 0; if (air && me.jumps >= 2) return;
   me.jumps = air ? 2 : 1; me.jv = air ? 4.2 : 4.6; if (air) spawnFx(starTex, meDoll.root.position, 3, .5, .2); me.jc++; sendPresence(true);
   // 14층: 뛰어들 수 있는 그림(꽃게 게임 만화) 앞에서 점프하면 월드처럼 그림 속으로 뛰어들어 게임을 시작한다
@@ -2350,7 +2363,7 @@ function refreshRoomTags() {
   for (const r of floor.rooms) if (r.name) roomTags.push({ el: mkLabel(`room-tag${r.planet ? " planet" : ""}`, r.name), x: wx(r.x + r.w / 2), y: WALL + .35, z: wz(r.y + .5), place: true });
   for (const z of floor.zones) if (z.desc && !floor.rooms.some((r) => r.name && z.name.includes(r.name)) && !["엘리베이터 홀", "회의실"].includes(z.name)) roomTags.push({ el: mkLabel("room-tag", z.name), x: wx(z.x + z.w / 2), y: .9, z: wz(z.y + z.h / 2), place: true });
   for (const p of floor.portals) roomTags.push({ el: mkLabel("room-tag port", "⇅ " + p.label), x: wx(p.x + p.w / 2), y: 1.1, z: wz(p.y + p.h / 2) });
-  roomTags.push({ el: mkLabel("room-tag", "엘리베이터"), x: wx(ELEV_SPAWN[0]), y: 2.0, z: wz(13.5) });
+  if (!floor.arena) roomTags.push({ el: mkLabel("room-tag", "엘리베이터"), x: wx(ELEV_SPAWN[0]), y: 2.0, z: wz(13.5) });
 }
 const myTag = mkLabel("name-tag me", "나"), myBub = mkLabel("bub", ""); myBub.hidden = true;
 // 빈백에 누운 사람 머리 위 zzz(글자 셋이 차례로 떠오른다)
@@ -2409,6 +2422,7 @@ addEventListener("keydown", (e) => {
     return;
   }
   if (!lb.hidden) return;
+  if (duelUi?.key(e)) { e.preventDefault(); return; }   // 대결: 초대장 Y · N, 경기 중 종목 키
   if (c === "KeyC") { e.preventDefault(); if (!e.repeat) fireFirework(); return; }   // C: 앞으로 폭죽
   if (c === "Backslash") { e.preventDefault(); if (!e.repeat) tuckSide(!sideTucked); return; }   // \: 사이드바 접기/펼치기
   if (c === "Tab") { e.preventDefault(); if (!e.repeat) toggleInv(); return; }
@@ -2422,7 +2436,7 @@ addEventListener("keydown", (e) => {
   if (c === "KeyQ") { cam.yawT += Math.PI / 4; return; } if (c === "KeyE") { cam.yawT -= Math.PI / 4; return; }
   if (MOVE[c]) { keys.add(MOVE[c]); stopFollow(); me.path = null; me.goal = null; e.preventDefault(); }
 });
-addEventListener("keyup", (e) => { if (MOVE[e.code]) keys.delete(MOVE[e.code]); if (e.code === "ShiftLeft" || e.code === "ShiftRight" || e.key === "Shift") me.runHold = false; });
+addEventListener("keyup", (e) => { duelUi?.key(e); if (MOVE[e.code]) keys.delete(MOVE[e.code]); if (e.code === "ShiftLeft" || e.code === "ShiftRight" || e.key === "Shift") me.runHold = false; });
 $all(".skill[data-skill]").forEach((b) => (b.onclick = () => useSkill(b.dataset.skill)));
 // 인벤토리(Tab): 마인크래프트처럼 칸에 든 물건을 눌러 쓴다
 const ICON = { // 하루들 낙서체 아이콘(검은 선 + 노랑·하늘 포인트)
@@ -2493,7 +2507,8 @@ canvas.addEventListener("pointermove", (e) => {
 const endDrag = (e) => {
   pointers.delete(e.pointerId); canvas.classList.remove("dragging");
   if (drag && !drag.moved && pointers.size === 0) {
-    if (!locked() && boothHit(e.clientX, e.clientY)) { }   // 바로가기·이젤을 눌렀으면 고정하지 않고 바로 연다
+    if (duelUi?.ateClick()) { }   // 대결 종목이 쓴 클릭(복싱 주먹 등)
+    else if (!locked() && boothHit(e.clientX, e.clientY)) { }   // 바로가기·이젤을 눌렀으면 고정하지 않고 바로 연다
     else if (inside() && e.pointerType === "mouse" && !locked()) lockMouse();   // 들어가서 볼 때 누르면 커서를 숨기고 고정
     else if (locked()) { if (picker.hidden && me.act?.name !== "gun") clickAt(innerWidth / 2, innerHeight / 2); }   // 고정 중 클릭(종이 총은 아래 mousedown에서 바로 쏜다)
     else if (me.act?.name === "gun" && e.button === 0 && !TOUCH) { const a = aimAt(e.clientX, e.clientY); fireFirework(true, a); }   // 커서가 보일 때(위에서 보기 등): 누른 곳 쪽으로 발사   // 고정 중엔 화면 가운데(조준점)를 누른 것으로(층 고르는 중엔 무시)
@@ -2506,7 +2521,7 @@ let lockFailed = false;
 const locked = () => document.pointerLockElement === canvas;
 // 경계: 창(층 고르기·크루 피드·사진·캐릭터 꾸미기·설정)이 떠 있는 동안은 커서를 꺼내 두고, 다 닫히면 게임으로 돌아와 다시 고정한다.
 // 채팅창에 쓰는 동안도 커서를 꺼내 둔다
-const uiOpen = () => !$("shop").hidden || !easelEd.hidden || $("loginAsk")?.hidden === false || !gifts.hidden || !$("startrackPanel").hidden || !menu.hidden || !profile.hidden || !tour.hidden || !inv.hidden || !picker.hidden || panel.classList.contains("open") || !avPanel.hidden || !lb.hidden;
+const uiOpen = () => !!duelUi?.modal() || !$("shop").hidden || !easelEd.hidden || $("loginAsk")?.hidden === false || !gifts.hidden || !$("startrackPanel").hidden || !menu.hidden || !profile.hidden || !tour.hidden || !inv.hidden || !picker.hidden || panel.classList.contains("open") || !avPanel.hidden || !lb.hidden;
 const typing = () => document.activeElement === sayInput;   // 채팅창에 쓰는 중: 커서를 꺼내 둔다
 function syncCursor() { if (uiOpen()) { if (locked()) document.exitPointerLock(); } else lockMouse(); }
 function lockMouse() {
@@ -2524,7 +2539,9 @@ document.addEventListener("mousemove", (e) => {
 });
 // 고정이 거절돼도(조작 없이 불렸거나 막 풀린 직후) 다음 클릭에 다시 시도한다. 아예 지원 안 하는 브라우저만 끄기(lockMouse 안에서)
 // 종이 총: 마우스 고정 중 왼쪽 버튼을 누르는 순간 바로 발사(눌렀다 떼는 클릭 판정을 기다리지 않는다)
-document.addEventListener("mousedown", (e) => { if (e.button === 0 && locked() && me.act?.name === "gun" && !uiOpen()) { e.preventDefault(); fireFirework(true); } });
+document.addEventListener("mousedown", (e) => { if (!uiOpen() && (locked() || e.target === canvas) && duelUi?.pointer(e)) { e.preventDefault(); return; } if (e.button === 0 && locked() && me.act?.name === "gun" && !uiOpen()) { e.preventDefault(); fireFirework(true); } });
+document.addEventListener("mouseup", (e) => { if (!uiOpen() && (locked() || e.target === canvas)) duelUi?.pointer(e); });
+document.addEventListener("contextmenu", (e) => { if (duelUi?.active() && (locked() || e.target === canvas)) e.preventDefault(); });   // 대결 중 오른쪽 클릭은 종목이 쓴다
 document.addEventListener("pointerlockerror", () => {});
 document.addEventListener("pointerlockchange", () => {
   document.getElementById("cross").hidden = !(VIEW.mode === "first" || locked());
@@ -2667,9 +2684,9 @@ picker.addEventListener("click", (e) => { if (e.target === picker) closePicker()
 const fade = document.getElementById("fade"); let lastPortal = 0;
 // 14층은 하루들 월드: 캠퍼스에서는 14층 엘리베이터 앞에 서 있는 것으로 두고, 월드를 화면 위에 띄운 동안 캠퍼스는 멈춘다
 let inWorld = false;
-function goFloor(f, spawn) {
+function goFloor(f, spawn, exact = false) {   // exact: 그 자리 그대로(대결장 발판 위처럼 걸어서 닿지 않는 곳). spawn[2]가 있으면 그쪽을 본다
   fade.style.opacity = "1";
-  setTimeout(() => { if (me.brush) { me.brush = false; } standUp(); me.f = f; floor = FLOORS[f]; [me.x, me.y] = nearestFree(floor, spawn[0], spawn[1]); me.jz = 0; me.jv = 0; me.up = 0; dog.x = me.x - 1; dog.y = me.y + .5; me.path = null; curZone = null; showFloors(); refreshRoomTags(); updateFloorHud(); sendPresence(true); cam.target.set(wx(me.x), floorY(f), wz(me.y)); fade.style.opacity = "0"; if (f === 14 && (!showcase || performance.now() - showcaseAt > SHOWCASE_EVERY)) refreshShowcase(); }, 250);
+  setTimeout(() => { if (me.brush) { me.brush = false; } standUp(); me.f = f; floor = FLOORS[f]; [me.x, me.y] = exact ? [spawn[0], spawn[1]] : nearestFree(floor, spawn[0], spawn[1]); if (spawn[2] != null) { me.h = spawn[2]; cam.yawT = cam.yaw = me.h + Math.PI; } me.jz = 0; me.jv = 0; me.up = 0; dog.x = me.x - 1; dog.y = me.y + .5; me.path = null; curZone = null; showFloors(); if (exact) me.up = topAt(floor, me.x, me.y); refreshRoomTags(); updateFloorHud(); sendPresence(true); cam.target.set(wx(me.x), floorY(f), wz(me.y)); fade.style.opacity = "0"; if (f === 14 && (!showcase || performance.now() - showcaseAt > SHOWCASE_EVERY)) refreshShowcase(); }, 250);
 }
 // 14층 하루들 월드 창: 액자·가판대를 누르거나 앞에서 F. 창이 떠 있는 동안 캠퍼스는 멈춘다
 function openItem(item) { if (!item) return; if (item.link) openLink(item.link); else openShow(item.view); }
@@ -2700,7 +2717,7 @@ const nearShow = () => {
 // 가판대가 넓어서 가운데가 아니라 가판대 가장자리까지 거리로 본다
 const nearScoop = () => (me.f === 14 && !me.lie && !me.seat && FLOORS[14].furn.find((o) => o.kind === "scoopstand" && Math.hypot(Math.max(o.x - me.x, 0, me.x - o.x - o.w), Math.max(o.y - me.y, 0, me.y - o.y - o.h)) < 2.2)) || null;
 // 층 바로가기 버튼은 없다: 다른 층은 엘리베이터나 계단으로만 간다
-function updateFloorHud() { document.querySelector("#floorBadge b").textContent = me.f + "F"; document.querySelector("#floorBadge span").textContent = FLOOR_INFO[me.f]; }
+function updateFloorHud() { document.querySelector("#floorBadge b").textContent = isArena(me.f) ? "⚔️" : me.f + "F"; document.querySelector("#floorBadge span").textContent = FLOOR_INFO[me.f]; }
 // 처음 온 사람에게 안내: F 상호작용 → V 시점 → Tab 인벤토리 → 조작 한눈에 (→ 하루들 연동)
 const tour = document.getElementById("tour"), tourStep = document.getElementById("tourStep"), tourDots = document.getElementById("tourDots");
 const tourNext = document.getElementById("tourNext") as HTMLButtonElement, tourPrev = document.getElementById("tourPrev") as HTMLButtonElement;
@@ -2918,17 +2935,32 @@ let keepChat: string | null = null;
 const cmdHints = mountCommandHints(sayInput);
 const clickIf = (id) => { const b = document.getElementById(id) as HTMLButtonElement | null; if (!b || b.disabled || b.closest("[hidden]")) return false; b.click(); return true; };
 const placeOf = (s) => { let best = null; for (const z of FLOORS[s.f]?.zones || []) if (z.name && inRect(z, s.x, s.y) && (!best || z.w * z.h < best.w * best.h)) best = z; return best?.name || ""; };
+// 1:1 대결(src/duel/client.ts): 엔진 기능을 host로 빌려준다. 종목은 이것(ctx)만 통해 엔진을 다룬다
+duelUi = mountDuel({
+  THREE, scene, camera, touch: TOUCH, me, elev: ELEV_SPAWN, move: duelMove,
+  send: (m) => netSend(m), online: () => netUp, probeClock: () => netSend({ t: "startrack:clock", sentAt: performance.now() }),
+  floorGroup: (f) => groupOf(f), topAt: (x, y) => topAt(floor, x, y),
+  goFloor: (f, spot, exact) => goFloor(f, spot, exact),
+  place: (x, y, h) => { stopFollow(); me.path = null; me.goal = null; me.x = x; me.y = y; me.up = topAt(floor, x, y); me.jz = 0; me.jv = 0; dog.x = x - 1; dog.y = y + .5; if (h != null) { me.h = h; if (inside()) cam.yawT = cam.yaw = h + Math.PI; } sendPresence(true); },
+  actor: (id) => (id === "me" ? me : peers.get(id) || null), whoIs: (a) => (a === me ? "me" : [...peers].find(([, v]) => v === a)?.[0] ?? null),
+  act: (name) => { if (!name) { if (me.act) { endAct(me); sendPresence(true); } } else if (me.act?.name !== name) useSkill(name); },
+  fire: (aim) => fireFirework(true, aim ?? null), jump: () => jump(), bounce: (v) => { me.jv = v; me.jc++; sendPresence(true); },
+  shootPaper: (f, x, y, dir, lift, a) => shootPaper(f, x, y, dir, lift, a), hitReact: (a, dir) => hitReact(a, dir),
+  presence: () => sendPresence(true),
+  toast: (h, p = "", ms) => showToast(h, p, ms), note: (text) => chatNet({ k: "sys", text }),
+  unlock: () => { if (locked()) document.exitPointerLock(); keys.clear(); me.runHold = false; }, syncCursor: () => syncCursor(),
+});
 const cmdHost: CommandHost = {
   say: (text, k = chatTab, to = dmTo, cmd) => { if (k !== chatTab) setChatTab(k); sendChat(text, k, to, cmd); },
   note: (text) => chatNet({ k: "sys", text }),
   setTab: (k) => { setChatTab(k); keepChat = ""; },
-  peers: () => { const here = { f: me.f, x: me.x, y: me.y, rm: roomKeyAt(me.f, me.x, me.y) }; return peerList.filter((p) => p.presence && FLOORS[p.presence.f]).map((p) => ({ id: p.peer, u: p.u, name: p.name || "크루", f: p.presence.f, place: placeOf(p.presence), near: canHear(here, p.presence) })); },
+  peers: () => { const here = { f: me.f, x: me.x, y: me.y, rm: roomKey() }; return peerList.filter((p) => p.presence && FLOORS[p.presence.f]).map((p) => ({ id: p.peer, u: p.u, name: p.name || "크루", f: p.presence.f, place: isArena(p.presence.f) ? (p.presence.dr === 2 ? "👀 관전 중" : "⚔️ 대결 중") : placeOf(p.presence), near: canHear(here, p.presence) })); },
   skill: (name) => useSkill(name),
   item: (id) => useItem(id),
   dance: (style) => useSkill("dance", style),
   dances: DANCES,
   firework: () => fireFirework(),
-  floor: (f) => (f === me.f ? chatNet({ k: "sys", text: `이미 ${f}F예요` }) : goFloor(f, ELEV_SPAWN)),
+  floor: (f) => (isArena(me.f) ? chatNet({ k: "sys", text: "대결장에서는 층을 옮길 수 없어요 · /기권이나 /관전으로 나가요" }) : f === me.f ? chatNet({ k: "sys", text: `이미 ${f}F예요` }) : goFloor(f, ELEV_SPAWN)),
   follow: (id) => startFollow(id),
   stopFollow: () => (me.follow ? stopFollow() : chatNet({ k: "sys", text: "따라가는 중이 아니에요" })),
   dm: (u, name) => { dmTo = u; dmToName = name; setChatTab("dm"); keepChat = ""; },
@@ -2936,6 +2968,7 @@ const cmdHost: CommandHost = {
   mic: () => clickIf("micToggle"),
   open: (w) => { if (w === "profile") openProfile(); else if (w === "look") openAvPanel(); else if (w === "inv") { if (inv.hidden) toggleInv(); } else if (w === "tour") openTour(); else openMenu(w === "menu" ? "main" : w); },
   prefill: (text) => { keepChat = text; },
+  duel: duelUi.commands,
 };
 document.getElementById("sayForm").addEventListener("submit", (e) => {
   e.preventDefault(); const v = sayInput.value.trim(); cmdHints.hide();
@@ -2983,7 +3016,7 @@ let notifyDailyReady: () => void = () => {};
 const media = mountMediaControls({ speakingChanged: (peers) => { talkingPeers = peers; renderPlist(); }, requestJoin: (area) => requestMediaJoin(area), requestRenew: () => requestMediaRenew(), requestCloudflare: (operation, data) => requestCloudflareMedia(operation, data), requestMeeting: (operation, data) => requestMeeting(operation, data), notifyDailyReady: () => notifyDailyReady(), notifyLeft: () => notifyMediaLeft(), acknowledgeSwitch: (revision) => acknowledgeMediaSwitch(revision), meetingChanged: () => renderChat(), voiceChanged: (v) => { myVoice = v; queueMicrotask(() => sendPresence(true)); } });
 media.setAvailable(STANDALONE);
 const startrack = mountStartrack((message) => { if (!netUp) return false; sendPresence(true); netSend(message); return true; }, () => screenProjection(camera));
-function updateMediaWorld() { const x = Math.round(me.x * 100) / 100, y = Math.round(me.y * 100) / 100; const position = { f: me.f, x, y, rm: roomKeyAt(me.f, x, y) }; media.updateWorld(position, peerList); startrack.updateWorld(position); }
+function updateMediaWorld() { const x = Math.round(me.x * 100) / 100, y = Math.round(me.y * 100) / 100; const position = { f: me.f, x, y, rm: duelUi?.rm() || roomKeyAt(me.f, x, y) }; media.updateWorld(position, peerList); startrack.updateWorld(position); }
 /* ───── 로컬 테스트용 가짜 크루(목록·따라가기 확인용) ─────
    vite 개발 서버(npm run dev)에서는 저절로, localhost에서 빌드본을 볼 땐 ?mock 을 붙이면 나온다. ?nomock 이면 끈다. 배포 서버에서는 절대 안 나온다 */
 const MOCK = !new URLSearchParams(location.search).has("nomock") && (import.meta.env.DEV || (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && new URLSearchParams(location.search).has("mock")));
@@ -3013,7 +3046,7 @@ let wasMoving = false, myVoice = 0;   // 음성 상태(vc): 0 미연결 · 1 마
 document.addEventListener("visibilitychange", () => { if (document.hidden && me.moving) { me.moving = false; wasMoving = false; sendPresence(true); } });
 function sendPresence(force) {
   if (!room) return; const now = performance.now(); if (!force && now - lastSent < 90) return; lastSent = now;
-  room.presence({ f: me.f, x: Math.round(me.x * 100) / 100, y: Math.round(me.y * 100) / 100, u: Math.round(me.up * 100) / 100, h: Math.round(me.h * 100) / 100, lp: me.act?.name === "laptop" ? 1 : 0, rd: me.act?.name === "read" ? 1 : 0, gn: me.act?.name === "gun" ? 1 : 0, br: me.brush ? 1 : 0, bc: ezPen.c, fk: me.fk, hc: me.hc, hd: Math.round(me.hd * 100) / 100, fc: me.fc, fh: Math.round(me.fh * 100) / 100, dn: me.act?.name === "dance" ? me.act.style + 1 : 0, m: me.moving ? 1 : 0, r: running() ? 1 : 0, l: me.lie ? 1 : 0, st: me.seat ? 1 : 0, ly: me.lie ? Math.round(me.lie.yaw * 100) / 100 : 0, jc: me.jc, ac: me.ac, an: me.an, as: me.as, look: 0, av: avEncode(myAv), rm: roomKey(), vc: myVoice }).catch(() => { });
+  room.presence({ f: me.f, x: Math.round(me.x * 100) / 100, y: Math.round(me.y * 100) / 100, u: Math.round(me.up * 100) / 100, h: Math.round(me.h * 100) / 100, lp: me.act?.name === "laptop" ? 1 : 0, rd: me.act?.name === "read" ? 1 : 0, gn: me.act?.name === "gun" ? 1 : 0, br: me.brush ? 1 : 0, bc: ezPen.c, fk: me.fk, hc: me.hc, hd: Math.round(me.hd * 100) / 100, fc: me.fc, fh: Math.round(me.fh * 100) / 100, dn: me.act?.name === "dance" ? me.act.style + 1 : 0, m: me.moving ? 1 : 0, r: running() ? 1 : 0, l: me.lie ? 1 : 0, st: me.seat ? 1 : 0, ly: me.lie ? Math.round(me.lie.yaw * 100) / 100 : 0, jc: me.jc, ac: me.ac, an: me.an, as: me.as, look: 0, av: avEncode(myAv), rm: roomKey(), vc: myVoice, ar: duelUi?.ar() || undefined }).catch(() => { });
   updateMediaWorld();
 }
 // EC2에서는 직접 만든 WebSocket 서버가 room 역할을 한다
@@ -3074,7 +3107,7 @@ function wsRoom() {
   const showUpdate = () => { if (document.getElementById("updateChip")) return; const b = document.createElement("button"); b.id = "updateChip"; b.type = "button"; b.textContent = "새 버전이 나왔어요 · 새로고침"; b.onclick = () => location.reload(); document.body.append(b); };
   const connect = () => {
     ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
-    ws.onopen = () => { netUp = true; retry = 800; send({ t: "id", u: secretUid() }); send({ t: "name", name: myName }); if (last) send({ t: "p", p: last }); media.setNetwork(true); startrack.setNetwork(true); probeStartrackClock(); setTimeout(probeStartrackClock, 1500); setTimeout(probeStartrackClock, 5000); };
+    ws.onopen = () => { netUp = true; retry = 800; send({ t: "id", u: secretUid() }); send({ t: "name", name: myName }); if (last) send({ t: "p", p: last }); media.setNetwork(true); startrack.setNetwork(true); probeStartrackClock(); setTimeout(probeStartrackClock, 1500); setTimeout(probeStartrackClock, 5000); duelUi?.online(true); };
     ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch { return; }
       if (m.t === "hello") { myId = m.id; media.setMeetingEnabled(!!m.meetingTest); if (m.v) { if (!firstV) firstV = m.v; else if (m.v !== firstV) showUpdate(); } }
       if (m.t === "media:join") { const pending = pendingMedia.get(m.id); if (pending) { clearTimeout(pending.timer); pendingMedia.delete(m.id); if (m.join) pending.resolve(m.join); else pending.reject(new Error(m.error || "unavailable")); } }
@@ -3084,11 +3117,12 @@ function wsRoom() {
       if (m.t === "media:switch" && Number.isSafeInteger(m.revision)) media.switchProvider(m.revision);
       if (m.t === "me" && typeof m.u === "string") { myPub = m.u; renderChat(); }   // 서버가 정한 내 주소(게스트 p_… · 하루들 연동 h_…)
       if (m.t === "startrack") startrack.receive(m);
-      if (m.t === "startrack:clock") startrack.syncClock(m.sentAt, m.serverTime);
+      if (m.t === "startrack:clock") { startrack.syncClock(m.sentAt, m.serverTime); duelUi?.clock(m.sentAt, m.serverTime); }
       if (m.t === "ez") easelNet(m);
       if (m.t === "chat") chatNet(m);
+      if (typeof m.t === "string" && m.t.startsWith("duel:")) duelUi?.net(m);
       if (m.t === "bye") retry = 150; /* 서버가 새 버전으로 바뀌는 중: 곧바로 다시 붙는다 */ if (m.t === "peers" && handler) handler({ peers: m.peers.map((p) => ({ ...p, kind: "viewer", sameTab: p.peer === myId })) }); };
-    ws.onclose = () => { netUp = false; media.setNetwork(false); startrack.setNetwork(false); for (const pending of [...pendingMedia.values(), ...pendingRenew.values(), ...pendingCloudflare.values(), ...pendingMeetings.values()]) { clearTimeout(pending.timer); pending.reject(new Error("not_ready")); } pendingMedia.clear(); pendingRenew.clear(); pendingCloudflare.clear(); pendingMeetings.clear(); setTimeout(connect, retry); retry = Math.min(10000, retry * 1.6); };
+    ws.onclose = () => { netUp = false; duelUi?.online(false); media.setNetwork(false); startrack.setNetwork(false); for (const pending of [...pendingMedia.values(), ...pendingRenew.values(), ...pendingCloudflare.values(), ...pendingMeetings.values()]) { clearTimeout(pending.timer); pending.reject(new Error("not_ready")); } pendingMedia.clear(); pendingRenew.clear(); pendingCloudflare.clear(); pendingMeetings.clear(); setTimeout(connect, retry); retry = Math.min(10000, retry * 1.6); };
   };
   connect();
   return { presence: async (p) => { last = p; send({ t: "p", p }); }, onPeers: (fn) => { handler = fn; } };
@@ -3157,7 +3191,7 @@ function syncPeers(dt, t) {
     else if (!s.dn && v.act?.name === "dance") endAct(v);
     v.jz = v.jz || 0; v.jv = v.jv || 0; if (v.jz > 0 || v.jv > 0) { v.jv -= 15 * dt; v.jz += v.jv * dt; if (v.jz <= 0) { v.jz = 0; v.jv = 0; } }
     // 같은 층이거나, 뚫린 자리(라이브러리·계단 구멍) 너머 위·아래층이면 보인다(그 사람의 폭죽·노트북·춤도 같이)
-    const vis = s.f === me.f || (Math.abs(s.f - me.f) === 1 && nearRects(voidsOf(FLOORS[Math.max(s.f, me.f)]), s.x, s.y, s.x, s.y)); v.doll.root.visible = vis; setPos(v.doll, s.f, v.x, v.y); v.doll.root.position.y += (+s.u || 0) + v.jz; v.doll.blob.position.y = .012 - v.jz; applyLie(v.doll, s.l ? { yaw: +s.ly || 0 } : null); v.doll.setSeated(s.st ? v.seat || true : null);
+    const vis = (s.f === me.f || (Math.abs(s.f - me.f) === 1 && nearRects(voidsOf(FLOORS[Math.max(s.f, me.f)]), s.x, s.y, s.x, s.y))) && !duelUi?.hides(s); v.doll.root.visible = vis; setPos(v.doll, s.f, v.x, v.y); v.doll.root.position.y += (+s.u || 0) + v.jz; v.doll.blob.position.y = .012 - v.jz; applyLie(v.doll, s.l ? { yaw: +s.ly || 0 } : null); v.doll.setSeated(s.st ? v.seat || true : null);
     // 그 크루가 데리고 다니는 펫
     const pk = petOfSku(g?.pet);
     if (pk !== (v.pet?.kind ?? null)) { dropDoll(v.pet?.doll); v.pet = pk ? { kind: pk, x: v.x - .6, y: v.y + .4, moving: false, h: 0, doll: makePet(pk) } : null; if (v.pet) scene.add(v.pet.doll.root); }
@@ -3189,7 +3223,7 @@ try { chatLogs.near = JSON.parse(LS.get("ww.chatNear") || "[]"); } catch { }
 const uidOf = (peer) => peerList.find((p) => p.peer === peer)?.u || null;
 // 지금 있는 방: 회의실·강의실 같은 닫힌 대화 공간이면 그 이름(층 포함), 아니면 ""
 function roomKey() {
-  return roomKeyAt(me.f, me.x, me.y);
+  return duelUi?.rm() || roomKeyAt(me.f, me.x, me.y);   // 대결장은 경기 방(duel:<ar>): 근처 채팅 · 음성이 그 경기 안에서만
 }
 function chatNet(m) {
   const mine = m.from?.u === selfU();
@@ -3249,22 +3283,22 @@ setInterval(() => { if (chatTab === "near") renderChat(); }, 1000);   // 방을 
 /* ───── 같이 있는 크루 목록: 나 · 근처(채팅 · 음성이 닿는 크루) · 같은 층 · 다른 층 순, 이름 옆에 층, 따라가기 ───── */
 const plistBody = document.getElementById("plistBody");
 function esc(v) { return String(v).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch])); }   // 함수 선언: 위쪽 채팅 코드가 먼저 불러도 된다
-const actIcon = (s2) => (s2.br ? "🖌️ 그리는 중" : s2.dn ? "💃 춤추는 중" : s2.lp ? "💻 코딩 중" : s2.rd ? "📖 책 읽는 중" : s2.gn ? "🎉 종이 총" : s2.l ? "💤 쉬는 중" : s2.st ? "🪑 앉아 있음" : s2.m ? "🚶 걷는 중" : "");
+const actIcon = (s2) => (s2.dr === 1 ? "⚔️ 대결 중" : s2.dr === 2 ? "👀 관전 중" : s2.br ? "🖌️ 그리는 중" : s2.dn ? "💃 춤추는 중" : s2.lp ? "💻 코딩 중" : s2.rd ? "📖 책 읽는 중" : s2.gn ? "🎉 종이 총" : s2.l ? "💤 쉬는 중" : s2.st ? "🪑 앉아 있음" : s2.m ? "🚶 걷는 중" : "");
 const dotColor = (av, seed) => { const c = avDecode(av); return c?.headColor || ["#B39DDB", "#FFD43B", "#7DB3F0", "#7FCFAE", "#F7A6A0"][hash(seed) % 5]; };
 let plistKey = "";
 function renderPlist() {
   const q = ($<HTMLInputElement>("plistSearch").value || "").trim().toLowerCase();
   const all = peerList.filter((p) => p.presence && FLOORS[p.presence.f]).map((p) => ({ id: p.peer, name: p.name || "크루", s: p.presence }));
   // 근처: 근처 채팅 · 음성과 같은 기준(같은 층 6칸 안, 방 안이면 같은 방)
-  const here = { f: me.f, x: me.x, y: me.y, rm: roomKeyAt(me.f, me.x, me.y) }, isNear = (r) => canHear(here, r.s);
+  const here = { f: me.f, x: me.x, y: me.y, rm: roomKey() }, isNear = (r) => canHear(here, r.s);
   const rows = q ? all.filter((r) => r.name.toLowerCase().includes(q)) : all;
   rows.sort((a, b) => (b.s.f === me.f ? 1 : 0) - (a.s.f === me.f ? 1 : 0) || b.s.f - a.s.f || a.name.localeCompare(b.name, "ko"));
   const near = rows.filter(isNear), far = rows.filter((r) => !isNear(r));
   renderNear(all.filter(isNear));
   $("plistTitle").textContent = all.length ? `캠퍼스에 ${all.length + 1}명` : "아직 혼자 둘러보는 중이에요"; $("plistCnt").textContent = $("sideShowCnt").textContent = String(all.length + 1);   // 사이드바를 접어도 오른쪽 위에 접속 인원
   const ini = (n) => esc([...String(n).trim()][0] || "?");
-  const line = (id, name, f, col, icon, mine, near = false, vc = null) => `<li class="${mine ? "mine" : near ? `same near${talkingPeers.has(id) ? " talking" : ""}` : f === me.f ? "same" : ""}"><span class="av" style="background:${col}">${ini(name)}</span><span class="who"><span class="nm">${esc(name)}${mine ? "<em>나</em>" : ""}</span><span class="sub"><span class="fl ${f === me.f ? "here" : ""}">${f}F</span>${near ? voiceBadges(vc) : ""}${icon ? `<span>${icon}</span>` : ""}</span></span>${mine ? "" : `${uidOf(id) ? `<button type="button" class="dm" data-id="${esc(id)}" title="개인 메시지">💬</button>` : ""}<button type="button" class="fw" data-id="${esc(id)}" aria-pressed="${me.follow === id}">${me.follow === id ? "따라가는 중" : "따라가기"}</button>`}</li>`;
-  const html = line("", myNameNow() || "나", me.f, myAv.headColor || "#B39DDB", actIcon({ br: me.brush, dn: me.act?.name === "dance", lp: me.act?.name === "laptop", rd: me.act?.name === "read", gn: me.act?.name === "gun", l: me.lie, st: me.seat }), true)
+  const line = (id, name, f, col, icon, mine, near = false, vc = null) => `<li class="${mine ? "mine" : near ? `same near${talkingPeers.has(id) ? " talking" : ""}` : f === me.f ? "same" : ""}"><span class="av" style="background:${col}">${ini(name)}</span><span class="who"><span class="nm">${esc(name)}${mine ? "<em>나</em>" : ""}</span><span class="sub"><span class="fl ${f === me.f ? "here" : ""}">${isArena(f) ? "⚔️" : `${f}F`}</span>${near ? voiceBadges(vc) : ""}${icon ? `<span>${icon}</span>` : ""}</span></span>${mine ? "" : `${uidOf(id) ? `<button type="button" class="dm" data-id="${esc(id)}" title="개인 메시지">💬</button>` : ""}<button type="button" class="fw" data-id="${esc(id)}" aria-pressed="${me.follow === id}">${me.follow === id ? "따라가는 중" : "따라가기"}</button>`}</li>`;
+  const html = line("", myNameNow() || "나", me.f, myAv.headColor || "#B39DDB", actIcon({ dr: duelUi?.role(), br: me.brush, dn: me.act?.name === "dance", lp: me.act?.name === "laptop", rd: me.act?.name === "read", gn: me.act?.name === "gun", l: me.lie, st: me.seat }), true)
     + (near.length ? `<li class="pgrp near">근처 · 채팅 · 음성이 닿는 크루 <b>${near.length}</b></li>` + near.map((r) => line(r.id, r.name, r.s.f, dotColor(r.s.av, r.id), actIcon(r.s), false, true, r.s.vc)).join("") : "")
     + (far.length ? (near.length ? `<li class="pgrp">다른 크루</li>` : "") + far.map((r) => line(r.id, r.name, r.s.f, dotColor(r.s.av, r.id), actIcon(r.s), false)).join("") : near.length ? "" : `<li class="empty">다른 크루가 들어오면 여기에 보여요</li>`);
   if (html === plistKey) return; plistKey = html; plistBody.innerHTML = html;
@@ -3301,6 +3335,7 @@ function tickFollow(t) {
   if (!me.follow) return;
   const p = peerList.find((q) => q.peer === me.follow), s2 = p?.presence;
   if (!s2 || !FLOORS[s2.f]) { stopFollow(); showToast("따라가기를 멈췄어요", "그 크루가 나갔어요.", 2000); return; }
+  if (s2.f !== me.f && (isArena(s2.f) || isArena(me.f))) { stopFollow(); showToast("따라가기를 멈췄어요", isArena(s2.f) ? "그 크루는 대결 중이에요. /관전으로 볼 수 있어요." : "대결장에서는 따라갈 수 없어요.", 2600); return; }
   if (me.lie || me.seat) standUp();
   if (s2.f !== me.f) { // 다른 층: 가장 가까운 엘리베이터까지 걸어가서, 잠깐 기다렸다 타고, 그 층 엘리베이터에서 다시 걸어간다
     if (atCall()) {
@@ -3328,6 +3363,7 @@ function step(dt, t) {
   if (joy.on) { const m = Math.hypot(joy.x, joy.y); if (m > .18) { ix = joy.x; iy = joy.y; amag = clamp(m, .45, 1); } }   // 조이스틱: 민 만큼 빠르게
   if (keys.has("arrowleft") || keys.has("a")) ix -= 1; if (keys.has("arrowright") || keys.has("d")) ix += 1;
   if (keys.has("arrowup") || keys.has("w")) iy -= 1; if (keys.has("arrowdown") || keys.has("s")) iy += 1;
+  if (duelMove.lock) { ix = iy = 0; me.path = null; }   // 대결: 3·2·1 동안이나 종목이 잠그면 제자리
   let vx = 0, vy = 0;
   // 걷는 방향은 지금 시야 기준
   const ry = inside() ? cam.yawT : cam.yaw;
@@ -3339,7 +3375,7 @@ function step(dt, t) {
     if (gl.bag && !gl.bag.taken && Math.hypot(gl.x - me.x, gl.y - me.y) < 2.2) lieDown(gl.bag);
     else if (gl.seat && !gl.seat.taken && Math.hypot(gl.x - me.x, gl.y - me.y) < 1.4) sitDown(gl.seat);
   }
-  const sp = (running() ? 7.3 : 3.2) * amag, len = Math.hypot(vx, vy) || 1; vx = vx / len * sp * dt; vy = vy / len * sp * dt;
+  const sp = (running() ? 7.3 : 3.2) * amag * duelMove.speed, len = Math.hypot(vx, vy) || 1; vx = vx / len * sp * dt; vy = vy / len * sp * dt;
   // 걷기: 발 높이(올라선 가구 + 점프)에서 갈 수 있는지 본다. 책상·화분 같은 건 점프해서 올라서고, 가장자리를 넘으면 떨어진다
   const feet = me.up + me.jz, free = (x, y) => (me.lie || me.seat ? fits(floor, x, y) : canStand(floor, x, y, feet));
   // 끼임 방지: 몸이 벽·가구와 겹친 채 시작하면(예전 에스컬레이터 도착 자리) 어떤 방향으로도 못 움직였다 → 가장 가까운 빈 칸으로 옮긴다
@@ -3355,7 +3391,7 @@ function step(dt, t) {
   // 시야는 몸 방향을 따라가지 않는다: 마우스로만 돈다
   if (me.jz > 0 || me.jv > 0) { me.jv -= 15 * dt; me.jz += me.jv * dt; if (me.jz <= 0) { me.jz = 0; me.jv = 0; me.jumps = 0; } }
   // 트램펄린 위에서는 저절로 통통
-  if (me.jz <= 0 && me.jv <= 0 && floor.furn.some((o) => o.kind === "trampoline" && inRect(o, me.x, me.y))) { me.jv = 6.4; me.jc++; sendPresence(true); }
+  if (me.jz <= 0 && me.jv <= 0) { const tr = floor.furn.find((o) => (o.kind === "trampoline" || o.bounce) && inRect(o, me.x, me.y) && Math.abs(me.up - topOf(o)) < .05); if (tr) { me.jv = tr.bounce || 6.4; me.jc++; sendPresence(true); } }   // bounce: 대결장 트램펄린(기둥 위)은 더 높이
   $all(".skill[data-skill], .mBtn[data-skill]").forEach((b) => b.classList.toggle("on", me.act?.name === b.dataset.skill));
   npcSkillTimer -= dt; if (npcSkillTimer <= 0) { npcSkillTimer = 8 + Math.random() * 12; const idle = NPCS.filter((n) => n.f === me.f && !n.moving && !n.act && !n.talk && !n.lie); const n = idle[Math.floor(Math.random() * idle.length)]; if (n) startAct(n, ["draw", "draw", "wave", "heart"][Math.floor(Math.random() * 4)]); }
   if (t * 1000 - lastPortal > 1400) for (const p of floor.portals) if (inRect(p, me.x, me.y)) { lastPortal = t * 1000; goFloor(p.to, p.spawn); break; }
@@ -3404,6 +3440,7 @@ function render(dt, t) {
   for (const s of spinners) s.rotation.y += dt * .9;
   tickFridges(dt);
   syncPeers(dt, t);
+  duelUi?.frame(dt, t);
   const mp = meDoll.root.position;
   if (VIEW.mode === "first" || (VIEW.mode === "third" && cam.close)) myTag.style.display = "none"; else project(myTag, mp.x, mp.y - .05, mp.z, true);
   myBub.hidden = !(me.say && Date.now() - me.sayAt < 6000); if (!myBub.hidden) { myBub.textContent = me.say; project(myBub, mp.x, mp.y + DOLL, mp.z); }
@@ -3433,7 +3470,7 @@ fontsReady.then(() => {
   ready = true;
   // 화면 점검용 손잡이: 주소 끝에 ?debug를 붙였을 때만
   if (new URLSearchParams(location.search).has("debug")) (window as any).__ez = ezState; (window as any).__t = { peers, gl: renderer, Q, me, NPCS, cam, goFloor, setView, setMyAv, useSkill, jump, lieDown, sitDown, nearSeat, sendPresence, AVATAR_PRESETS, get floor() { return floor; } };
-  if (new URLSearchParams(location.search).has("debug")) Object.assign((window as any).__t, { city, camera, startrack });
+  if (new URLSearchParams(location.search).has("debug")) Object.assign((window as any).__t, { city, camera, startrack, duel: duelUi });
 });
 
 return { frame(dt: number) { if (!ready || inWorld) return; const t = performance.now() / 1000; step(Math.min(.05, dt), t); render(Math.min(.05, dt), t); startrack.frame(); } };

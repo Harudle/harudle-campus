@@ -23,7 +23,7 @@ function DollView({ doll }: { doll: Doll }) {
     else if (a.moving) m.phase += dt * (a.run ? STEP.run : STEP.walk)
     m.sit = THREE.MathUtils.damp(m.sit ?? 0, a.seated ? 1 : 0, 12, dt)
     m.sitH = a.seatH ?? 0.26
-    pose.current.act = a.act; pose.current.waving = a.waving; pose.current.air = a.air; pose.current.style = a.style; pose.current.actT = a.actT; pose.current.noHead = a.noHead
+    pose.current.act = a.act; pose.current.waving = a.waving; pose.current.air = a.air; pose.current.style = a.style; pose.current.actT = a.actT; pose.current.noHead = a.noHead; pose.current.arms = a.arms
     if (bob.current) {
       bob.current.position.y = a.moving && !a.air && !a.seated ? Math.abs(Math.sin(m.phase)) * m.amount * 0.08 : 0
       bob.current.rotation.x = THREE.MathUtils.damp(bob.current.rotation.x, a.moving && a.run ? 0.14 : 0, 10, dt)
