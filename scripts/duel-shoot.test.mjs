@@ -23,7 +23,7 @@ function setup() {
   const fc = { pa: 0, pb: 0 };
   // 위치 보내기(엔진 sendPresence처럼 fk · fc · fh를 늘 같이). 쏘면 fc가 하나 늘고 fh가 방향
   const pos = (pid, x, y, o = {}) => duel.presence(pid, { f: 22, x, y, u: 0, fk: 1, fc: fc[pid], fh: o.fh ?? 0, ...o });
-  const fire = (pid, x, y, dir) => { fc[pid]++; pos(pid, x, y, { fh: dir }); return t; };
+  const fire = (pid, x, y, dir, o = {}) => { fc[pid]++; pos(pid, x, y, { fh: dir, ...o }); return t; };   // o: fp(조준해 쏜 위아래) 등
   const hit = (pid, p) => duel.message(pid, { t: "duel:game", id: m.id, k: "hit", lift: 0, ...p });
   pos("pa", 20, 13.5); pos("pb", 28, 13.5); advance(1500);   // 경기장에 놓일 때 보내는 위치(엔진도 쏘기 전에 늘 위치가 먼저 간다). 시험의 상대 위치 창(쏘기 1초 전부터)에 섞이지 않게 흘려보낸다
   // 정석 한 발: a(20, 13.5)가 동쪽 b(28, 13.5)를 쏘고, 총알이 닿을 무렵 b가 그 자리에 있다
@@ -152,5 +152,34 @@ test("사격: 예전에 쏜 발을 더 가까이 걸어온 자리에서 쏜 것�
   const n = s.sent.length; s.hit("pa", { to: 1, dir: E, at });
   const miss = s.sent.slice(n).find((x) => x.pid === "pa" && x.k === "miss");
   assert.equal(miss?.why, "shot"); assert.equal(s.m.state.hp[1], SHOOT.HP);
+});
+
+// 헤드샷: 쏜 발(fp 위아래)을 위치 기록에 남기고, 브라우저가 말한 맞은 높이(hy)로 머리인지 본다
+function headShot(s, { fp, hy, head = 1 }) {
+  s.advance(300); s.pos("pb", 28, 13.5);
+  const at = s.fire("pa", 20, 13.5, E, fp === undefined ? {} : { fp });   // 쏜 순간 위치 기록에 위아래를 단다
+  s.advance(200); s.pos("pb", 28, 13.5); s.advance(200); s.pos("pb", 28, 13.5);
+  const n = s.sent.length; s.hit("pa", { to: 1, dir: E, at, hy, head });
+  return s.sent.slice(n).find((x) => x.pid === "pa" && x.t === "duel:game" && x.k === "hit");
+}
+
+test("사격: 체력 200 · 몸 15 · 머리는 1.75배(26)", () => {
+  assert.equal(SHOOT.HP, 200); assert.equal(Math.round(SHOOT.DMG * SHOOT.HEAD), 26);
+  const s = setup(); assert.deepEqual(s.m.state.hp, [200, 200]);
+});
+
+test("사격: 수평으로 겨눠 머리 높이를 맞히면 헤드샷(26), 모두에게 head로 알린다", () => {
+  const s = setup(); const h = headShot(s, { fp: 0, hy: .85 });
+  assert.equal(h?.head, 1); assert.equal(h.dmg, 26); assert.equal(s.m.state.hp[1], SHOOT.HP - 26);
+});
+
+test("사격: 아래를 겨눠 놓고 머리라고 하면 몸으로만(15) 받는다", () => {
+  const s = setup(); const h = headShot(s, { fp: -.3, hy: .9 });   // 10m 앞이면 총알은 바닥 아래를 지난다
+  assert.equal(h?.head, undefined); assert.equal(h.dmg, SHOOT.DMG); assert.equal(s.m.state.hp[1], SHOOT.HP - SHOOT.DMG);
+});
+
+test("사격: 위아래(fp)가 없는 예전 발이나 몸 높이(hy < 0.7)는 헤드샷이 아니다", () => {
+  const s = setup(); assert.equal(headShot(s, { hy: .9 }).dmg, SHOOT.DMG);
+  const s2 = setup(); assert.equal(headShot(s2, { fp: 0, hy: .5 }).dmg, SHOOT.DMG);
 });
 

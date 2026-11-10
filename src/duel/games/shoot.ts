@@ -30,6 +30,18 @@ registerFurn("scover", (G, o, k) => {
 const COLOR = [0xF15B5B, 0x2F80ED], CSS = ["#F15B5B", "#2F80ED"];   // 0번 자리 빨강(북서) · 1번 자리 파랑(남동)
 const BLOCK = new Set(["Digit1", "Digit2", "Digit3", "Digit4", "Numpad1", "Numpad2", "Numpad3", "Numpad4", "KeyZ"]);   // 경기 중 선수: 총을 내려놓게 하는 동작 키(그리기 · 인사 · 하트 · 춤 · 인벤토리 칸)
 const turn = (a: number, b: number) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
+// 맞힌 소리(FPS처럼): 몸은 짧은 '틱', 머리는 높은 '띵' 두 번. 첫 소리 때 오디오를 연다(이미 클릭해 쏜 뒤라 브라우저가 막지 않는다)
+let audio: AudioContext | null = null;
+function ping(head: boolean) {
+  try {
+    audio ||= new AudioContext(); if (audio.state === "suspended") void audio.resume();
+    const t0 = audio.currentTime;
+    for (const [f, at, len, vol] of head ? [[2400, 0, .07, .16], [3600, .05, .09, .12]] : [[1500, 0, .045, .12]]) {
+      const o = audio.createOscillator(), g = audio.createGain(); o.type = head ? "triangle" : "square"; o.frequency.value = f;
+      g.gain.setValueAtTime(vol, t0 + at); g.gain.exponentialRampToValueAtTime(.001, t0 + at + len); o.connect(g).connect(audio.destination); o.start(t0 + at); o.stop(t0 + at + len + .02);
+    }
+  } catch { }
+}
 
 /* ───── 경기 ───── */
 export const game: DuelGame = {
@@ -43,6 +55,14 @@ export const game: DuelGame = {
     const big = document.createElement("div"); big.className = "shootCount"; big.hidden = true; big.setAttribute("aria-live", "assertive"); document.body.append(big);
     const mark = document.createElement("div"); mark.className = "shootMark"; mark.hidden = true; document.body.append(mark);
     const flash = document.createElement("div"); flash.className = "shootFlash"; document.body.append(flash);
+    // 조준점 둘레 히트마커(X)와 데미지 숫자: 맞힌 순간 내 화면에서 바로(몸 흰색 · 머리 빨강), 쓰러뜨렸으면 서버가 받은 뒤 크게
+    const hitX = document.createElement("div"); hitX.className = "shootHitX"; hitX.hidden = true; document.body.append(hitX);
+    const dmgNum = document.createElement("div"); dmgNum.className = "shootDmg"; dmgNum.hidden = true; document.body.append(dmgNum);
+    let hitT = 0;
+    function hitmark(kind: "body" | "head" | "kill", text: string) {
+      hitX.className = `shootHitX ${kind}`; hitX.hidden = false; void hitX.offsetWidth; hitX.classList.add("on");
+      dmgNum.textContent = text; dmgNum.className = `shootDmg ${kind}`; dmgNum.hidden = false; void dmgNum.offsetWidth; dmgNum.classList.add("on"); hitT = performance.now();
+    }
     let key = "", bigKey = "", n = st().n ?? 1, armedAt = -9, told = false, markT = 0;
     const ak = mountAK(ctx);
     const shots: { dir: number; lift: number; at: number; used?: boolean }[] = [];
@@ -97,7 +117,8 @@ export const game: DuelGame = {
     ctx.onBulletHit((b) => {
       if (ctx.mine && b.mine && b.target === foe && live()) {
         const dir = Math.atan2(b.vel.x, b.vel.z), s = shots.filter((x) => !x.used && turn(x.dir, dir) < 1e-3).at(-1);
-        if (s) { s.used = true; ctx.send({ k: "hit", to: foe, dir: s.dir, at: s.at, lift: s.lift }); }
+        const d = ctx.doll(foe), hy = d ? b.pos.y - d.root.position.y : 0, head = hy >= SHOOT.HEAD_Y;   // 맞은 높이(상대 발에서 m)
+        if (s) { s.used = true; ctx.send({ k: "hit", to: foe, dir: s.dir, at: s.at, lift: s.lift, hy: Math.round(hy * 100) / 100, ...(head ? { head: 1 } : {}) }); hitmark(head ? "head" : "body", head ? `헤드샷 -${Math.round(SHOOT.DMG * SHOOT.HEAD)}` : `-${SHOOT.DMG}`); ping(head); }
       }
       return true;
     });
@@ -113,6 +134,7 @@ export const game: DuelGame = {
         } else ctx.canFire(false);   // 관전자는 쏘지 않는다(경기에 영향 없음)
         paintHud(); paintCount(); paintBars();
         if (!mark.hidden && performance.now() - markT > 650) mark.hidden = true;
+        if (!hitX.hidden && performance.now() - hitT > 420) { hitX.hidden = true; dmgNum.hidden = true; }
       },
       match(m) {
         const s = m.state || {};
@@ -129,8 +151,8 @@ export const game: DuelGame = {
       message(p) {
         if (p.k === "hit") {
           ctx.hitReact(p.to, p.dir);
-          if (p.to === seat) { flash.classList.remove("on"); void flash.offsetWidth; flash.classList.add("on"); }
-          else if (p.seat === seat) pop(mark, p.hp?.[p.to] > 0 ? "명중!" : "명중! 쓰러뜨렸어요", "hit");
+          if (p.to === seat) { flash.className = `shootFlash${p.head ? " head" : ""}`; void flash.offsetWidth; flash.classList.add("on"); if (p.head) ctx.toast("헤드샷을 맞았어요", `-${p.dmg}`, 900); }   // 머리에 맞으면 더 진하게
+          else if (p.seat === seat && !(p.hp?.[p.to] > 0)) { hitmark("kill", p.head ? "헤드샷! 쓰러뜨렸어요" : "쓰러뜨렸어요"); pop(mark, "처치!", "hit"); }
         }
         if (p.k === "miss") console.debug("[shoot] 서버가 받지 않은 명중", p.why);   // 화면 확인 때 판정 너그러움을 맞추려고 남긴다
         if (p.k === "round") {
@@ -146,7 +168,7 @@ export const game: DuelGame = {
         return seat === null ? `라운드 ${w[0]} : ${w[1]}` : `라운드 ${w[seat]} : ${w[1 - seat]}`;
       },
       stop() {
-        box.remove(); big.remove(); mark.remove(); flash.remove(); ak.stop(); ctx.tags(true);
+        box.remove(); big.remove(); mark.remove(); flash.remove(); hitX.remove(); dmgNum.remove(); ak.stop(); ctx.tags(true);
         for (const b of bars) { b.g.removeFromParent(); b.mats.forEach((x) => x.dispose()); b.geos.forEach((x) => x.dispose()); }
         if (ctx.mine && ctx.me.act === "gun") ctx.act(null);   // 경기가 끝나면 총을 넣는다
       },
