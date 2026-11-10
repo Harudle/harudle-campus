@@ -76,6 +76,7 @@ button.chip{cursor:pointer}
 #floorHud{top:calc(12px + env(safe-area-inset-top,0px));left:max(12px,env(safe-area-inset-left,0px));max-width:calc(100% - 24px)}
 #floorBadge b{font-size:24px;color:var(--brand-strong);margin-right:6px}
 #setBtn{width:40px;height:40px;padding:0;display:grid;place-items:center;font-size:19px}
+#walletChip{height:40px;display:flex;align-items:baseline;gap:4px;background:#EFE7FB}#walletChip b{font-size:22px}   /* 하루들 연동 크루의 컷 잔액 */
 button:focus-visible,input:focus-visible{outline:3px solid var(--brand);outline-offset:2px}
 #topRight{top:calc(12px + env(safe-area-inset-top,0px));right:max(12px,env(safe-area-inset-right,0px));justify-content:flex-end;max-width:calc(100% - 24px)}
 @media (max-width:640px){#topRight{top:calc(96px + env(safe-area-inset-top,0px))}}
