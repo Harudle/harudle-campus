@@ -564,5 +564,21 @@ body.touch .dcBtns kbd{display:none}
 .jumpHud .jt{font-weight:700;font-variant-numeric:tabular-nums;min-width:62px}
 .jumpHud .jp{display:flex;align-items:center;gap:3px}.jumpHud .jp em{font-style:normal;margin-right:3px}.jumpHud .jp.me em{font-weight:700}
 .jumpHud i{display:inline-block;width:10px;height:10px;border:1.5px solid var(--ink);border-radius:50%;background:#fff}.jumpHud i.on{background:#5FBF86}.jumpHud i.end{border-radius:2px}.jumpHud i.end.on{background:var(--brand)}
+/* 사격 대결(src/duel/games/shoot.ts): 라운드 · 체력 막대 · 이긴 라운드, 라운드 사이 3·2·1, 명중 표시, 맞았을 때 붉은 테 */
+.shootHud{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:4px 12px;background:rgba(255,255,255,.94);border:1.5px solid var(--ink);border-radius:12px;padding:4px 10px;font-size:15px}
+.shootHud .sr{font-weight:700}
+.shootHud .sp{display:flex;align-items:center;gap:5px}.shootHud .sp em{font-style:normal}.shootHud .sp.me em{font-weight:700}
+.shootHud .hp{display:block;width:92px;height:11px;border:1.5px solid var(--ink);border-radius:6px;background:#fff;overflow:hidden}.shootHud .hp b{display:block;height:100%;background:var(--c);transition:width .2s}
+.shootHud .hn{min-width:26px;font-variant-numeric:tabular-nums;font-size:13px}
+.shootHud .w{display:flex;gap:2px}.shootHud .w i{display:inline-block;width:9px;height:9px;border:1.5px solid var(--ink);border-radius:50%;background:#fff}.shootHud .w i.on{background:var(--c)}
+.shootCount{position:fixed;z-index:16;left:50%;top:38%;transform:translate(-50%,-50%);display:grid;justify-items:center;font-family:var(--hand);font-weight:700;font-size:min(120px,24vw);line-height:1;color:var(--brand);-webkit-text-stroke:5px var(--ink);paint-order:stroke fill;pointer-events:none;text-shadow:4px 6px 0 rgba(17,17,24,.35)}
+.shootCount small{font-size:.32em;-webkit-text-stroke:3px var(--ink)}
+.shootCount[hidden],.shootMark[hidden]{display:none}
+.shootCount.pop{animation:duelPop .5s ease-out}
+.shootMark{position:fixed;z-index:15;left:50%;top:calc(50% + 34px);transform:translateX(-50%);font-family:var(--hand);font-weight:700;font-size:22px;color:#fff;-webkit-text-stroke:3px var(--ink);paint-order:stroke fill;pointer-events:none}
+.shootFlash{position:fixed;inset:0;z-index:14;pointer-events:none;box-shadow:inset 0 0 90px 30px rgba(241,91,91,.55);opacity:0}
+.shootFlash.on{animation:shootFlash .45s ease-out}
+@keyframes shootFlash{0%{opacity:1}100%{opacity:0}}
+@media (max-width:640px){.shootHud .hp{width:64px}}
 @media (max-width:640px){#duelHud{top:calc(58px + env(safe-area-inset-top,0px))}.dhBar{font-size:15px;gap:6px;padding:4px 9px}#duelInbox{top:calc(150px + env(safe-area-inset-top,0px))}}
-@media (prefers-reduced-motion:reduce){#duelCount.pop{animation:none}.dcBar{transition:none}}
+@media (prefers-reduced-motion:reduce){#duelCount.pop,.shootCount.pop,.shootFlash.on{animation:none}.dcBar{transition:none}}
