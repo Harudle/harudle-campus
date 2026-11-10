@@ -100,7 +100,7 @@ export function createAuth(env = process.env, opts = {}) {
   const secure = origin.startsWith("https:");
   const cache = new Map();   // sid 해시 → { user, until }
   const wallet = createWallet({ env, store: enabled ? store : null, harudle, fetch: fetchFn, now, log });   // 지갑 '컷'. CAMPUS_WALLET=on일 때만
-  const shop = createShop({ env, store: enabled ? store : null, now, log });   // 컷 상점 · 착용. 지갑과 같은 스위치
+  const shop = createShop({ env, store: enabled ? store : null, feedReward: wallet.amount, now, log });   // 컷 상점 · 착용. 지갑과 같은 스위치
 
   const cookie = (name, value, maxAge, path = "/") => `${name}=${value}; Path=${path}; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure ? "; Secure" : ""}`;
   const redirect = (res, to, cookies = []) => {

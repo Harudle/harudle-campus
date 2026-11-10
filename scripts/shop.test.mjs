@@ -30,11 +30,14 @@ async function setup({ env = ENV, cuts = 0 } = {}) {
   return { auth, store, request, gearEvents };
 }
 
-test("카탈로그: 펫 3 · 효과 3 · 착용 3, sku는 겹치지 않고 슬롯은 아는 것만", () => {
-  assert.equal(CATALOG.length, 9);
-  assert.equal(new Set(CATALOG.map((it) => it.sku)).size, 9);
+test("카탈로그: 펫 7(레어 2) · 효과 5 · 착용 5, sku는 겹치지 않고 슬롯은 아는 것만", () => {
+  assert.equal(CATALOG.length, 17);
+  assert.equal(new Set(CATALOG.map((it) => it.sku)).size, 17);
   for (const it of CATALOG) { assert.ok(SLOTS.includes(it.slot)); assert.ok(Number.isInteger(it.price) && it.price > 0); assert.match(it.sku, /^[a-z_]{1,40}$/); }
-  assert.deepEqual(CATALOG.filter((it) => it.slot === "pet").map((it) => it.name), ["고양이", "판다", "여우"]);
+  assert.deepEqual(CATALOG.filter((it) => it.slot === "pet").map((it) => it.name), ["고양이", "판다", "여우", "얼룩말", "에뮤", "호랑이", "불곰"]);
+  assert.deepEqual(CATALOG.filter((it) => it.rare).map((it) => [it.sku, it.price]), [["pet_tiger", 30], ["pet_bear", 30]]);
+  assert.equal(CATALOG.filter((it) => it.slot === "fx").length, 5);
+  for (const sku of ["pet_cat", "pet_panda", "pet_fox", "fx_bubble", "fx_bang", "fx_sparkle", "head_gradcap", "neck_idcard", "held_manuscript"]) assert.ok(itemOf(sku), `이미 팔린 ${sku}는 없애지 않는다`);
   assert.equal(itemOf("nope"), null); assert.equal(itemOf(null), null);
 });
 
@@ -55,7 +58,7 @@ test("게스트는 상품 목록만 보고, 사거나 쓰지 못한다", async (
   const s = await setup({ cuts: 50 });
   const guest = { cookie: "" };
   const list = await s.request("GET", "/api/shop", undefined, guest);
-  assert.equal(list.status, 200); assert.equal(list.body.loggedIn, false); assert.equal(list.body.catalog.length, 9); assert.equal("balance" in list.body, false);
+  assert.equal(list.status, 200); assert.equal(list.body.loggedIn, false); assert.equal(list.body.catalog.length, 17); assert.deepEqual(list.body.earn, { reward: 10 }); assert.equal("balance" in list.body, false);
   assert.equal((await s.request("POST", "/api/shop/buy", { sku: "pet_cat" }, guest)).status, 401);
   assert.equal((await s.request("PUT", "/api/me/gear", { slot: "pet", sku: "pet_cat" }, guest)).status, 401);
   assert.equal((await s.request("POST", "/api/shop/buy", { sku: "pet_cat" }, { origin: "https://evil.example" })).status, 403);
@@ -78,6 +81,7 @@ test("구매: 서버 가격으로 차감하고 한 번만 산다", async () => {
   assert.equal((await s.request("POST", "/api/shop/buy", "not json")).status, 400);
 
   const shop = (await s.request("GET", "/api/shop")).body;
+  assert.deepEqual(shop.earn, { reward: 10, today: false });
   assert.equal(shop.balance, 1); assert.deepEqual(shop.owned, ["pet_cat", "fx_bang"]);
   const entries = (await s.request("GET", "/api/me/wallet")).body.entries;
   assert.deepEqual(entries.slice(0, 2).map((e) => [e.kind, e.refKey, e.amount, e.balanceAfter]), [["purchase", "fx_bang", -3, 1], ["purchase", "pet_cat", -10, 4]]);
@@ -148,4 +152,13 @@ test("Supabase 저장소: 구매는 DB 함수 하나로, 보유 · 착용 요청
 
   await s.saveGear({ userId: ME, gear: { fx: "fx_bang" }, at: T0 });
   assert.deepEqual(calls.at(-1), { url: "/campus_gear?on_conflict=harudle_user_id", method: "POST", prefer: "resolution=merge-duplicates,return=minimal", body: { harudle_user_id: ME, gear: { fx: "fx_bang" }, updated_at: "2026-11-10T03:00:00.000Z" } });
+});
+
+test("상점 응답의 earn.today: 오늘 피드 보상을 받았으면 true", async () => {
+  const s = await setup();
+  assert.deepEqual((await s.request("GET", "/api/shop")).body.earn, { reward: 10, today: false });
+  await s.store.grantReward({ userId: ME, kind: "feed_daily", refKey: "2026-11-09", amount: 10, at: T0 });
+  assert.equal((await s.request("GET", "/api/shop")).body.earn.today, false, "어제 것은 오늘이 아니다");
+  await s.store.grantReward({ userId: ME, kind: "feed_daily", refKey: "2026-11-10", amount: 10, at: T0 });
+  assert.equal((await s.request("GET", "/api/shop")).body.earn.today, true);
 });
