@@ -11,10 +11,10 @@ import { createMediaService } from "../server/media/index.js";
 
 const env = { LIVEKIT_URL: "ws://127.0.0.1:7880", LIVEKIT_API_KEY: "devkey", LIVEKIT_API_SECRET: "secret" };
 
-test("음성은 같은 층의 6칸 이내 또는 같은 방 사람에게만 전달한다", () => {
+test("음성은 같은 층의 12칸 이내 또는 같은 방 사람에게만 전달한다", () => {
   const me = { f: 12, x: 20, y: 20, rm: "" };
-  assert.equal(canHear(me, { f: 12, x: 26, y: 20, rm: "" }), true);
-  assert.equal(canHear(me, { f: 12, x: 26.1, y: 20, rm: "" }), false);
+  assert.equal(canHear(me, { f: 12, x: 32, y: 20, rm: "" }), true);
+  assert.equal(canHear(me, { f: 12, x: 32.1, y: 20, rm: "" }), false);
   assert.equal(canHear(me, { f: 13, x: 20, y: 20, rm: "" }), false);
   assert.equal(canHear(me, { f: 12, x: 20, y: 20, rm: "12:회의실 보이저" }), false);
   const meeting = { ...me, rm: "12:회의실 보이저" };
