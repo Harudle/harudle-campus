@@ -267,7 +267,7 @@ body.touch.chatting #topRight,body.touch.peopleOpen #topRight{display:none}
 .tslot{position:relative;width:46px;height:46px;border:2px solid var(--ink);border-radius:10px;background:var(--paper-2);display:grid;place-items:center}
 .tslot svg{width:32px;height:32px}.tslot i{position:absolute;left:3px;top:1px;font-style:normal;font-family:var(--body);font-size:9px;color:var(--brand-strong)}
 .tslot.vacant{border:2px dashed #D3D0DA;background:transparent}
-.tbox h4{margin:0 0 6px;font-size:26px}
+.tbox h4{margin:0 0 6px;font-size:26px;word-break:keep-all}
 .tdesc{margin:0 0 14px;font-family:var(--body);font-size:14px;line-height:1.55;color:#33313C;word-break:keep-all}
 .tdesc kbd{font-family:var(--body);font-size:12px;background:var(--brand-weak);border:1px solid var(--ink);border-radius:5px;padding:0 5px;color:var(--brand-strong)}
 .tart-link{background:#F4F0FD}.tart-link svg{width:200px;height:113px}
