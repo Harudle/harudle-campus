@@ -3,6 +3,7 @@
 import type { DuelGame, DuelSeat } from "../client";
 import { registerFurn } from "../furniture";
 import { SHOOT } from "../arena/shoot.mjs";
+import { esc } from "../shared.mjs";
 
 /* ───── 그리기: 엄폐물(1.2m, 총알은 1.25m 아래를 막는다) ───── */
 registerFurn("scover", (G, o, k) => {
@@ -25,7 +26,6 @@ registerFurn("scover", (G, o, k) => {
 
 const COLOR = [0xF15B5B, 0x2F80ED], CSS = ["#F15B5B", "#2F80ED"];   // 0번 자리 빨강(북서) · 1번 자리 파랑(남동)
 const BLOCK = new Set(["Digit1", "Digit2", "Digit3", "Digit4", "Numpad1", "Numpad2", "Numpad3", "Numpad4", "KeyZ"]);   // 경기 중 선수: 총을 내려놓게 하는 동작 키(그리기 · 인사 · 하트 · 춤 · 인벤토리 칸)
-const esc = (v: unknown) => String(v ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
 const turn = (a: number, b: number) => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
 
 /* ───── 경기 ───── */

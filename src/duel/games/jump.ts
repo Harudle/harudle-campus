@@ -4,6 +4,7 @@ import type { DuelGame } from "../client";
 import { registerFurn } from "../furniture";
 import { JUMP_COURSES } from "../arena/jump.mjs";
 import { fmtMs } from "../shared.mjs";
+import { inRect } from "../../engine/world";
 
 /* ───── 그리기: 구름 바닥에서 솟은 기둥 ───── */
 const COLS = [0x9CC8F5, 0xC9B8F0, 0xFFC98A, 0x9EDDB9];   // 코스마다 기둥 색
@@ -42,7 +43,6 @@ export const game: DuelGame = {
   id: "jump",
   start(ctx) {
     const c = JUMP_COURSES[ctx.match.state?.course ?? 0], last = c.pads.length - 1;
-    const inPad = (p, x: number, y: number) => x >= p.x && x < p.x + p.w && y >= p.y && y < p.y + p.h;
     let reached = ctx.mine ? ctx.match.state?.cp?.[ctx.seat] ?? 0 : 0;
     if (ctx.mine && ctx.match.phase === "playing" && reached > 0) { const s = c.spot[reached]; ctx.place(s[0], s[1], s[2]); }   // 다시 접속: 마지막 발판에서 이어서
     const box = document.createElement("div"); box.className = "jumpHud"; ctx.hud.append(box);
@@ -63,7 +63,7 @@ export const game: DuelGame = {
         if (!ground) return;
         if (m.up < .05) { back(["앗, 떨어졌어요", reached ? `${reached}번 체크포인트에서 다시 해요` : "출발대에서 다시 해요"]); return; }   // 구름 바닥에 닿았다
         const next = c.pads[reached + 1];
-        if (next && Math.abs(m.up - next.top) < .06 && inPad(next, m.x, m.y)) {
+        if (next && Math.abs(m.up - next.top) < .06 && inRect(next, m.x, m.y)) {
           reached++; ctx.sync(); ctx.send({ k: "pad", i: reached });   // 위치를 먼저 보내야 서버가 발판 근처인지 본다
           if (reached < last) ctx.toast(`체크포인트 ${reached}`, "떨어지면 여기서 다시 해요", 1400);
         }

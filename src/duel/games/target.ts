@@ -5,10 +5,10 @@ import type * as THREE from "three";
 import { registerFurn } from "../furniture";
 import { TARGET_BOOTHS, TARGET_RAIL } from "../arena/target.mjs";
 import { TARGET, targetAt } from "../target-path.mjs";
+import { clamp } from "../../engine/world";
 
 const SEAT = ["#2F6FDB", "#D9534F"];   // 경기 틀(.dhP)과 같은 선수 색
 const WOOD = 0xC98E5A, CREAM = "#FFF6E2", RED = "#E5484D";
-const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
 /* ───── 사격장 가구 ───── */
 const texes = new Map<string, any>();

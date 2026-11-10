@@ -15,8 +15,9 @@ function crosses(r, x0, y0, x1, y1, m = .2) {
   }
   return true;
 }
-// 쏜 순간들: 종이 총(fk)이고 fc가 바로 앞 위치와 달라진 위치(쏠 때마다 엔진이 위치를 바로 보낸다)
-const shotsOf = (hist) => hist.filter((e, i) => e.fk && (i === 0 || e.fc !== hist[i - 1].fc));
+// 쏜 순간들: 종이 총(fk)이고 fc가 바로 앞 위치와 달라진 위치(쏠 때마다 엔진이 위치를 바로 보낸다). 맨 앞 기록은 비교할 앞이 없어 쏜 순간으로 치지 않는다
+// (예전 발의 fc를 그대로 단 채 더 가까이 걸어온 위치를 쏜 자리로 우기지 못하게)
+const shotsOf = (hist) => hist.filter((e, i) => i > 0 && e.fk && e.fc !== hist[i - 1].fc);
 
 // 맞힘 확인: 받으면 { shot }, 아니면 { why } (why: round · self · bad · late · fast · shot · behind · far · cover · aim)
 export function judge(m, seat, p, api) {
@@ -27,7 +28,7 @@ export function judge(m, seat, p, api) {
   if (p.at > t + 300 || p.at < t - 2000 || p.at < st.at - 100) return { why: "late" };   // 지난 라운드 · 너무 오래된 발 · 앞날 시각
   if (p.at - sh.lastAt[seat] < SHOOT.GAP) return { why: "fast" };
   // 그 발을 쏜 순간: 방향이 같고(fh는 0.01로 반올림돼 온다) 아직 안 쓴 발 중 서버에 닿은 시각이 쏜 시각과 가장 가까운 것
-  const shot = shotsOf(api.history(m, seat, 3000)).filter((e) => e.f === m.floor && turn(e.fh, p.dir) < .006 && e.at >= p.at - 300 && e.at <= p.at + 1500 && e.fc > sh.lastFc[seat])
+  const shot = shotsOf(api.history(m, seat, Infinity)).filter((e) => e.f === m.floor && turn(e.fh, p.dir) < .006 && e.at >= p.at - 300 && e.at <= p.at + 1500 && e.fc > sh.lastFc[seat])
     .reduce((a, e) => (!a || Math.abs(e.at - p.at) < Math.abs(a.at - p.at) ? e : a), null);
   if (!shot) return { why: "shot" };
   if (shot.at - sh.lastShot[seat] < SHOOT.GAP / 2) return { why: "fast" };   // 서버에 닿은 간격으로도(보낸 시각을 꾸며도 걸린다. 네트워크 흔들림만큼 봐준다)

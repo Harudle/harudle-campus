@@ -18,3 +18,5 @@ export const DUEL = { INVITE: 30000, COOLDOWN: 60000, MOVE: 1200, COUNTDOWN: 300
 export const DUEL_REASON = { finish: "도착", timeout: "시간 종료", forfeit: "기권", disconnect: "연결 끊김", ko: "KO", score: "점수" };
 // 0:42.31
 export const fmtMs = (ms) => { const s = Math.max(0, ms) / 1000; return `${Math.floor(s / 60)}:${(s % 60).toFixed(2).padStart(5, "0")}`; };
+// 화면에 넣을 글을 HTML로 이스케이프(대결 화면들이 같이 쓴다)
+export const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));

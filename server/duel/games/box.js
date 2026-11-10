@@ -31,7 +31,7 @@ export default {
       return;
     }
     if (p.k !== "punch") return;
-    const kind = p.kind, P = BOX.PUNCH[kind], t = api.now(), b = m.box;
+    const kind = p.kind, P = Object.hasOwn(BOX.PUNCH, kind) ? BOX.PUNCH[kind] : null, t = api.now(), b = m.box;
     if (!P || m.state.guard[seat]) return;   // 가드를 올린 채로는 못 친다(브라우저도 막는다)
     if (t - b.at[seat][kind] < P.gap * SLACK || t - b.any[seat] < BOX.GAP * SLACK) return;   // 너무 빠르면 없던 일로
     b.at[seat][kind] = t; b.any[seat] = t;

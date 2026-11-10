@@ -5,7 +5,8 @@ import type * as THREE from "three";
 import type { DuelGame, DuelSeat } from "../client";
 import { registerFurn } from "../furniture";
 import { BOX, BOX_RING } from "../arena/box.mjs";
-import { inside } from "../../engine/world";
+import { inside, clamp, lerp } from "../../engine/world";
+import { esc } from "../shared.mjs";
 
 const COL = [0x2F6FDB, 0xD9534F];   // 자리 색(경기 틀과 같게): 0 파랑 코너 · 1 빨강 코너
 const NAME = { jab: "잽", str: "스트레이트" };
@@ -44,8 +45,6 @@ const STANCE = [-1.0, .42], GUARD = [-2.55, .3], REACH = [-1.55, .1];
 const HAND_OF = { jab: 1, str: 0 }, DUR = { jab: .26, str: .36 };
 // 1인칭 글러브(카메라 기준 자리): 서기 · 가드 · 뻗기, x는 오른손 기준(왼손은 반대)
 const FP = { stance: [.2, -.24, -.5], guard: [.1, -.08, -.36], reach: [.06, -.12, -.8] };
-const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
 export const game: DuelGame = {
   id: "box",
@@ -203,7 +202,6 @@ export const game: DuelGame = {
   },
 };
 
-const esc = (v: unknown) => String(v ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
 
 /* ───── 화면 모양(이 종목 것만이라 여기서 붙인다) ───── */
 if (typeof document !== "undefined" && !document.getElementById("boxStyle")) {

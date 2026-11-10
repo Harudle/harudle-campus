@@ -24,6 +24,7 @@ function setup() {
   const pos = (pid, x, y, o = {}) => duel.presence(pid, { f: 22, x, y, u: 0, fk: 1, fc: fc[pid], fh: o.fh ?? 0, ...o });
   const fire = (pid, x, y, dir) => { fc[pid]++; pos(pid, x, y, { fh: dir }); return t; };
   const hit = (pid, p) => duel.message(pid, { t: "duel:game", id: m.id, k: "hit", lift: 0, ...p });
+  pos("pa", 20, 13.5); pos("pb", 28, 13.5); advance(1500);   // 경기장에 놓일 때 보내는 위치(엔진도 쏘기 전에 늘 위치가 먼저 간다). 시험의 상대 위치 창(쏘기 1초 전부터)에 섞이지 않게 흘려보낸다
   // 정석 한 발: a(20, 13.5)가 동쪽 b(28, 13.5)를 쏘고, 총알이 닿을 무렵 b가 그 자리에 있다
   // b가 쏠 때는 자리를 바꿔 서쪽으로 쏜다. 돌려주는 것: 이번 발에 서버가 보낸 miss(받았으면 undefined)
   const shot = (from = "pa", { sx = from === "pa" ? 20 : 28, sy = 13.5, tx = from === "pa" ? 28 : 20, ty = 13.5, dir = from === "pa" ? E : W, to = from === "pa" ? 1 : 0, ...o } = {}) => {
@@ -124,7 +125,7 @@ test("사격: 90초가 지나면 체력이 많은 쪽이 라운드를 가져가�
 
 test("사격: 비기는 판만 이어지면 정한 판 수에서 라운드 수로 끝낸다(같으면 무승부)", () => {
   const s = setup();
-  for (let i = 0; i < SHOOT.MAX_ROUNDS; i++) s.advance(SHOOT.READY + SHOOT.ROUND + 100);
+  for (let i = 0; i < SHOOT.MAX_ROUNDS * 2 && s.m.phase === "playing"; i++) s.advance((SHOOT.READY + SHOOT.ROUND) / 2);   // 결과가 뜰 때까지(정한 판 수보다 오래 끌지 않는지는 rounds로 본다)
   assert.equal(s.m.phase, "result"); const end = s.last("pa", "duel:end"); assert.equal(end.winner, null); assert.equal(end.summary.rounds, SHOOT.MAX_ROUNDS);
   assert.equal(s.duel.records.users[UA].d, 1);
 });
@@ -139,3 +140,16 @@ test("사격장 배치: 엄폐물은 경기장 안에 겹치지 않고, 선수 �
   for (const [x, y] of SHOOT_ARENA.watch) assert.ok(!inField(x, y), "관전 자리는 경기장 밖");
   const [a, b] = SHOOT_ARENA.spawns; assert.equal(a[0] + b[0], SHOOT_FIELD.x * 2 + SHOOT_FIELD.w); assert.equal(a[1] + b[1], SHOOT_FIELD.y * 2 + SHOOT_FIELD.h, "두 자리는 가운데를 두고 마주 본다");
 });
+
+test("사격: 예전에 쏜 발을 더 가까이 걸어온 자리에서 쏜 것처럼 우기면 받지 않는다", () => {
+  const s = setup();
+  s.advance(300); s.pos("pb", 28, 13.5);
+  s.fire("pa", 4, 13.5, E);   // 멀리서 한 발(16칸 넘어 닿지 않는다)
+  s.advance(3500);            // 쏜 순간이 3초 창 밖으로 밀려난다
+  s.pos("pa", 20, 13.5, { fh: E }); const at = s.now();   // fc는 그대로인 채 가까이 걸어왔다
+  s.advance(200); s.pos("pb", 28, 13.5);
+  const n = s.sent.length; s.hit("pa", { to: 1, dir: E, at });
+  const miss = s.sent.slice(n).find((x) => x.pid === "pa" && x.k === "miss");
+  assert.equal(miss?.why, "shot"); assert.equal(s.m.state.hp[1], SHOOT.HP);
+});
+

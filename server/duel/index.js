@@ -31,6 +31,7 @@ export function createDuel({ peers, send = () => { }, now = Date.now, random = M
   const nameOf = (pid) => str(peers.get(pid)?.name, 16) || "크루";
   const pendingOf = (u) => [...invites.values()].filter((i) => i.from.u === u || i.to.u === u);
   const busy = (u) => seats.has(u) || pendingOf(u).length > 0;
+  const sending = (u) => [...invites.values()].some((i) => i.from.u === u);   // 내가 보낸 신청이 걸려 있다
   const people = (m) => [...m.players.map((p) => p.peer), ...m.watchers.values()];
 
   /* ───── 경기 정보 · 보내기 ───── */
@@ -108,6 +109,7 @@ export function createDuel({ peers, send = () => { }, now = Date.now, random = M
   function tick() {
     const t = now();
     for (const inv of [...invites.values()]) if (inv.expiresAt <= t) { invites.delete(inv.id); inviteState(inv, "expired"); }
+    for (const [k, at] of lastInvite) if (t - at >= DUEL.COOLDOWN) lastInvite.delete(k);   // 기다림이 끝난 기록은 버린다
     for (const m of [...matches.values()]) {
       const g = games[m.game];
       if (m.phase === "countdown" || m.phase === "playing") {
@@ -148,7 +150,7 @@ export function createDuel({ peers, send = () => { }, now = Date.now, random = M
         if (!games[g.id] || !arenaOfGame(g.id)) return oops(pid, "not_ready", `${g.name}은 아직 준비 중이에요`);
         if (!to || !tu) return oops(pid, "unknown", "그 크루를 찾지 못했어요");
         if (tu === u) return oops(pid, "self", "나 자신에게는 신청할 수 없어요");
-        if (busy(u)) return oops(pid, "busy_me", s ? "경기나 관전이 끝난 뒤에 신청해 주세요" : "보낸 신청이 끝난 뒤에 다시 해 주세요");
+        if (seats.has(u) || sending(u)) return oops(pid, "busy_me", s ? "경기나 관전이 끝난 뒤에 신청해 주세요" : "보낸 신청이 끝난 뒤에 다시 해 주세요");
         if (prefs.get(tu) === false) return oops(pid, "off", `${nameOf(msg.to)}님은 지금 대결 신청을 받지 않아요`);
         const key = `${u}>${tu}`, wait = (lastInvite.get(key) ?? -Infinity) + DUEL.COOLDOWN - t;
         if (wait > 0) return oops(pid, "cooldown", `${nameOf(msg.to)}님에게는 ${Math.ceil(wait / 1000)}초 뒤에 다시 신청할 수 있어요`);
@@ -173,7 +175,7 @@ export function createDuel({ peers, send = () => { }, now = Date.now, random = M
       case "duel:watch": {
         if (!msg.peer) { if (!unwatch(u, pid)) oops(pid, "not_watching", "관전 중이 아니에요"); return; }
         const tu = peers.get(msg.peer)?.uid, ts = tu && seats.get(tu);
-        if (!ts || ts.seat === null || ts.match.phase === "closed") return oops(pid, "no_match", "그 크루는 지금 경기 중이 아니에요");
+        if (!ts || ts.seat === null || (ts.match.phase !== "countdown" && ts.match.phase !== "playing")) return oops(pid, "no_match", "그 크루는 지금 경기 중이 아니에요");
         if (s && s.seat !== null) return oops(pid, "playing", "경기 중에는 관전할 수 없어요");
         if (s?.match === ts.match) return sync(ts.match);
         if (pendingOf(u).length) return oops(pid, "pending", "대결 신청이 끝난 뒤에 관전해 주세요");
@@ -199,15 +201,16 @@ export function createDuel({ peers, send = () => { }, now = Date.now, random = M
     }
   }
 
-  // 위치가 올 때마다(app.js "p"): 선수의 최근 위치를 3초치 남긴다
+  // 위치가 올 때마다(app.js "p"): 선수의 최근 위치를 3초치(+ 그 바로 앞 하나) 남긴다
   function presence(pid, p) {
     const u = peers.get(pid)?.uid, s = u && seats.get(u); if (!s || s.seat === null || !p) return;
     const pl = s.match.players[s.seat]; if (pl.peer !== pid) return;
-    const t = now(); pl.hist.push({ ...p, at: t }); while (pl.hist.length && pl.hist[0].at < t - 3000) pl.hist.shift();
+    const t = now(); pl.hist.push({ ...p, at: t }); while (pl.hist.length > 1 && pl.hist[1].at < t - 3000) pl.hist.shift();   // 창 바로 앞 기록 하나는 남긴다(쏜 순간 비교용)
   }
   // 연결이 끊겼을 때(app.js close, peers에서 지우기 전에 부른다)
   function left(pid) {
     const u = peers.get(pid)?.uid; if (!u) return;
+    if (![...peers].some(([q, p]) => q !== pid && p.uid === u)) prefs.delete(u);   // 그 사람의 마지막 연결이면 설정도 버린다(다시 붙으면 브라우저가 다시 보낸다)
     for (const inv of [...invites.values()]) if (inv.from.peer === pid || inv.to.peer === pid) { invites.delete(inv.id); inviteState(inv, "canceled"); }
     const s = seats.get(u); if (!s) return;
     if (s.seat === null) { if (s.match.watchers.get(u) === pid) { s.match.watchers.delete(u); seats.delete(u); sync(s.match); } return; }

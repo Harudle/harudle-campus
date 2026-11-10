@@ -180,3 +180,30 @@ test("종목 규칙 모듈을 바꿔 끼울 수 있다(setup · message · tick 
   s.duel.message("pb", { t: "duel:game", id: "other", n: 5 }); assert.equal(m.state.n, 1, "다른 경기 id는 무시");
   s.duel.message("pb", { t: "duel:game", id: m.id, n: 2 }); assert.equal(s.last("pa", "duel:end").winner, UB);
 });
+
+test("초대를 받은 채로도 다른 크루에게 신청할 수 있고, 내가 보낸 신청이 걸려 있으면 못 한다", () => {
+  const s = setup();
+  s.duel.message("pa", { t: "duel:invite", to: "pb", game: "jump" });
+  s.duel.message("pb", { t: "duel:invite", to: "pc", game: "jump" });
+  assert.equal(s.last("pb", "duel:invite-state")?.state, "pending", "받은 초대가 있어도 신청은 된다");
+  s.duel.message("pb", { t: "duel:invite", to: "pa", game: "jump" }); assert.equal(s.last("pb", "duel:error").code, "busy_me", "보낸 신청이 걸려 있으면 막는다");
+});
+
+test("결과가 뜬 경기는 관전할 수 없다(곧 닫혀 바로 튕기므로)", () => {
+  const s = setup(); startMatch(s); s.advance(DUEL.MOVE + DUEL.COUNTDOWN + 100);
+  s.duel.message("pa", { t: "duel:forfeit" }); assert.equal(s.duel.matchOf(UA).phase, "result");
+  s.duel.message("pc", { t: "duel:watch", peer: "pa" }); assert.equal(s.last("pc", "duel:error").code, "no_match");
+  assert.equal(s.duel.matchOf("p_cccccccccccccccc"), null);
+});
+
+test("지난 신청 기록은 기다림이 끝나면 지우고, 설정은 마지막 연결이 끊길 때 지운다", () => {
+  const s = setup();
+  s.duel.message("pa", { t: "duel:invite", to: "pb", game: "jump" }); s.duel.message("pa", { t: "duel:cancel" });
+  s.advance(DUEL.COOLDOWN + 200);
+  s.duel.message("pa", { t: "duel:invite", to: "pb", game: "jump" }); assert.equal(s.last("pa", "duel:invite-state").state, "pending", "기다림이 끝나면 다시 신청");
+  s.duel.message("pc", { t: "duel:prefs", accept: false }); s.duel.left("pc"); s.peers.delete("pc");
+  s.peers.set("pc2", { uid: "p_cccccccccccccccc", name: "씨", presence: null });
+  s.duel.message("pa", { t: "duel:cancel" }); s.duel.message("pa", { t: "duel:invite", to: "pc2", game: "jump" });
+  assert.equal(s.last("pa", "duel:invite-state")?.state, "pending", "다시 붙으면 브라우저가 설정을 다시 보낼 때까지 기본(받기)");
+});
+

@@ -316,6 +316,7 @@ wss.on("connection", (ws, request) => {
     if (raw.length > 4096 && msg.t !== "media:cf") return;
     const me = peers.get(id); if (!me) return;
     if (msg.t === "name" && !me.verified) { me.name = clean(msg.name, 16) || "크루"; dirty = true; }
+    if (msg.t === "p" && !me.uid && +msg.p?.f >= 21) return;   // 다시 붙자마자 오는 대결장 위치: 누구인지(uid) 정해진 뒤 다시 온다(먼저 받으면 11층으로 튀어 보인다)
     if (msg.t === "p") {
       const previousArea = me.presence && mediaArea(me.presence);
       me.presence = sanitize(msg.p, duel.arenaOf(me.uid)); duel.presence(id, me.presence);

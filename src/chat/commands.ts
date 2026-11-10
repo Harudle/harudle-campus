@@ -92,6 +92,7 @@ const COMMANDS: Command[] = [
   // 1:1 대결(docs/duel.md)
   { names: ["대결", "duel"], args: "이름 [종목]", desc: "1:1 대결 신청 (점프맵 · 사격 · 과녁 · 복싱)", run: (a, h) => {
     if (!a) { h.note("대결할 크루 이름을 같이 써 주세요 (예: /대결 포비 점프맵)"); return; }
+    const whole = h.peers().find((p) => p.name === a); if (whole) { h.duel.invite(whole, undefined); return; }   // 쓴 글 전체가 이름이면 그 사람("고양이 복싱" 같은 이름)
     // 끝 단어가 종목이면 종목, 아니면 이름 전체(띄어쓰기 있는 이름도 된다)
     const sp = a.lastIndexOf(" "), g = sp > 0 ? findGame(a.slice(sp + 1)) : null;
     const [p, rest] = splitTarget(h, g ? a.slice(0, sp).trim() : a); if (!p) return;

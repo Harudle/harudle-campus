@@ -3,7 +3,7 @@
 import type * as THREE from "three";
 import type { Doll } from "../engine/dolls";
 import { W, H, S, wx, wz, tX, tY, floorY, FLOORS } from "../engine/world";
-import { DUEL, DUEL_GAMES, DUEL_REASON, duelGame, isArena, fmtMs } from "./shared.mjs";
+import { DUEL, DUEL_GAMES, DUEL_REASON, duelGame, isArena, fmtMs, esc } from "./shared.mjs";
 import { JUMP_COURSES } from "./arena/jump.mjs";
 import { furnKit, type FurnKit } from "./furniture";
 import { GAMES } from "./games";
@@ -88,7 +88,6 @@ export type DuelHost = {
 };
 
 const LS = { get(k: string) { try { return localStorage.getItem(k); } catch { return null; } }, set(k: string, v: string | null) { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch { } } };
-const esc = (v: unknown) => String(v ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
 const el = (tag: string, cls: string, html = "") => { const e = document.createElement(tag); e.className = cls; e.innerHTML = html; return e; };
 
 export function mountDuel(host: DuelHost) {

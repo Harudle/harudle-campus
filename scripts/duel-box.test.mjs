@@ -117,3 +117,11 @@ test("복싱: 관전자는 주먹도 가드도 못 한다", () => {
   assert.deepEqual(s.m.state.hp, [100, 100]); assert.deepEqual(s.m.state.guard, [0, 0]); assert.equal(s.games("pa").length, 0);
   s.punch("pa", "jab"); assert.equal(s.last("pc", "duel:game").hit, 1, "관전자도 주먹을 본다");
 });
+
+test("복싱: 표에 없는 펀치 종류(constructor 같은 이름)는 없던 일", () => {
+  const b = bout(); b.at("pa", 27.5, 20, E); b.at("pb", 28.5, 20, W);
+  for (const kind of ["constructor", "toString", "__proto__", "hasOwnProperty"]) b.punch("pa", kind);
+  assert.deepEqual(b.m.state.hp, [BOX.HP, BOX.HP]);
+  b.punch("pa", "jab"); assert.equal(b.m.state.hp[1], BOX.HP - BOX.PUNCH.jab.dmg, "진짜 잽은 그대로 들어간다");
+});
+
