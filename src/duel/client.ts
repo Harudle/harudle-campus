@@ -57,7 +57,7 @@ export type DuelCtx = {
   fire(aim?: number | null): void                  // 종이 총 한 발(엔진 연사 간격 0.25초). aim: 방향(없으면 보는 쪽)
   shootPaper(x: number, y: number, dir: number, lift: number, who?: DuelWho): void   // 종이 총알 모양만(다른 사람이 쏜 것 보여 주기)
   hitReact(who: DuelWho, dir: number): void        // 맞은 흔들림
-  onFire(fn: (s: { x: number; y: number; dir: number; lift: number; at: number }) => void): void   // 내가 쐈을 때
+  onFire(fn: (s: { x: number; y: number; dir: number; lift: number; pitch: number | null; at: number }) => void): void   // 내가 쐈을 때(pitch: 조준해 쏜 위아래, 위에서 볼 땐 null)
   onBullet(fn: (b: DuelBullet) => boolean | void): void      // 날아가는 총알 한 걸음마다(true면 거기서 맞은 것으로 멈춘다: 과녁 등)
   onBulletHit(fn: (b: DuelBullet) => boolean | void): void   // 총알이 사람에게 맞았을 때(true면 엔진 기본 처리를 안 한다)
   send(payload: Record<string, unknown>): void     // 서버로 duel:game(선수만 받는다)
@@ -385,7 +385,7 @@ export function mountDuel(host: DuelHost) {
     role: () => (match ? (match.seat === null ? 2 : 1) : 0),
     // 대결장에서는 같은 경기 방(ar) 사람만 보인다
     hides: (s: any) => s.f === me.f && isArena(me.f) && (s.ar !== (match?.ar ?? lastAr) || (match?.seat != null && s.dr === 2)),   // 다른 경기 방 · 선수 화면의 관전자
-    fired(dir: number, lift: number) { if (hooks.fire.length) { const s = { x: me.x, y: me.y, dir, lift, at: now() }; for (const fn of hooks.fire) safe(() => fn(s)); } },
+    fired(dir: number, lift: number, pitch: number | null = null) { if (hooks.fire.length) { const s = { x: me.x, y: me.y, dir, lift, pitch, at: now() }; for (const fn of hooks.fire) safe(() => fn(s)); } },
     bullet(w: any, pos: THREE.Vector3) { if (!hooks.bullet.length) return false; const b = bulletOf(w, pos); let hit = false; for (const fn of hooks.bullet) safe(() => { if (fn(b)) hit = true; }); return hit; },
     bulletHit(w: any, target: any, pos: THREE.Vector3) { if (!hooks.hit.length) return false; const b = bulletOf(w, pos, target); let eat = false; for (const fn of hooks.hit) safe(() => { if (fn(b)) eat = true; }); return eat; },
     // 채팅 명령어(/대결 · /수락 · /거절 · /관전 · /종료 · /기권 · /전적)
