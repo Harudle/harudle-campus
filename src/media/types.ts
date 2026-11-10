@@ -20,5 +20,5 @@ export interface MediaProvider {
   microphoneTrack(): MediaStreamTrack | null;   // 지금 보내는 내 마이크(말하는 중 표시용)
   setScreenShare(enabled: boolean): Promise<void>;
   resumeAudio(): Promise<void>;
-  disconnect(): Promise<void>;
+  disconnect(keepMicrophone?: boolean): Promise<void>;   // keepMicrophone: 방을 옮겨 다시 들어갈 거라 마이크는 끄지 않는다(LiveKit만)
 }

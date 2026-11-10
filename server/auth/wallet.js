@@ -1,6 +1,7 @@
 // 캠퍼스 지갑 '컷' (하루들 연동 크루만)
 //
 //   하루들 공개 피드에 네컷만화를 올린 날마다 하루 한 번 컷을 준다(한국 날짜 기준).
+//   처음 연동한 크루에게는 연동 선물로 한 번 더 준다(기본 15컷, 첫 정산 때. 회원마다 한 번만).
 //   캠퍼스 서버가 하루들 공개 피드(GET /api/v1/feeds)를 직접 읽어 글쓴이 ID가 연동 회원 ID와 같은지 본다.
 //   브라우저가 "올렸어요"라고 알리는 값은 믿지 않는다. 하루들 서비스 DB · 백엔드는 건드리지 않는다.
 //
@@ -14,6 +15,7 @@ const FUTURE_SKEW_MS = 5 * 60_000;
 const KST_MS = 9 * 3600e3;
 export const CURRENCY = "컷";
 export const FEED_DAILY = "feed_daily";
+export const LINK_FIRST = "link_first";   // 연동 선물: ref_key = "first" 하나뿐이라 DB 고유 제약으로 회원마다 한 번
 
 export const kstDate = (ms) => new Date(ms + KST_MS).toISOString().slice(0, 10);
 
@@ -23,9 +25,17 @@ function readAmount(value) {
   return n;
 }
 
+function readBonus(value) {
+  const n = Number(value ?? 15);
+  if (!Number.isInteger(n) || n < 0 || n > 1000) throw new Error("invalid_campus_wallet_link_bonus");
+  return n;
+}
+
 export function createWallet({ env = {}, store, harudle, fetch: fetchFn = globalThis.fetch, now = () => Date.now(), log = console }) {
   const enabled = env.CAMPUS_WALLET === "on" && !!store?.grantReward;
   const amount = readAmount(env.CAMPUS_WALLET_FEED_REWARD);
+  const bonus = readBonus(env.CAMPUS_WALLET_LINK_BONUS);   // 0이면 연동 선물을 주지 않는다
+  const welcomed = new Set();   // 이 워커가 이미 연동 선물을 DB에 확인한 회원
   let scan = { at: 0, feeds: null, pending: null };
   const settled = new Map();   // "회원|날짜" → 이 워커가 이미 DB에 확인한 것(같은 요청을 되풀이하지 않으려고)
   const lastSettle = new Map();
@@ -59,6 +69,15 @@ export function createWallet({ env = {}, store, harudle, fetch: fetchFn = global
         .catch((e) => { scan.pending = null; throw new Error(String(e?.message).startsWith("harudle") ? e.message : `harudle ${e?.message}`); });
     }
     return scan.pending;
+  }
+
+  // 연동 선물: 처음 정산할 때 한 번. 이미 받았으면 DB가 걸러 낸다(amount 0). 하루들 피드와 상관없이 준다
+  async function welcome(userId) {
+    const me = String(userId).toLowerCase();
+    if (!bonus || welcomed.has(me)) return { amount: 0, balance: null };
+    const r = await store.grantReward({ userId, kind: LINK_FIRST, refKey: "first", amount: bonus, meta: {}, at: now() });
+    welcomed.add(me); if (welcomed.size > 20000) welcomed.clear();
+    return { amount: r.granted ? bonus : 0, balance: r.balance };
   }
 
   // 이 회원이 피드를 올린 한국 날짜마다 한 번씩 지급한다. 이미 준 날짜는 DB가 걸러 낸다
@@ -101,19 +120,20 @@ export function createWallet({ env = {}, store, harudle, fetch: fetchFn = global
       const t = now(), last = lastSettle.get(u.id) || 0;
       if (t - last < SETTLE_GAP_MS) { json(res, 200, { currency: CURRENCY, balance: (await store.getWallet(u.id)).balance, granted: [] }); return true; }
       lastSettle.set(u.id, t); if (lastSettle.size > 5000) lastSettle.clear();
+      const gift = await welcome(u.id), given = gift.amount ? { welcome: gift.amount } : {};   // welcome: 방금 받은 연동 선물(없으면 빠진다)
       let result;
       try { result = await settle(u.id); }
       catch (e) {
         lastSettle.delete(u.id);
         const upstream = String(e?.message).startsWith("harudle");
         log.error?.(`[wallet] settle failed: ${e?.message}`);
-        json(res, 502, { error: upstream ? "harudle" : "store" });
+        json(res, 502, { error: upstream ? "harudle" : "store", ...(gift.amount ? { ...given, balance: gift.balance } : {}) });   // 하루들이 잠깐 안 돼도 연동 선물은 들어간다
         return true;
       }
-      json(res, 200, { currency: CURRENCY, ...result });
+      json(res, 200, { currency: CURRENCY, ...result, ...given });
     } catch (e) { log.error?.("[wallet] failed:", e.message); json(res, 502, { error: "store" }); }
     return true;
   }
 
-  return { enabled, amount, handle, settle };
+  return { enabled, amount, bonus, handle, settle };
 }

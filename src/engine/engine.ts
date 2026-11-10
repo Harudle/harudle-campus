@@ -1355,6 +1355,75 @@ function buildFurn(G, o, fl) {
       box(gift, .26, .26, .26, 0xFFD43B, 0, 0, 0, { line: .008 }); box(gift, .27, .27, .05, 0x7B5BD6, 0, -.005, 0, { line: 0 }); box(gift, .05, .27, .27, 0x7B5BD6, 0, -.005, 0, { line: 0 });
       for (const k of [-1, 1]) ball(gift, .06, 0x7B5BD6, k * .05, .29, 0, { line: .004 }).scale.set(1.3, .8, .8);
       break; }
+    case "hbshop": { // 하루들 컷 상점(서쪽을 본다): 뚜껑 연 미니어처 가게처럼. 분홍 체크 바닥 위 분홍 뒷벽에 줄무늬 차양과 노란 간판,
+      // 차양 아래 두 단 선반에 펫이 줄지어 앉아 있고, 물방울 테두리 분홍 카운터 위엔 계산대 · 컷 동전 병 · 유리 진열장 속 꼬마 하루들.
+      // 앞에는 투명 회전판 위에서 대표 장식을 입은 하루들과 펫이 빙글빙글, 모서리엔 노란 별 쿠션. 간판 · 뒷벽 · 카운터를 누르면 컷 상점
+      const g2 = new THREE.Group(); g2.position.set(x, 0, z); g2.rotation.y = -Math.PI / 2; G.add(g2);   // 그룹 안: +x 남쪽, +z 앞(서쪽)
+      const live = new THREE.Group(); live.position.copy(g2.position); live.rotation.copy(g2.rotation); live.userData.noMerge = true; G.add(live);   // 인형 · 회전판은 묶지 않는다
+      const SW = d - .12, SD = w - .12, back = -SD / 2, front = SD / 2, PINK = 0xF7B8D0, PINK_D = 0xE77FA6, PINK_L = 0xFCDDE8, LILAC = 0xC9B8F0, YEL = 0xFFD43B, base = .12;
+      const shop = (m) => { m.userData.noMerge = true; m.userData.shop = true; linkBoards.push(m); return m; };
+      // 바닥: 흰 받침 위 분홍 · 흰 체크
+      box(g2, SW, base, SD, 0xFFFFFF, 0, 0, 0, { line: .012 });
+      const n = 8, t = SW / n; for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) if ((i + j) % 2) box(g2, t, .01, SD / n, PINK_L, -SW / 2 + (i + .5) * t, base, -SD / 2 + (j + .5) * SD / n, { line: 0, cast: false });
+      // 뒷벽 · 옆 날개벽(앞쪽은 탁 트였다)
+      const wallH = 2.5; box(g2, SW, wallH, .14, PINK_L, 0, base, back + .07, { line: .012 });
+      shop(board(g2, SW - .08, wallH - .06, shopWallTex, 0, base + wallH / 2, back + .145));
+      for (const k of [-1, 1]) { box(g2, .12, 1.6, SD * .42, PINK_L, k * (SW / 2 - .06), base, back + SD * .21, { line: .01 }); box(g2, .16, .06, SD * .42 + .04, PINK_D, k * (SW / 2 - .06), base + 1.6, back + SD * .21, { line: .006 }); }
+      // 줄무늬 차양: 뒷벽 꼭대기에서 앞으로 비스듬히, 앞 끝은 물결 테두리
+      const awn = new THREE.Group(); awn.position.set(0, base + wallH - .05, back + .12); awn.rotation.x = .38; g2.add(awn);
+      const stripes = 10, sw2 = (SW + .1) / stripes, depth = 1.05;
+      for (let i = 0; i < stripes; i++) { const sx = -(SW + .1) / 2 + (i + .5) * sw2, c = i % 2 ? 0xFFFFFF : PINK_D;
+        box(awn, sw2, .04, depth, c, sx, 0, depth / 2, { line: .004 }); ball(awn, sw2 / 2, c, sx, 0, depth, { line: .004 }).scale.set(1, .35, .8); }
+      // 간판: 차양 위 노란 판
+      box(g2, 2.1, .7, .08, 0xFFFFFF, 0, base + wallH + .02, back + .1, { line: .01 });
+      shop(board(g2, 2.02, .62, shopSignTex, 0, base + wallH + .37, back + .145));
+      // 선반 두 단(차양 아래)과 그 위에 앉은 펫들
+      const shelves = [[base + .95, ["cat", "panda", "fox", "zebra"], .36], [base + 1.6, ["emu", "tiger", "bear"], .3]] as [number, PetKind[], number][];
+      for (const [sy, kinds, sc] of shelves) {
+        box(g2, SW - .5, .05, .36, 0xFFFFFF, 0, sy, back + .32, { line: .008 }); box(g2, SW - .5, .05, .02, PINK_D, 0, sy, back + .5, { line: 0 });
+        kinds.forEach((kind, i) => { const p = makePet(kind); p.root.scale.setScalar(sc); p.root.position.set(-(SW - .9) / 2 + (i + .5) * (SW - .9) / kinds.length, sy + .05, back + .3); live.add(p.root); });
+      }
+      // 카운터: 분홍 몸통 + 흰 물방울 테두리, 앞면에 가게 이름
+      const cw = SW * .64, cx = SW * .14, cz = back + 1.3, ch = .82;
+      box(g2, cw, ch, .56, PINK, cx, base, cz, { line: .012 }); box(g2, cw + .06, .06, .62, 0xFFFFFF, cx, base + ch, cz, { line: .008 });
+      for (let k = 0; k < 11; k++) { const bx = cx - cw / 2 + .08 + k * (cw - .16) / 10; ball(g2, .055, 0xFFFFFF, bx, base + ch - .02 - (k % 3) * .04, cz + .29, { line: .004 }).scale.set(1, 1.5, .6); }
+      shop(board(g2, cw - .3, .3, signTex("하루들 컷 상점", { bg: "#F7B8D0", fg: "#FFFFFF", size: 58, w: 768, h: 120 }), cx, base + ch * .45, cz + .285));
+      const top = base + ch + .06;
+      // 계산대(보라 몸통 + 노란 화면) · 컷 동전 병
+      box(g2, .34, .2, .28, LILAC, cx + cw / 2 - .28, top, cz - .02, { line: .008 }); const scr = box(g2, .22, .13, .03, YEL, cx + cw / 2 - .28, top + .2, cz - .1, { line: .005 }); scr.rotation.x = -.5;
+      const jx = cx + cw / 2 - .7; cyl(g2, .11, .11, .24, 0xF4FAFF, jx, top, cz, { mat: toon(0xF4FAFF, { opacity: .45 }), line: .006, cast: false }); for (let k = 0; k < 5; k++) cyl(g2, .075, .075, .025, YEL, jx + (k % 2) * .02, top + .01 + k * .03, cz, { line: .003 });
+      // 유리 진열장: 장식을 하나씩 입은 꼬마 하루들 셋
+      const vx = cx - cw / 2 + .55; box(g2, .9, .58, .36, 0xF4FAFF, vx, top, cz, { mat: toon(0xF4FAFF, { opacity: .28 }), line: .006, cast: false }); box(g2, .94, .03, .4, 0xFFFFFF, vx, top + .58, cz, { line: .004 });
+      SHOP_MINIS.forEach((gear, i) => { const m = makeChar(AVATAR_PRESETS[(i + 1) % AVATAR_PRESETS.length].config, gear); m.root.scale.setScalar(.3); m.root.position.set(vx - .28 + i * .28, top + .01, cz); live.add(m.root); });
+      // 앞: 분홍 받침 위 투명 회전판에 대표 하루들 · 레어 펫. 둘레를 꼬마 별 셋이 함께 돌고, 받침 앞에 이름표
+      const starGeo = (r, depth = .08) => { const sh = new THREE.Shape(); for (let i = 0; i < 10; i++) { const a = Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; sh[i ? "lineTo" : "moveTo"](Math.cos(a) * rr, Math.sin(a) * rr); } sh.closePath(); return new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: true, bevelSize: r * .12, bevelThickness: r * .12, bevelSegments: 2 }); };
+      ([[makeChar(SHOP_HERO_LOOK, SHOP_HERO), -SW * .27, .9, "하트 효과 · 사원증 · 아아", "#FFA9BD"], [makePet(SHOP_PET), SW * .3, .72, "★ 레어 호랑이", "#FFD43B"]] as [any, number, number, string, string][]).forEach(([doll, px, sc, label, bg]) => {
+        const pz = front - .62;
+        cyl(g2, .4, .44, .1, PINK, px, base, pz, { line: .008 }); cyl(g2, .44, .44, .03, 0xFFFFFF, px, base + .1, pz, { line: .005 });
+        cyl(live, .42, .42, .04, 0xF4FAFF, px, base + .13, pz, { mat: toon(0xF4FAFF, { opacity: .55 }), line: .005, cast: false });
+        const spin = new THREE.Group(); spin.position.set(px, base + .17, pz); live.add(spin); doll.root.scale.setScalar(sc); spin.add(doll.root); spinners.push(spin);
+        [[.62, .5, YEL], [.5, .95, PINK_D], [.56, 1.3, LILAC]].forEach(([r, sy, c], k) => { const st = solidMesh(starGeo(.07, .03), c, { line: .006 }); const a = k * 2.1; st.position.set(Math.cos(a) * r, sy, Math.sin(a) * r); st.rotation.y = -a; spin.add(st); });
+        const tag = board(g2, .78, .17, signTex(label, { bg, fg: "#111118", size: 40, w: 600, h: 130 }), px, base + .08, pz + .45); tag.userData.noMerge = true; tag.userData.shop = true; linkBoards.push(tag);
+      });
+      // 노란 별 쿠션(앞 모서리에 비스듬히)
+      const sm = solidMesh(starGeo(.3), YEL, { line: .012 }); sm.position.set(-SW / 2 + .4, base + .3, front - .25); sm.rotation.set(-.25, .4, .2); g2.add(sm);
+      break; }
+    case "hbwelcome": { // 연동 선물 안내판(서쪽을 본다): 가는 기둥 위 둥근 노란 판 "처음 연동하면 15컷 선물!", 발치엔 리본 묶은 선물 상자. 누르면 연동 안내
+      const g3 = new THREE.Group(); g3.position.set(x, 0, z); g3.rotation.y = -Math.PI / 2 + (o.tilt || 0); G.add(g3);
+      cyl(g3, .2, .24, .06, 0xFFFFFF, 0, 0, 0, { line: .006 }); cyl(g3, .03, .03, 1.3, 0xE77FA6, 0, .06, 0, { line: .004 });
+      const rim = cyl(g3, .46, .46, .06, 0xE77FA6, 0, 0, 0, { line: .01 }); rim.rotation.x = Math.PI / 2; rim.position.set(0, 1.78, -.02);   // 분홍 테두리 판(세운 원판)
+      const m = new THREE.Mesh(new THREE.CircleGeometry(.42, 40), new THREE.MeshBasicMaterial({ map: welcomeTex, side: THREE.DoubleSide })); m.position.set(0, 1.78, .015); m.userData.noMerge = true; m.userData.welcome = true; g3.add(m); linkBoards.push(m);
+      box(g3, .3, .26, .3, 0xFFD43B, .3, 0, .1, { line: .008 }); box(g3, .31, .27, .05, 0xE77FA6, .3, -.005, .1, { line: 0 }); box(g3, .05, .27, .31, 0xE77FA6, .3, -.005, .1, { line: 0 });
+      for (const k of [-1, 1]) ball(g3, .055, 0xE77FA6, .3 + k * .05, .29, .1, { line: .004 }).scale.set(1.3, .8, .8);
+      break; }
+    case "hbmenu": { // 컷 상점 메뉴 입간판(서쪽을 본다): 분홍 A자 판에 파는 것과 사는 법. 누르면 컷 상점
+      const g3 = new THREE.Group(); g3.position.set(x, 0, z); g3.rotation.y = -Math.PI / 2 + (o.tilt || 0); G.add(g3);
+      for (const s of [1, -1]) {
+        const leaf = new THREE.Group(); leaf.position.z = s * .17; leaf.rotation.x = -s * .17; g3.add(leaf);
+        box(leaf, .62, 1.02, .04, 0xE77FA6, 0, 0, 0, { line: .006 });
+        const m = board(leaf, .56, .94, shopMenuTex, 0, .54, s * .025, s > 0 ? 0 : Math.PI); m.userData.noMerge = true; m.userData.shop = true; linkBoards.push(m);
+      }
+      break; }
     case "painteasel": { // 함께 그리는 이젤(서쪽을 본다): 큰 나무 이젤에 네컷 틀 캔버스. 붓을 든 채 누르면 그린다
       const g2 = new THREE.Group(); g2.position.set(x, 0, z); g2.rotation.y = -Math.PI / 2 + (o.tilt || 0); G.add(g2);
       for (const [lx, lz, rx2] of [[-.4, .14, .1], [.4, .14, -.1], [0, -.4, 0]] as [number, number, number][]) { const l = box(g2, .06, 1.9, .06, C.woodD, lx, 0, lz, { line: .006 }); l.rotation.z = rx2; if (lz < 0) l.rotation.x = .28; }
@@ -1799,7 +1868,7 @@ const fwDot = canvasTex(32, 32, (g) => { const r = g.createRadialGradient(16, 16
 // F: 폭죽 / 좌클릭: 종이 총(꺼내 들었을 때). aim은 위에서 볼 때 누른 곳 쪽 방향
 function fireFirework(paper = false, aim: number | null = null) {
   if (paper && (me.act?.name !== "gun" || duelMove.noFire)) return;
-  const now = performance.now(); if (now < fwReady) return; fwReady = now + (paper ? 250 : 600);
+  const now = performance.now(); if (now < fwReady) return; fwReady = now + (paper ? duelMove.fireGap : 600);
   const fh = aim ?? (inside() ? cam.yaw + Math.PI : me.h); me.fh = Math.atan2(Math.sin(fh), Math.cos(fh)); me.fc++; me.fk = paper ? 1 : 0;   // fh는 -π~π로: 카메라를 여러 바퀴 돌리면 서버(±50으로 자른다)와 방향이 어긋난다
   if (me.fk) { me.h = me.fh; me.kickAt = now / 1000; shootPaper(me.f, me.x, me.y, me.fh, me.up + me.jz, me); duelUi?.fired(me.fh, me.up + me.jz); } else launchFirework(me.f, me.x, me.y, me.fh, me.up + me.jz);
   sendPresence(true);
@@ -1888,7 +1957,7 @@ function startAct(a, name, seed?) {
   a.act = { name, t: 0, seed: seed ?? Math.floor(Math.random() * 1e6) };
   if (name === "dance") a.act.style = a.act.seed % DANCES.length;
   if (name === "draw") { a.board = makeBoard(a.act.seed); a.board.npc = NPCS.includes(a); scene.add(a.board.mesh); }
-  if (name === "laptop" || name === "coffee" || name === "gun" || name === "read") { a.prop = name === "laptop" ? makeLaptop() : name === "gun" ? makePaperGun() : name === "read" ? makeBook(a.act.seed) : makeIcedCoffee(); scene.add(a.prop); }
+  if (name === "laptop" || name === "coffee" || name === "gun" || name === "read") { a.prop = name === "laptop" ? makeLaptop() : name === "gun" ? makeGunProp() : name === "read" ? makeBook(a.act.seed) : makeIcedCoffee(); scene.add(a.prop); }
 }
 // 춤 열 가지: Z를 누를 때마다 방금 춘 것 말고 하나를 고른다(번호는 seed % 10, 다른 크루에겐 dn = 번호 + 1로 간다)
 const DANCES = ["통통 춤", "파도 춤", "빙글빙글 춤", "만세 점프", "로봇 춤", "디스코", "트위스트", "박수 춤", "헤드뱅", "셔플"];
@@ -1950,6 +2019,35 @@ function makeIcedCoffee() { // 테이크아웃 아이스 아메리카노: 위가
   for (let k = 0; k < 9; k++) { const a = k * 2.4, y = .03 + (k * .037) % .1, rr = rb + (rt - rb) * (y / H) + .001; const d = new THREE.Mesh(new THREE.SphereGeometry(.0028, 6, 4), drop); d.position.set(Math.cos(a) * rr, y, Math.sin(a) * rr); g.add(d); }   // 겉면 물방울
   return g;
 }
+const makeGunProp = () => { const g = duelMove.gun === "ak" ? makePaperAK() : makePaperGun(); g.userData.look = duelMove.gun || "paper"; return g; };
+// 대결 사격용 종이 AK-47: 크라프트지 몸통 · 진한 판지 총열 · 앞으로 휜 바나나 탄창 · 나무색 판지 개머리와 손잡이. 앞(+z)을 겨눈다
+const SIGHT_Y = .1;   // 종이 AK 조준기 끝 높이(총 기준)
+// 장전 동작(r 0~1, 대결 사격 2.2초): 총을 옆으로 기울여 내리고 → 탄창이 빠져 아래로 → 새 탄창이 올라와 끼워지고 → 장전 손잡이를 당겨 툭 → 다시 든다
+function reloadPose(r) {
+  const ease = (a, b) => { const x = clamp((r - a) / (b - a), 0, 1); return x * x * (3 - 2 * x); }, up = ease(0, .14) - ease(.86, 1);
+  const out = ease(.16, .36), back = ease(.46, .68);
+  return { tilt: up * .6, dip: up * .07, pitch: up * .22, mag: out - back, magVis: out < 1 || back > 0, rack: r > .72 && r < .84 ? Math.sin((r - .72) / .12 * Math.PI) : 0 };
+}
+function makePaperAK() {
+  const g = new THREE.Group(), kraft = 0xE7D5B5, dark = 0x3A3540, wood = 0xC99A62;
+  box(g, .06, .075, .3, kraft, 0, -.04, .02, { line: .007 });                         // 몸통(리시버)
+  box(g, .052, .03, .24, kraft, 0, .03, .02, { line: .006 });                         // 덮개
+  box(g, .058, .055, .17, wood, 0, -.03, .26, { line: .006 });                        // 손잡이 덮개(나무)
+  for (const [r, len, y, z] of [[.013, .3, 0, .36], [.008, .2, .035, .3]] as [number, number, number, number][]) { const t = cyl(g, r, r, len, dark, 0, 0, 0, { line: r > .01 ? .004 : 0 }); t.rotation.x = Math.PI / 2; t.position.set(0, y, z); }   // 총열 · 가스관
+  // 조준기: 끝이 같은 높이(SIGHT_Y)라 오른쪽 클릭 조준에서 가늠자 홈 사이로 가늠쇠 끝이 조준점에 온다
+  box(g, .032, .022, .03, dark, 0, .008, .47, { line: .003 });                        // 가늠쇠 받침
+  box(g, .009, SIGHT_Y - .03, .009, 0xF15B5B, 0, .03, .47, { line: .002 });          // 가늠쇠(빨간 기둥, 끝이 SIGHT_Y)
+  for (const s of [-1, 1]) box(g, .006, SIGHT_Y - .036, .014, dark, s * .017, .03, .47, { line: 0 });   // 양옆 보호 귀(가늠쇠보다 조금 낮게)
+  box(g, .056, .018, .03, dark, 0, .045, .08, { line: .003 });                        // 가늠자 받침
+  for (const s of [-1, 1]) box(g, .018, SIGHT_Y - .063, .022, dark, s * .016, .063, .08, { line: .002 });   // 가늠자 U자 홈(가운데가 빈 두 기둥)
+  const mag = new THREE.Group(); g.add(mag); g.userData.mag = mag;   // 탄창은 따로 묶는다(장전할 때 빠졌다 끼워진다)
+  for (let i = 0; i < 3; i++) { const m = box(mag, .044, .07, .045, 0xD9C29C, 0, -.12 - i * .055, .1 + i * .02, { line: .005 }); m.rotation.x = .25 + i * .12; }   // 앞으로 휜 탄창(세 조각)
+  const grip = box(g, .045, .1, .05, wood, 0, -.15, -.07, { line: .006 }); grip.rotation.x = -.3;   // 손잡이
+  box(g, .012, .035, .05, dark, 0, -.085, -.02, { line: 0 });                          // 방아쇠울
+  const stock = box(g, .05, .07, .22, wood, 0, -.075, -.24, { line: .007 }); stock.rotation.x = .12;   // 개머리
+  g.traverse((m: any) => { if (m.isMesh) m.castShadow = false; });
+  return g;
+}
 function makePaperGun() { // 종이 총(파티 팡팡 총): 노란 몸통, 분홍 손잡이, 앞으로 벌어지는 하늘색 나팔 총구에 색종이가 살짝 삐져나온다. 앞(+z)을 겨눈다
   const g = new THREE.Group();
   box(g, .07, .07, .2, 0xFFD43B, 0, -.035, 0, { line: .008 });
@@ -1966,7 +2064,8 @@ function shootPaper(f, x, y, dir, lift = 0, shooter = null) {
   const fx = Math.sin(dir), fz = Math.cos(dir), rx = Math.cos(dir), rz = -Math.sin(dir);
   const m = solidMesh(BULLET_GEO, 0xFAF8F2, { line: .01, cast: false });
   m.position.set(wx(x) - rx * .2 + fx * .6, floorY(f) + heightAt(FLOORS[f], x, y) + lift + .6, wz(y) + rz * .2 + fz * .6); scene.add(m);
-  fireworks.push({ kind: "bullet", m, v: new THREE.Vector3(fx * 19.5, .6, fz * 19.5), spin: new THREE.Vector3(9, 4, 7), t: 0, f, shooter, hit: false });
+  const sp = duelMove.bulletSpeed && f === me.f ? duelMove.bulletSpeed : 19.5;   // 대결 사격장 AK는 더 빠르다
+  fireworks.push({ kind: "bullet", m, v: new THREE.Vector3(fx * sp, .6, fz * sp), spin: new THREE.Vector3(9, 4, 7), t: 0, f, shooter, hit: false });
 }
 // 맞으면 머리가 맞은 방향으로 휙 젖혀졌다가 두세 번 흔들리며 돌아온다(0.8초)
 function hitReact(a, dir) { a.hitAt = performance.now() / 1000; a.hitDir = dir || 0; }
@@ -2000,9 +2099,16 @@ function tickAct(a, dt) {
   if (a.prop) { // 노트북은 앉은 무릎 앞 책상 높이에, 커피는 오른손에 들고 입으로 가져간다
     const h = a.doll.turn.rotation.y, fx = Math.sin(h), fz = Math.cos(h), rx = Math.cos(h), rz = -Math.sin(h); a.prop.visible = a.doll.root.visible || fp; a.prop.rotation.set(0, h, 0);
     if (a.act.name === "gun") { // 오른손(몸의 -x 쪽, 뒤에서 보면 화면 오른쪽)에 쥐고 앞으로 겨눈다. 쏘면 잠깐 뒤로 튄다
-      const kick = Math.max(0, (a.kickAt ?? -9) + .18 - performance.now() / 1000) * 1.4;
-      a.prop.position.set(p.x - rx * .2 + fx * (.32 - kick), p.y + .6, p.z - rz * .2 + fz * (.32 - kick)); a.prop.rotation.x = -kick * 2;
-      if (fp) { fpAt(a.prop, .2, -.2, -.55 + kick * .5); a.prop.rotateX(-kick * 2); } }   // 1인칭: 화면 오른쪽 아래에서 조준점 쪽으로
+      if (a.prop.userData.look !== (duelMove.gun || "paper")) { a.prop.removeFromParent(); a.prop = makeGunProp(); scene.add(a.prop); a.prop.visible = a.doll.root.visible || fp; a.prop.rotation.set(0, h, 0); }   // 대결 사격장에 들어오고 나가면 총 모양이 바뀐다
+      const ak = a.prop.userData.look === "ak", kick = Math.max(0, (a.kickAt ?? -9) + (ak ? .08 : .18) - performance.now() / 1000) * (ak ? 1.2 : 1.4);
+      a.prop.position.set(p.x - rx * .2 + fx * ((ak ? .26 : .32) - kick), p.y + (ak ? .66 : .6), p.z - rz * .2 + fz * ((ak ? .26 : .32) - kick)); a.prop.rotation.x = -kick * 2;
+      const rl = ak && a === me && duelMove.reload >= 0 ? reloadPose(duelMove.reload) : null, mg = a.prop.userData.mag;   // 내 장전 동작(다른 크루 것은 안 보낸다)
+      if (mg) { mg.position.y = rl ? -.32 * rl.mag : 0; mg.visible = !rl || rl.magVis; }
+      if (fp && ak) { // 1인칭 AK: 오른쪽 아래(허리) ↔ 오른쪽 클릭이면 가늠자 · 가늠쇠가 조준점에 오도록 화면 가운데로(조준 정도 adsK로 부드럽게)
+        const k = duelMove.adsK; fpAt(a.prop, lerp(.17, 0, k), lerp(-.23, -SIGHT_Y, k) - (rl?.dip ?? 0), lerp(-.36, -.64, k) + kick * lerp(.6, .3, k) + (rl?.rack ?? 0) * .05); a.prop.rotateX(-kick * lerp(2, .8, k));   // 조준: 눈에서 멀리 내려 몸통은 화면 아래로만 보이고 조준기만 가운데에
+        if (rl) { a.prop.rotateZ(rl.tilt); a.prop.rotateX(rl.pitch); } }
+      else if (rl) { a.prop.rotateZ(rl.tilt); a.prop.position.y -= rl.dip; }   // 3인칭에서 보는 내 장전
+      else if (fp) { if (ak) fpAt(a.prop, .17, -.23, -.36 + kick * .6); else fpAt(a.prop, .2, -.2, -.55 + kick * .5); a.prop.rotateX(-kick * 2); } }   // 1인칭: 화면 오른쪽 아래에서 조준점 쪽으로(AK는 어깨에 붙여 더 가까이)
     else if (a.act.name === "laptop") { { const st = a.seat, desk = st && typeof st === "object" ? st.desk ?? (st.h == null ? .44 : null) : .44, base = p.y - seatLift(st), d = desk == null ? .22 : .42;   // 책상이 있으면 그 위에, 없으면(벤치·소파) 무릎 위에
       a.prop.position.set(p.x + fx * d, desk == null ? p.y + .33 : base + desk + .002, p.z + fz * d); } a.prop.rotation.y = h + Math.PI; const ct = a.prop.userData.code; if (ct) ct.offset.y = (ct.offset.y - dt * .06) % 1; }   // 화면이 나를 본다, 코드는 위로 흘러간다
     else if (a.act.name === "read") { // 책: 의자 앞에 책상이 있으면 독서대에 세워 두고, 빈백에 누우면 얼굴 위로 든다(책상 없는 벤치·소파는 손에 든다). 4초마다 한 장 넘긴다
@@ -2320,7 +2426,7 @@ function showFloors() {
 
 /* ════════════════ 8. 나 · 강아지 · 다른 크루 ════════════════ */
 let duelUi: DuelUi | null = null;   // 1:1 대결(src/duel/client.ts). 아래 cmdHost 앞에서 붙인다
-const duelMove = { lock: false, speed: 1, noFire: false, ghost: null as null | { x: number; y: number; w: number; h: number } };   // 대결 종목이 정하는 것: 걷기 · 점프 잠금, 걷기 빠르기, 종이 총 막기. ghost: 관전자가 막힘 없이 다니는 사각형
+const duelMove = { lock: false, speed: 1, noFire: false, jumps: 2, view: null as null | string, noTags: false, gun: "", fireGap: 250, bulletSpeed: 0, ads: false, adsK: 0, reload: -1, ghost: null as null | { x: number; y: number; w: number; h: number } };   // view: 이 시점만(V 막음) · noTags: 이름표 숨김 · gun: "ak"면 이 층 종이 총을 AK 모양으로 · fireGap: 연사 간격(ms) · bulletSpeed: 종이 총알 m/s(0이면 기본 19.5)   // 대결 종목이 정하는 것: 걷기 · 점프 잠금, 걷기 빠르기, 종이 총 막기, 연달아 뛸 수 있는 횟수(1이면 더블 점프 없음). ghost: 관전자가 막힘 없이 다니는 사각형
 const LS = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch { } } };
 
 /* ════════════════ 하루들 부스: 함께 그리는 이젤 · 붓 ════════════════
@@ -2426,6 +2532,54 @@ const instaTex = canvasTex(512, 512, (g, w, h) => {
   g.fillStyle = "#FFFFFF"; g.font = `800 38px "Pretendard","Apple SD Gothic Neo",sans-serif`; g.fillText("인스타 바로가기 ↗", w / 2, 429);
 });
 // 하루들 선물 입간판: 하루들에서 해 보면 풀리는 귀 장식 둘(LOCKED_OPTIONS)과 받는 법
+// 하루들 부스 컷 상점: 앞 회전판의 대표 하루들 · 펫, 카운터 유리 진열장의 꼬마 하루들(장식 하나씩)
+// 회전판은 가게의 얼굴: 분홍 원피스에 리본 · 윙크한 하루들이 두근거리는 하트 효과 · 사원증 · 아아를, 옆엔 레어 호랑이
+const SHOP_HERO_LOOK: AvatarConfig = { ...AVATAR_PRESETS[0].config, head: "ribbon", face: "wink", outfit: "tunic", held: "none", outfitColor: "#FFA9BD", headColor: "#F0568A" };
+const SHOP_HERO = { fx: "fx_heart", neck: "neck_idcard", held: "held_coffee" }, SHOP_PET: PetKind = "tiger";
+const SHOP_MINIS = [{ head: "head_headband", fx: "fx_heart" }, { held: "held_manuscript", fx: "fx_bubble" }, { neck: "neck_idcard", fx: "fx_bang" }];
+const shopFont = (wt, px) => `${wt} ${px}px "Pretendard","Apple SD Gothic Neo",sans-serif`;
+// 간판: 노란 판에 보라 글씨, 양옆 하트
+const shopSignTex = canvasTex(1024, 310, (g, w, h) => {
+  g.fillStyle = "#FFD43B"; g.strokeStyle = "#111118"; g.lineWidth = 10; g.beginPath(); g.roundRect(8, 8, w - 16, h - 16, 60); g.fill(); g.stroke();
+  g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = "#7B5BD6"; g.font = shopFont(900, 130); g.fillText("컷 상점", w / 2, h / 2 - 10);
+  g.fillStyle = "#E77FA6"; g.font = shopFont(800, 34); g.fillText("HARUDLE CUT SHOP", w / 2, h - 50);
+  for (const k of [-1, 1]) { const hx = w / 2 + k * 330, hy = h / 2 - 8; g.fillStyle = "#E77FA6"; g.beginPath(); g.moveTo(hx, hy + 30); g.bezierCurveTo(hx - 52, hy - 4, hx - 26, hy - 44, hx, hy - 16); g.bezierCurveTo(hx + 26, hy - 44, hx + 52, hy - 4, hx, hy + 30); g.fill(); }
+});
+// 뒷벽: 위는 분홍에 흰 물방울, 아래는 보라 · 흰 체크(선반 뒤로 비친다)
+const shopWallTex = canvasTex(1024, 704, (g, w, h) => {
+  g.fillStyle = "#F9C9DB"; g.fillRect(0, 0, w, h);
+  g.fillStyle = "#FFFFFF"; for (let y = 30; y < h * .62; y += 70) for (let x = (y / 70) % 2 ? 35 : 70; x < w; x += 70) { g.beginPath(); g.arc(x, y, 9, 0, 7); g.fill(); }
+  const c0 = h * .62, n = 16, t = w / n; for (let i = 0; i < n; i++) for (let j = 0; j * t < h - c0; j++) { g.fillStyle = (i + j) % 2 ? "#FFFFFF" : "#B39DDB"; g.fillRect(i * t, c0 + j * t, t, t); }
+  g.fillStyle = "#E77FA6"; g.fillRect(0, c0 - 14, w, 16);
+});
+// 연동 선물 안내판(둥근 판): 처음 연동하면 15컷(서버 CAMPUS_WALLET_LINK_BONUS 기본값과 같게)
+const WELCOME_CUTS = 15;
+const welcomeTex = canvasTex(512, 512, (g, w, h) => {
+  g.fillStyle = "#FFD43B"; g.fillRect(0, 0, w, h);
+  g.fillStyle = "#FFFFFF"; for (let i = 0; i < 14; i++) { const a = i / 14 * Math.PI * 2; g.beginPath(); g.arc(w / 2 + Math.cos(a) * 214, h / 2 + Math.sin(a) * 214, 9, 0, 7); g.fill(); }   // 둘레 물방울
+  g.textAlign = "center"; g.textBaseline = "middle";
+  g.fillStyle = "#7B5BD6"; g.font = shopFont(800, 46); g.fillText("하루들과 처음", w / 2, 150); g.fillText("연동하면", w / 2, 202);
+  g.fillStyle = "#E77FA6"; g.font = shopFont(900, 118); g.fillText(`${WELCOME_CUTS}컷`, w / 2, 290);
+  g.fillStyle = "#111118"; g.font = shopFont(800, 52); g.fillText("선물 🎁", w / 2, 384);
+});
+// 메뉴 입간판: 파는 것 셋과 사는 법 네 걸음
+const shopMenuTex = canvasTex(512, 860, (g, w, h) => {
+  const ink = "#111118";
+  g.fillStyle = "#FFFDF6"; g.fillRect(0, 0, w, h); g.fillStyle = "#E77FA6"; g.fillRect(0, 0, w, 120);
+  g.textAlign = "center"; g.textBaseline = "middle"; g.fillStyle = "#FFFFFF"; g.font = shopFont(900, 54); g.fillText("오늘의 메뉴", w / 2, 62);
+  [["#FFB37A", "펫", "따라다니는 친구 7종"], ["#FFD43B", "만화 효과", "머리 위 반짝 · 하트 5종"], ["#B39DDB", "착용 장식", "학사모 · 사원증 · 아아 5종"]].forEach(([c, a, b], i) => {
+    const y = 160 + i * 96; g.fillStyle = c; g.strokeStyle = ink; g.lineWidth = 4; g.beginPath(); g.arc(70, y, 30, 0, 7); g.fill(); g.stroke();
+    g.textAlign = "left"; g.fillStyle = ink; g.font = shopFont(800, 38); g.fillText(a, 120, y - 16); g.fillStyle = "#6B5A8E"; g.font = shopFont(600, 26); g.fillText(b, 120, y + 22); g.textAlign = "center";
+  });
+  g.strokeStyle = "#E77FA6"; g.setLineDash([10, 10]); g.lineWidth = 4; g.beginPath(); g.moveTo(30, 460); g.lineTo(w - 30, 460); g.stroke(); g.setLineDash([]);
+  g.fillStyle = "#7B5BD6"; g.font = shopFont(800, 34); g.fillText("컷으로 사는 법", w / 2, 500);
+  [`연동하고 ${WELCOME_CUTS}컷 선물 받기`, "피드에 네컷 올리기", "하루 한 번 컷 받기", "마음에 드는 것 사기"].forEach((t, i) => {
+    const y = 556 + i * 58; g.fillStyle = i === 3 ? "#FFD43B" : "#EFE7FB"; g.beginPath(); g.arc(64, y, 22, 0, 7); g.fill(); g.fillStyle = ink; g.font = shopFont(800, 26); g.fillText(String(i + 1), 64, y + 1);
+    g.textAlign = "left"; g.font = shopFont(700, 30); g.fillText(t, 104, y + 1); g.textAlign = "center";
+  });
+  g.fillStyle = "#FFD43B"; g.strokeStyle = ink; g.lineWidth = 5; g.beginPath(); g.roundRect(56, h - 92, w - 112, 64, 32); g.fill(); g.stroke();
+  g.fillStyle = ink; g.font = shopFont(800, 32); g.fillText("눌러서 구경하기 · F", w / 2, h - 59);
+});
 const giftTex = canvasTex(512, 768, (g, w) => {
   const pf = (wt, px) => `${wt} ${px}px "Pretendard","Apple SD Gothic Neo",sans-serif`, ink = "#111118";
   g.fillStyle = "#FFFDF6"; g.fillRect(0, 0, w, 768); g.fillStyle = "#7B5BD6"; g.fillRect(0, 0, w, 190);
@@ -2538,6 +2692,7 @@ function closeEasel(relock = true) { if (ezState().cur) ezEnd(); easelEd.hidden 
 const boothZone = () => FLOORS[12].zones.find((z) => z.name === "하루들 부스");
 const inBooth = () => { const b = boothZone(); return me.f === 12 && !!b && inRect({ x: b.x - .3, y: b.y - .3, w: b.w + .6, h: b.h + .6 }, me.x, me.y); };
 const nearFurn = (kind, r) => me.f === 12 && FLOORS[12].furn.some((o) => o.kind === kind && Math.hypot(o.x + o.w / 2 - me.x, o.y + o.h / 2 - me.y) < r);
+const nearShop = () => nearFurn("hbshop", 2.4) || nearFurn("hbmenu", 1.5);   // 하루들 부스 컷 상점 앞이나 메뉴 입간판 옆
 const nearWb = (r) => nearFurn("wbpost", r) || nearFurn("wbwall", r + 1);   // 함께 쓰는 화이트보드: 나무 기둥 것과 나무 벽의 큰 것(벽이 넓어서 조금 더 멀리서도)
 function makeBrush() { // 붓: 나무 자루 + 은색 물림쇠 + 지금 고른 색 붓끝(위를 향해 쥔다)
   const g = new THREE.Group();
@@ -2576,7 +2731,7 @@ function jump() { // 땅에서 한 번, 공중에서 한 번 더(더블 점프)
   if (me.lie || me.seat) { standUp(); return; }
   if (duelMove.lock) return;
   if (me.out && (me.out.z > floorY(13) + .01 || me.out.vz !== 0)) return;   // 13층 창밖 허공에선 못 뛴다(창턱에 서 있을 때만)
-  const air = me.jz > .001 || me.jv > 0; if (air && me.jumps >= 2) return;
+  const air = me.jz > .001 || me.jv > 0; if (air && me.jumps >= duelMove.jumps) return;   // 대결 종목이 막으면(jumps 1) 더블 점프 없음
   me.jumps = air ? 2 : 1; me.jv = air ? 4.2 : 4.6; if (air) spawnFx(starTex, meDoll.root.position, 3, .5, .2); me.jc++; sendPresence(true);
   // 14층: 뛰어들 수 있는 그림(꽃게 게임 만화) 앞에서 점프하면 월드처럼 그림 속으로 뛰어들어 게임을 시작한다
   const sl = nearShow(); if (sl && showItem(sl)?.dive && !inWorld) { spawnFx(starTex, meDoll.root.position, 8, .9, .4); setTimeout(() => { if (me.f === 14 && !inWorld) openShow("crab"); }, 380); }
@@ -2676,7 +2831,7 @@ addEventListener("keydown", (e) => {
   if (c === "Enter" || c === "NumpadEnter") { e.preventDefault(); if (!e.repeat) openChat(); return; }   // Enter: 채팅창으로 들어간다
   if (c === "ShiftLeft" || c === "ShiftRight") { me.runHold = true; return; }
   if (SKILL_KEY[c]) { if (!e.repeat) useSkill(SKILL_KEY[c]); return; }
-  if (c === "KeyV") { if (!e.repeat) setView({ top: "third", third: "first", first: "top" }[VIEW.mode]); return; }
+  if (c === "KeyV") { if (!e.repeat) { if (duelMove.view) showToast("지금은 시점을 바꿀 수 없어요", "사격 대결 중에는 1인칭으로만 봐요.", 1800); else setView({ top: "third", third: "first", first: "top" }[VIEW.mode]); } return; }
   if (c === "KeyQ") { cam.yawT += Math.PI / 4; return; } if (c === "KeyE") { cam.yawT -= Math.PI / 4; return; }
   if (MOVE[c]) { keys.add(MOVE[c]); stopFollow(); me.path = null; me.goal = null; e.preventDefault(); }
 });
@@ -2734,7 +2889,7 @@ const joy = { on: false, x: 0, y: 0, id: -1, cx: 0, cy: 0 };
   sayIn.addEventListener("blur", () => { if (TOUCH) setTimeout(() => document.body.classList.remove("chatting"), 150); });
 }
 addEventListener("blur", () => { keys.clear(); me.runHold = false; if (me.moving) { me.moving = false; wasMoving = false; sendPresence(true); } pointers.clear(); drag = null; canvas.classList.remove("dragging"); });   // 알트탭: 떼지 못한 클릭이 남아 다음 클릭을 막지 않게
-document.getElementById("viewBtn").onclick = () => setView({ top: "third", third: "first", first: "top" }[VIEW.mode]);
+document.getElementById("viewBtn").onclick = () => { if (duelMove.view) showToast("지금은 시점을 바꿀 수 없어요", "사격 대결 중에는 1인칭으로만 봐요.", 1800); else setView({ top: "third", third: "first", first: "top" }[VIEW.mode]); };
 document.getElementById("rotL").onclick = () => (cam.yawT += Math.PI / 4);
 document.getElementById("rotR").onclick = () => (cam.yawT -= Math.PI / 4);
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
@@ -2777,7 +2932,7 @@ function lockMouse() {
 }
 document.addEventListener("mousemove", (e) => {
   if (!locked() || !inside()) return;
-  const dx = clamp(e.movementX || 0, -200, 200), dy = clamp(e.movementY || 0, -200, 200);   // 고정 직후 튀는 값은 자른다
+  const sens = lerp(1, .58, duelMove.adsK), dx = clamp(e.movementX || 0, -200, 200) * sens, dy = clamp(e.movementY || 0, -200, 200) * sens;   // 고정 직후 튀는 값은 자른다 · 조준하면(화면이 당겨지니) 느리게 돈다
   cam.yawT -= dx * .0032;
   if (VIEW.mode === "first") cam.lookT = clamp(cam.lookT - dy * .0026, -1.45, 1.1); else cam.ipT = clamp(cam.ipT + dy * .0026, -.05, 1.45);   // 거의 바로 아래까지 내려다본다(13층 창밖 트램펄린)
 });
@@ -2822,7 +2977,7 @@ function useGoal(px, py) {
 function clickAt(cx, cy) {
   stopFollow();
   ndc.set(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
-  if (me.f === 12 && linkBoards.length) { const lh = ray.intersectObjects(linkBoards, false)[0]; if (lh) { if (lh.object.userData.gift) openGifts(); else openLink(lh.object.userData.link); return; } }   // 바로가기 장치·선물 입간판을 눌렀다
+  if (me.f === 12 && linkBoards.length) { const lh = ray.intersectObjects(linkBoards, false)[0]; if (lh) { if (lh.object.userData.gift) openGifts(); else if (lh.object.userData.shop) shopUi.open(); else if (lh.object.userData.welcome) welcomeSign(); else openLink(lh.object.userData.link); return; } }   // 바로가기 장치 · 선물 입간판 · 컷 상점 진열대를 눌렀다
   if (me.f === 14 && showSlots.length) { const sh = ray.intersectObjects(showSlots.flatMap((sl) => sl.mesh.userData.twin ? [sl.mesh, sl.mesh.userData.twin] : [sl.mesh]), false)[0]; if (sh) { openItem(showItem((sh.object.userData.of ?? sh.object).userData.show)); return; } }   // 14층 액자를 눌렀다
   if (me.f === 12 && ezBoards.length) { const eh = ray.intersectObjects(ezBoards, false)[0]; if (eh && eh.object.userData.wb) { if (nearWb(4)) { openEasel("wb"); return; } } else if (eh && nearFurn("painteasel", 3.2)) { tryEasel(); return; } }   // 이젤·화이트보드를 눌렀다   // 이젤을 눌렀다
   const hit = ray.intersectObjects(NPCS.filter((n) => n.f === me.f && n.doll.root.visible).map((n) => n.doll.root), true).find((h) => h.object !== (h.object.parent as any)?.userData?.blob && !(h.object as any).isPoints);
@@ -2936,7 +3091,7 @@ function interact() {
   if (me.out) return;
   const stand = nearScoop(); if (stand) { openShow(stand.view ?? "scoop"); return; }
   const sh = nearShow(); if (sh) { openItem(showItem(sh)); return; }
-  if (!me.lie && !me.seat && me.f === 12) { if (nearWb(2.4)) { openEasel("wb"); return; } if (me.brush && nearFurn("painteasel", 2.1)) { tryEasel(); return; } if (nearFurn("brushcup", 1.7)) { toggleBrush(); return; } if (nearFurn("painteasel", 2.1)) { tryEasel(); return; } if (nearFurn("linkkiosk", 1.7)) { openLink("https://www.harudle.com/"); return; } if (nearFurn("instaboard", 1.7)) { openLink("https://www.instagram.com/harudle.official/"); return; } if (nearFurn("giftsign", 1.6)) { openGifts(); return; } }   // 하루들 부스: 붓 꽂이 · 함께 그리는 이젤   // 붓을 들었으면 이젤이 먼저
+  if (!me.lie && !me.seat && me.f === 12) { if (nearWb(2.4)) { openEasel("wb"); return; } if (me.brush && nearFurn("painteasel", 2.1)) { tryEasel(); return; } if (nearFurn("brushcup", 1.7)) { toggleBrush(); return; } if (nearFurn("painteasel", 2.1)) { tryEasel(); return; } if (nearFurn("linkkiosk", 1.7)) { openLink("https://www.harudle.com/"); return; } if (nearFurn("instaboard", 1.7)) { openLink("https://www.instagram.com/harudle.official/"); return; } if (nearFurn("giftsign", 1.6)) { openGifts(); return; } if (nearShop()) { shopUi.open(); return; } if (nearFurn("hbwelcome", 1.4)) { welcomeSign(); return; } }   // 하루들 부스: 붓 꽂이 · 함께 그리는 이젤 · 컷 상점   // 붓을 들었으면 이젤이 먼저
   if (nearStartrackScreen()) { startrack.openSettings(); return; }
   { const fr = nearFridge(); if (fr) { fr.want = !fr.want; return; } }   // 냉장고 앞: 문 열기·닫기
   if (me.act?.name === "gun" && !me.lie && !me.seat && !atCall()) { fireFirework(true); return; }   // 종이 총을 들었으면 F도 발사(엘리베이터 앞만 예외)
@@ -3166,6 +3321,10 @@ async function harudleLogout() {
   try { const r = await fetch("/auth/logout", { method: "POST", credentials: "same-origin" }); if (!r.ok && r.status !== 204) throw new Error(String(r.status)); location.reload(); }
   catch { showToast("연동을 끊지 못했어요", "잠시 뒤에 다시 시도해 주세요.", 3200); }
 }
+// 연동 선물 안내판: 아직이면 연동 안내 창, 이미 연동했으면 받은 선물 안내
+function welcomeSign() {
+  if (requireLogin(`하루들과 처음 연동하면 ${WELCOME_CUTS}컷을 선물로 드려요. 컷 상점에서 펫이나 장식을 살 수 있어요.`)) showToast("이미 연동했어요", `연동 선물 ${WELCOME_CUTS}컷은 처음 연동할 때 한 번 받아요. 컷 상점에서 써 보세요.`, 3600);
+}
 function requireLogin(reason: string) {
   if (account.user) return true;
   if (!account.enabled) { showToast("지금은 하루들 연동을 쓸 수 없어요", reason, 3200); return false; }
@@ -3178,20 +3337,25 @@ $("loginAskGo").onclick = startHarudleLogin;
 $("loginAskLater").onclick = closeLoginAsk;
 loginAsk.addEventListener("click", (e) => { if (e.target === loginAsk) closeLoginAsk(); });
 $("menuLogin").onclick = () => { if (account.user) void harudleLogout(); else startHarudleLogin(); };
-/* ───── 지갑 '컷' (연동한 크루만) ─────
+/* ───── 컷 상점 칩 · 지갑 '컷' ─────
+   칩: 상점 아이콘은 늘 보이고, 누구나 눌러 구경한다(사는 건 연동한 크루만. 서버가 상점을 꺼 두었으면 안내만). 옆의 컷 잔액은 연동한 크루만 보인다.
    들어올 때 서버에 정산을 부탁한다: 서버가 하루들 공개 피드를 읽어, 내가 네컷만화를 올린 날마다 하루 한 번 컷을 준다(docs/campus-wallet.md).
-   서버가 지갑을 꺼 두었으면(404) 칩이 보이지 않는다. 잔액은 서버가 돌려준 값만 보여 준다 */
-const walletChip = $("walletChip");
-let cuts = 0;
-function showCuts(n: number) { cuts = n; walletChip.hidden = false; walletChip.querySelector("b").textContent = n.toLocaleString("ko-KR"); walletChip.setAttribute("aria-label", `내 컷 ${n}컷`); }
+   잔액은 서버가 돌려준 값만 보여 준다 */
+const walletChip = $("walletChip"), walletCuts = $("walletCuts");
+function showCuts(n: number) { walletCuts.hidden = false; walletCuts.querySelector("b").textContent = n.toLocaleString("ko-KR"); walletChip.setAttribute("aria-label", `컷 상점 열기 · 내 컷 ${n}컷`); }
 async function loadWallet(toastAfter: number) {
   try {
     const r = await fetch("/api/me/wallet/settle", { method: "POST", credentials: "same-origin" });
+    // welcome: 처음 연동해서 방금 받은 연동 선물(받을 때 한 번만 온다). 피드 지급 알림은 그 뒤에 이어서
+    const welcomeToast = (n: number) => setTimeout(() => showToast(`🎁 연동 선물 ${n}컷을 받았어요`, "컷 상점에서 펫이나 장식을 골라 보세요. 하루들 피드에 네컷만화를 올리면 날마다 더 받아요.", 5200), toastAfter);
     if (r.ok) {
       const d = await r.json(), days = d.granted.length, got = d.granted.reduce((sum: number, g: { amount: number }) => sum + g.amount, 0);
       showCuts(d.balance);
-      if (got > 0) setTimeout(() => showToast(`${got}컷을 받았어요`, days > 1 ? `하루들 피드에 네컷만화를 올린 ${days}일 치예요.` : "하루들 피드에 네컷만화를 올려서 받았어요.", 4200), toastAfter);
-    } else if (r.status === 502) {   // 하루들이나 저장소가 잠깐 응답하지 않으면 잔액만 보여 준다
+      if (d.welcome > 0) welcomeToast(d.welcome);
+      if (got > 0) setTimeout(() => showToast(`${got}컷을 받았어요`, days > 1 ? `하루들 피드에 네컷만화를 올린 ${days}일 치예요.` : "하루들 피드에 네컷만화를 올려서 받았어요.", 4200), toastAfter + (d.welcome > 0 ? 5400 : 0));
+    } else if (r.status === 502) {   // 하루들이나 저장소가 잠깐 응답하지 않으면 잔액만 보여 준다(연동 선물은 그래도 들어온다)
+      const d = await r.json().catch(() => ({}));
+      if (d.welcome > 0 && typeof d.balance === "number") { showCuts(d.balance); welcomeToast(d.welcome); return; }
       const w = await fetch("/api/me/wallet", { credentials: "same-origin", cache: "no-store" });
       if (w.ok) showCuts((await w.json()).balance);
     }
@@ -3214,7 +3378,7 @@ let lastSettleAt = 0;
 function resettle() { if (!account.user || Date.now() - lastSettleAt < 20_000) return; lastSettleAt = Date.now(); void loadWallet(300).then(() => shopUi.load()); }
 addEventListener("focus", () => { if (shopUi.takeWentOut()) { lastSettleAt = 0; resettle(); } else if (Date.now() - lastSettleAt > 10 * 60_000) resettle(); });   // 오래 떠 있다 돌아와도 한 번
 const shopUi = createShopUi({ showToast, requireLogin, showCuts, setGear: setMyGear, preview: tryGear, openHarudle, onOpen: () => { if (locked()) document.exitPointerLock(); gifts.hidden = true; }, onClose: () => syncCursor() });
-walletChip.onclick = () => { if (shopUi.isAvailable()) shopUi.open(); else showToast(`내 컷 ${cuts.toLocaleString("ko-KR")}컷`, "하루들 피드에 네컷만화를 올린 날마다 하루 한 번 받아요.", 4200); };
+walletChip.onclick = () => shopUi.open();   // 서버가 상점을 꺼 두었으면 open이 "지금은 상점을 쓸 수 없어요"만 띄운다
 async function loadAccount() {
   const q = new URLSearchParams(location.search), result = q.get("login");
   if (result) { q.delete("login"); history.replaceState(null, "", location.pathname + (q.toString() ? `?${q}` : "") + location.hash); }
@@ -3255,7 +3419,7 @@ duelUi = mountDuel({
   act: (name) => { if (!name) { if (me.act) { endAct(me); sendPresence(true); } } else if (me.act?.name !== name) useSkill(name); },
   fire: (aim) => fireFirework(true, aim ?? null), jump: () => jump(), bounce: (v) => { me.jv = v; me.jc++; sendPresence(true); },
   shootPaper: (f, x, y, dir, lift, a) => shootPaper(f, x, y, dir, lift, a), hitReact: (a, dir) => hitReact(a, dir),
-  presence: () => sendPresence(true),
+  presence: () => sendPresence(true), recoil: (k) => { if (VIEW.mode === "first") cam.lookT = clamp(cam.lookT + k, -1.45, 1.1); else cam.yawT += (Math.random() - .5) * k * .5; },
   toast: (h, p = "", ms) => showToast(h, p, ms), note: (text) => chatNet({ k: "sys", text }),
   unlock: () => { if (locked()) document.exitPointerLock(); keys.clear(); me.runHold = false; }, syncCursor: () => syncCursor(),
 });
@@ -3275,7 +3439,7 @@ const cmdHost: CommandHost = {
   dm: (u, name) => { dmTo = u; dmToName = name; setChatTab("dm"); keepChat = ""; },
   voice: () => clickIf("voiceToggle"),
   mic: () => clickIf("micToggle"),
-  open: (w) => { if (w === "profile") openProfile(); else if (w === "look") openAvPanel(); else if (w === "inv") { if (inv.hidden) toggleInv(); } else if (w === "tour") openTour(); else openMenu(w === "menu" ? "main" : w); },
+  open: (w) => { if (w === "profile") openProfile(); else if (w === "look") openAvPanel(); else if (w === "inv") { if (inv.hidden) toggleInv(); } else if (w === "tour") openTour(); else if (w === "shop") shopUi.open(); else openMenu(w === "menu" ? "main" : w); },
   prefill: (text) => { keepChat = text; },
   duel: duelUi.commands,
 };
@@ -3434,7 +3598,7 @@ function wsRoom() {
       if (m.t === "glass") glassNet(m);
       if (m.t === "chat") chatNet(m);
       if (typeof m.t === "string" && m.t.startsWith("duel:")) duelUi?.net(m);
-      if (m.t === "bye") retry = 150; /* 서버가 새 버전으로 바뀌는 중: 곧바로 다시 붙는다 */ if (m.t === "peers" && handler) handler({ peers: m.peers.map((p) => ({ ...p, kind: "viewer", sameTab: p.peer === myId })) }); };
+      if (m.t === "bye") { retry = 150; media.setNetwork(false); } /* 서버가 새 버전으로 바뀌는 중: 곧바로 다시 붙는다(음성은 끊긴 것으로 치지 않고 다시 붙으면 이어 간다) */ if (m.t === "peers" && handler) handler({ peers: m.peers.map((p) => ({ ...p, kind: "viewer", sameTab: p.peer === myId })) }); };
     ws.onclose = () => { netUp = false; duelUi?.online(false); media.setNetwork(false); startrack.setNetwork(false); for (const pending of [...pendingMedia.values(), ...pendingRenew.values(), ...pendingCloudflare.values(), ...pendingMeetings.values()]) { clearTimeout(pending.timer); pending.reject(new Error("not_ready")); } pendingMedia.clear(); pendingRenew.clear(); pendingCloudflare.clear(); pendingMeetings.clear(); setTimeout(connect, retry); retry = Math.min(10000, retry * 1.6); };
   };
   connect();
@@ -3521,7 +3685,7 @@ function syncPeers(dt, t) {
     const vc = s.vc === 0 || s.vc === 1 || s.vc === 2 ? String(s.vc) : null;   // 이름표 앞 음성 아이콘(예전 버전이라 안 보내면 없음)
     if ((v.tag.dataset.vc ?? null) !== vc) { if (vc) v.tag.dataset.vc = vc; else delete v.tag.dataset.vc; v.tag.title = vc ? ["음성 연결 안 함", "마이크 꺼짐", "마이크 켜짐"][+vc] : ""; }
     const rp = v.doll.root.position;
-    if (vis) project(v.tag, rp.x, rp.y - .05, rp.z, true); else v.tag.style.display = "none";
+    if (vis && !duelMove.noTags) project(v.tag, rp.x, rp.y - .05, rp.z, true); else v.tag.style.display = "none";   // 대결 사격장: 이름표를 숨긴다
     const say = v.chatSay && Date.now() - v.chatAt < 6000 ? v.chatSay : "";   // 받은 근처·전체 채팅만 말풍선으로
     v.bub.hidden = !(vis && say); if (!v.bub.hidden) { v.bub.textContent = say; project(v.bub, rp.x, rp.y + DOLL, rp.z); }
     showZzz(v.zzz, v.doll, vis && !!s.l && !say);   // 말풍선이 떠 있는 동안은 잠깐 깬다
@@ -3703,7 +3867,14 @@ function tickFollow(t) {
   if (d < 1.4) { me.path = null; return; }
   if (t - (me.followAt || 0) > .5 || !me.path || !me.path.length) { me.followAt = t; const [gx, gy] = nearestFree(floor, s2.x, s2.y); me.path = findPath(Math.floor(me.x), Math.floor(me.y), Math.floor(gx), Math.floor(gy)) || []; if (me.path.length) me.path.pop(); }
 }
+// 대결 종목이 시점을 정하면(사격: 1인칭만) 그 시점으로, 풀리면 원래 시점으로 돌려놓는다
+let viewBefore: string | null = null;
+function syncDuelView() {
+  if (duelMove.view) { if (VIEW.mode !== duelMove.view) { viewBefore ??= VIEW.mode; setView(duelMove.view); } }
+  else if (viewBefore) { const v = viewBefore; viewBefore = null; if (VIEW.mode !== v) setView(v); }
+}
 function step(dt, t) {
+  syncDuelView();
   tickFollow(t);
   let ix = 0, iy = 0, amag = 1;
   if (joy.on) { const m = Math.hypot(joy.x, joy.y); if (m > .18) { ix = joy.x; iy = joy.y; amag = clamp(m, .45, 1); } }   // 조이스틱: 민 만큼 빠르게
@@ -3758,8 +3929,8 @@ function step(dt, t) {
   }
   checkZone();
   const near = nearNPC(), call = atCall(), bag = nearBag(), seat = nearSeat();
-  const ez0 = !me.lie && !me.seat && nearFurn("painteasel", 2.1), cup = !(me.brush && ez0) && !me.lie && !me.seat && nearFurn("brushcup", 1.7), ez = !cup && ez0, site = !cup && !ez && nearFurn("linkkiosk", 1.7), insta = !cup && !ez && !site && nearFurn("instaboard", 1.7), gift = !cup && !ez && !site && !insta && !me.lie && !me.seat && nearFurn("giftsign", 1.6), wb = !me.lie && !me.seat && nearWb(2.4), fr = nearFridge(), scoop = nearScoop(), shown = !scoop && nearShow(), screenNear = !scoop && !shown && nearStartrackScreen();   // 하루들 부스
-  actBtn.hidden = !(me.lie || me.seat || near || bag || call || seat || cup || ez || site || insta || gift || wb || fr || scoop || shown || screenNear); actBtn.textContent = screenNear ? "스타트랙 영상 설정" : scoop ? scoop.action ?? "오늘의 특종 보기" : shown ? showItem(shown).action : wb ? "화이트보드에 쓰기" : fr ? (fr.want ? "냉장고 닫기" : "냉장고 열기") : cup ? (me.brush ? "붓 꽂기" : "붓 들기") : ez ? "함께 그리기" : site ? "하루들 바로가기" : insta ? "인스타 바로가기" : gift ? "아이템 받는 법" : me.lie || me.seat ? "일어나기" : seat && !(near && Math.hypot(seat.x - me.x, seat.y - me.y) > .55) ? "앉기" : near ? `${withJosa(near.p.nick, "와", "과")} 대화하기` : bag ? "빈백에 눕기" : "엘리베이터 타기";
+  const ez0 = !me.lie && !me.seat && nearFurn("painteasel", 2.1), cup = !(me.brush && ez0) && !me.lie && !me.seat && nearFurn("brushcup", 1.7), ez = !cup && ez0, site = !cup && !ez && nearFurn("linkkiosk", 1.7), insta = !cup && !ez && !site && nearFurn("instaboard", 1.7), gift = !cup && !ez && !site && !insta && !me.lie && !me.seat && nearFurn("giftsign", 1.6), shopShow = !cup && !ez && !site && !insta && !gift && !me.lie && !me.seat && nearShop(), welcomeNear = !cup && !ez && !site && !insta && !gift && !shopShow && !me.lie && !me.seat && nearFurn("hbwelcome", 1.4), wb = !me.lie && !me.seat && nearWb(2.4), fr = nearFridge(), scoop = nearScoop(), shown = !scoop && nearShow(), screenNear = !scoop && !shown && nearStartrackScreen();   // 하루들 부스
+  actBtn.hidden = !(me.lie || me.seat || near || bag || call || seat || cup || ez || site || insta || gift || shopShow || welcomeNear || wb || fr || scoop || shown || screenNear); actBtn.textContent = screenNear ? "스타트랙 영상 설정" : scoop ? scoop.action ?? "오늘의 특종 보기" : shown ? showItem(shown).action : wb ? "화이트보드에 쓰기" : fr ? (fr.want ? "냉장고 닫기" : "냉장고 열기") : cup ? (me.brush ? "붓 꽂기" : "붓 들기") : ez ? "함께 그리기" : site ? "하루들 바로가기" : insta ? "인스타 바로가기" : gift ? "아이템 받는 법" : shopShow ? "컷 상점 들어가기" : welcomeNear ? (account.user ? "연동 선물 보기" : `연동하고 ${WELCOME_CUTS}컷 받기`) : me.lie || me.seat ? "일어나기" : seat && !(near && Math.hypot(seat.x - me.x, seat.y - me.y) > .55) ? "앉기" : near ? `${withJosa(near.p.nick, "와", "과")} 대화하기` : bag ? "빈백에 눕기" : "엘리베이터 타기";
   if (me.say && Date.now() - me.sayAt > 6000) { me.say = ""; sendPresence(true); }
 }
 const tgt = new THREE.Vector3();
@@ -3768,7 +3939,8 @@ function render(dt, t) {
   // 1인칭 고개는 마우스를 그대로 따른다(뒤따라 미끄러지는 느낌이 어지럽다). Q·E처럼 크게 돌릴 때만 부드럽게
   if (VIEW.mode === "first" && Math.abs(cam.yawT - cam.yaw) < .35) cam.yaw = cam.yawT; else cam.yaw = lerp(cam.yaw, cam.yawT, Math.min(1, dt * 8));
   if (VIEW.mode === "first") cam.look = cam.lookT;
-  const fov = VIEW.mode === "first" ? 62 : 38; if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
+  duelMove.adsK = clamp(duelMove.adsK + (duelMove.ads && VIEW.mode === "first" ? dt : -dt) * 8, 0, 1);   // 대결 사격 오른쪽 클릭 조준: 0.12초 만에 당겨진다
+  const fov = VIEW.mode === "first" ? lerp(62, 36, duelMove.adsK) : 38; if (Math.abs(camera.fov - fov) > .01) { camera.fov = fov; camera.updateProjectionMatrix(); }   // 1인칭은 넓게 봐야 덜 어지럽다(조준하면 당겨 본다)
   cam.pitch = lerp(cam.pitch, cam.pitchT, Math.min(1, dt * 8)); cam.dist = lerp(cam.dist, cam.distT, Math.min(1, dt * 8));   // 위에서 볼 때 기울기·거리(휠·핀치 확대)
   cam.ip = lerp(cam.ip, cam.ipT, Math.min(1, dt * 8)); cam.id = lerp(cam.id, cam.idT, Math.min(1, dt * 8)); cam.look = lerp(cam.look, cam.lookT, Math.min(1, dt * 10));
   tgt.set(wx(me.x), me.out ? me.out.z + .4 : floorY(me.f) + .4, wz(me.y)); cam.target.lerp(tgt, Math.min(1, dt * 6));
@@ -3795,7 +3967,7 @@ function render(dt, t) {
   syncPeers(dt, t);
   duelUi?.frame(dt, t);
   const mp = meDoll.root.position;
-  if (VIEW.mode === "first" || (VIEW.mode === "third" && cam.close)) myTag.style.display = "none"; else project(myTag, mp.x, mp.y - .05, mp.z, true);
+  if (duelMove.noTags || VIEW.mode === "first" || (VIEW.mode === "third" && cam.close)) myTag.style.display = "none"; else project(myTag, mp.x, mp.y - .05, mp.z, true);
   myBub.hidden = !(me.say && Date.now() - me.sayAt < 6000); if (!myBub.hidden) { myBub.textContent = me.say; project(myBub, mp.x, mp.y + DOLL, mp.z); }
   showZzz(myZzz, meDoll, !!me.lie && myBub.hidden && meDoll.root.visible && VIEW.mode !== "first");
   for (const { n, tag, bub, zzz } of npcTags) {

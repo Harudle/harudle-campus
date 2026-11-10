@@ -58,7 +58,7 @@ test("게스트는 상품 목록만 보고, 사거나 쓰지 못한다", async (
   const s = await setup({ cuts: 50 });
   const guest = { cookie: "" };
   const list = await s.request("GET", "/api/shop", undefined, guest);
-  assert.equal(list.status, 200); assert.equal(list.body.loggedIn, false); assert.equal(list.body.catalog.length, 17); assert.deepEqual(list.body.earn, { reward: 10 }); assert.equal("balance" in list.body, false);
+  assert.equal(list.status, 200); assert.equal(list.body.loggedIn, false); assert.equal(list.body.catalog.length, 17); assert.deepEqual(list.body.earn, { reward: 10, welcome: 15 }); assert.equal("balance" in list.body, false);
   assert.equal((await s.request("POST", "/api/shop/buy", { sku: "pet_cat" }, guest)).status, 401);
   assert.equal((await s.request("PUT", "/api/me/gear", { slot: "pet", sku: "pet_cat" }, guest)).status, 401);
   assert.equal((await s.request("POST", "/api/shop/buy", { sku: "pet_cat" }, { origin: "https://evil.example" })).status, 403);

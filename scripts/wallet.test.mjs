@@ -8,7 +8,8 @@ import { kstDate } from "../server/auth/wallet.js";
 const ORIGIN = "http://localhost:8090";
 const ME = "6d64421d-6a44-48fa-b917-c1d20f5e5883", OTHER = "0550bf07-01ce-4d68-87e8-a2fa70486a25";
 const SID = "s".repeat(43);
-const ENV = { CAMPUS_AUTH_ORIGIN: ORIGIN, HARUDLE_CAMPUS_SIGNING_KEY: Buffer.alloc(32, 7).toString("base64"), CAMPUS_WALLET: "on" };
+const ENV = { CAMPUS_AUTH_ORIGIN: ORIGIN, HARUDLE_CAMPUS_SIGNING_KEY: Buffer.alloc(32, 7).toString("base64"), CAMPUS_WALLET: "on", CAMPUS_WALLET_LINK_BONUS: "0" };   // 피드 지급만 보는 테스트: 연동 선물은 아래에서 따로
+const WITH_BONUS = { ...ENV, CAMPUS_WALLET_LINK_BONUS: undefined };
 const T0 = Date.parse("2026-11-10T03:00:00.000Z");   // 한국 시간 11월 10일 낮 12시
 const quiet = { error() {}, warn() {} };
 
@@ -116,6 +117,30 @@ test("지급량 설정: 기본 10, 잘못된 값이면 서버가 뜨지 않는�
   const s = await setup({ pages: [[feed("f1", ME, "2026-11-10T02:00:00Z")]], env: { ...ENV, CAMPUS_WALLET_FEED_REWARD: "3" } });
   assert.equal((await s.request("POST", "/api/me/wallet/settle")).body.balance, 3);
   for (const bad of ["0", "-1", "1.5", "abc", "1001"]) assert.throws(() => createAuth({ ...ENV, CAMPUS_WALLET_FEED_REWARD: bad }, { store: createMemoryStore() }), /invalid_campus_wallet_feed_reward/);
+});
+
+test("처음 연동하면 연동 선물 15컷을 한 번만, 피드 지급과 따로 알려 준다", async () => {
+  const s = await setup({ env: WITH_BONUS, pages: [[feed("f1", ME, "2026-11-10T02:00:00Z")]] });
+  assert.deepEqual((await s.request("POST", "/api/me/wallet/settle")).body, { currency: "컷", balance: 25, granted: [{ date: "2026-11-10", amount: 10 }], welcome: 15 });
+  // 새 워커(메모리 기억 없음) · 다음 날에도 연동 선물은 다시 주지 않는다
+  const next = await setup({ env: WITH_BONUS, pages: [[]], store: s.store, clock: { t: T0 + 864e5 } });
+  assert.deepEqual((await next.request("POST", "/api/me/wallet/settle")).body, { currency: "컷", balance: 25, granted: [] });
+  assert.deepEqual((await s.store.listWalletEntries(ME)).map((e) => [e.kind, e.refKey, e.amount]), [["feed_daily", "2026-11-10", 10], ["link_first", "first", 15]]);
+});
+
+test("하루들이 응답하지 않아도 연동 선물은 들어가고, 502에 잔액과 함께 알려 준다", async () => {
+  const s = await setup({ env: WITH_BONUS, status: 503 });
+  assert.deepEqual(await s.request("POST", "/api/me/wallet/settle"), { status: 502, body: { error: "harudle", welcome: 15, balance: 15 } });
+  assert.deepEqual(await s.request("POST", "/api/me/wallet/settle"), { status: 502, body: { error: "harudle" } });
+  assert.equal((await s.request("GET", "/api/me/wallet")).body.balance, 15);
+});
+
+test("연동 선물 설정: 기본 15, 0이면 주지 않고, 잘못된 값이면 서버가 뜨지 않는다", async () => {
+  const off = await setup({ env: { ...ENV, CAMPUS_WALLET_LINK_BONUS: "0" } });
+  assert.deepEqual((await off.request("POST", "/api/me/wallet/settle")).body, { currency: "컷", balance: 0, granted: [] });
+  const five = await setup({ env: { ...ENV, CAMPUS_WALLET_LINK_BONUS: "5" } });
+  assert.equal((await five.request("POST", "/api/me/wallet/settle")).body.welcome, 5);
+  for (const bad of ["-1", "1.5", "abc", "1001"]) assert.throws(() => createAuth({ ...ENV, CAMPUS_WALLET_LINK_BONUS: bad }, { store: createMemoryStore() }), /invalid_campus_wallet_link_bonus/);
 });
 
 test("메모리 저장소: 사용자가 지워지면 지갑도 지워진다", async () => {

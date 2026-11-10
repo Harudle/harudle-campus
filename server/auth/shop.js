@@ -16,7 +16,7 @@ async function readJson(req, max = 512) {
   return JSON.parse(body);
 }
 
-export function createShop({ env = {}, store, feedReward = 0, now = () => Date.now(), log = console }) {
+export function createShop({ env = {}, store, feedReward = 0, linkBonus = 0, now = () => Date.now(), log = console }) {
   const enabled = env.CAMPUS_WALLET === "on" && !!store?.buyItem;
   const listeners = new Set();
   const notify = (userId, gear) => { for (const fn of listeners) try { fn(userId, gear); } catch (e) { log.error?.("[shop] gear listener failed:", e.message); } };
@@ -35,8 +35,8 @@ export function createShop({ env = {}, store, feedReward = 0, now = () => Date.n
     if (!enabled) { json(res, 404, { error: "shop_disabled" }); return true; }
     if (!list && req.headers.origin !== origin) { json(res, 403, { error: "origin" }); return true; }
     const u = await user(req);
-    // earn: 컷을 받는 법(상점이 컷이 모자랄 때 하루들로 안내하는 데 쓴다). reward = 하루 한 번 받는 컷, today = 오늘 이미 받았는지
-    if (list && !u) { json(res, 200, { currency: CURRENCY, catalog: CATALOG, loggedIn: false, earn: { reward: feedReward } }); return true; }
+    // earn: 컷을 받는 법(상점이 컷이 모자랄 때 하루들로 안내하는 데 쓴다). reward = 하루 한 번 받는 컷, today = 오늘 이미 받았는지, welcome = 처음 연동하면 받는 선물(게스트에게만)
+    if (list && !u) { json(res, 200, { currency: CURRENCY, catalog: CATALOG, loggedIn: false, earn: { reward: feedReward, ...(linkBonus ? { welcome: linkBonus } : {}) } }); return true; }
     if (!u) { json(res, 401, { error: "login" }); return true; }
     try {
       if (list) {

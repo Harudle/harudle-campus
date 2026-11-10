@@ -19,7 +19,7 @@ export type CommandHost = {
   dm(u: string, name: string): void
   voice(): boolean
   mic(): boolean
-  open(what: "menu" | "voice" | "keys" | "profile" | "look" | "inv" | "tour"): void
+  open(what: "menu" | "voice" | "keys" | "profile" | "look" | "inv" | "tour" | "shop"): void
   prefill(text: string): void
   // 1:1 대결(src/duel/client.ts). game은 종목 id(jump · shoot · target · box), 없으면 종목 고르는 창
   duel: { games: readonly { id: string; name: string }[]; invite(p: CommandPeer, game?: string): void; answer(ok: boolean, name?: string): void; stop(): void; watch(p: CommandPeer | null): void; forfeit(): void; records(p: CommandPeer | null): void }
@@ -93,6 +93,11 @@ const COMMANDS: Command[] = [
   { names: ["대결", "duel"], args: "이름 [종목]", desc: "1:1 대결 신청 (점프맵 · 사격 · 과녁 · 복싱)", run: (a, h) => {
     if (!a) { h.note("대결할 크루 이름을 같이 써 주세요 (예: /대결 포비 점프맵)"); return; }
     const whole = h.peers().find((p) => p.name === a); if (whole) { h.duel.invite(whole, undefined); return; }   // 쓴 글 전체가 이름이면 그 사람("고양이 복싱" 같은 이름)
+    if (/^테스터(\s|$)/.test(a)) { // 개발 서버의 연습 상대: 바로 경기(운영 서버는 "찾지 못했어요")
+      const rest = a.slice(3).trim(), tg = rest ? findGame(rest) : null;
+      if (rest && !tg) { h.note(`종목은 ${h.duel.games.map((x) => x.name).join(" · ")} 중에서 골라 주세요`); return; }
+      h.duel.invite({ id: "tester", name: "테스터", f: 0, place: "", near: false }, tg?.id); return;
+    }
     // 끝 단어가 종목이면 종목, 아니면 이름 전체(띄어쓰기 있는 이름도 된다)
     const sp = a.lastIndexOf(" "), g = sp > 0 ? findGame(a.slice(sp + 1)) : null;
     const [p, rest] = splitTarget(h, g ? a.slice(0, sp).trim() : a); if (!p) return;
@@ -114,6 +119,7 @@ const COMMANDS: Command[] = [
   { names: ["프로필", "이름", "profile"], desc: "프로필(이름) 수정", run: (_, h) => h.open("profile") },
   { names: ["외형", "꾸미기", "캐릭터", "look"], desc: "캐릭터 외형 수정", run: (_, h) => h.open("look") },
   { names: ["인벤토리", "가방", "inv"], desc: "인벤토리 열기", run: (_, h) => h.open("inv") },
+  { names: ["상점", "shop"], desc: "컷 상점 열기 (구경은 누구나, 사기는 하루들 연동 후)", run: (_, h) => h.open("shop") },
   { names: ["안내", "tour"], desc: "처음 안내 다시 보기", run: (_, h) => h.open("tour") },
 ];
 const byName = new Map(COMMANDS.flatMap((c) => c.names.map((n) => [n.toLowerCase(), c] as const)));

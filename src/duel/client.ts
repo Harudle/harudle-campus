@@ -40,6 +40,14 @@ export type DuelCtx = {
   lock(on: boolean): void                          // 걷기 · 점프 잠그기
   speed(k: number): void                           // 걷기 빠르기 배수(가드 중 느리게 등)
   canFire(on: boolean): void                       // 종이 총 쏘기 허락
+  doubleJump(on: boolean): void                    // 더블 점프 허락(끄면 땅에서 한 번만)
+  view(mode: "first" | null): void                 // 시점 고정(V · 시점 버튼 막음). null이면 풀고 원래 시점으로
+  tags(on: boolean): void                          // 이 층 머리 위 이름표 보이기
+  gun(look: "ak" | null): void                     // 이 층 종이 총 모양(ak: 종이 AK-47, 총알도 bulletSpeed로)
+  fireGap(ms: number): void; bulletSpeed(mps: number): void   // 연사 간격(엔진 기본 250ms) · 종이 총알 빠르기(m/s, 기본 19.5)
+  recoil(k: number): void                          // 반동: 1인칭이면 시야가 위로 튄다(라디안)
+  ads(on: boolean): void                           // 조준(1인칭 AK): 화면이 당겨지고 총이 가운데로
+  reloading(r: number | null): void                // 장전 동작 진행(0~1, null이면 끝)
   jump(): void; bounce(v: number): void            // 점프 키와 같게 · 위로 튕기기(m/s)
   doll(who: DuelWho): Doll | null                  // 그 사람 캐릭터(root · turn). 외형이 바뀌면 새로 만들어지니 매번 다시 받는다
   pos(who: DuelWho): { f: number; x: number; y: number; h: number; up: number; jz: number; presence: any } | null
@@ -74,7 +82,7 @@ export type DuelGame = { id: string; start(ctx: DuelCtx): DuelRun };
 export type DuelHost = {
   THREE: typeof THREE; scene: THREE.Scene; camera: THREE.PerspectiveCamera; touch: boolean
   me: any; elev: [number, number]
-  move: { lock: boolean; speed: number; noFire: boolean; ghost: null | { x: number; y: number; w: number; h: number } }
+  move: { lock: boolean; speed: number; noFire: boolean; jumps: number; view: null | string; noTags: boolean; gun: string; fireGap: number; bulletSpeed: number; ads: boolean; reload: number; ghost: null | { x: number; y: number; w: number; h: number } }
   send(m: any): void; online(): boolean; probeClock(): void
   floorGroup(f: number): THREE.Group; topAt(x: number, y: number): number
   goFloor(f: number, spot: number[], exact?: boolean): void
@@ -82,7 +90,7 @@ export type DuelHost = {
   actor(peer: string | "me"): any; whoIs(actor: any): string | null   // 엔진의 사람(me · 같이 있는 크루 v) ↔ peer id("me")
   act(name: string | null): void; fire(aim?: number | null): void; jump(): void; bounce(v: number): void
   shootPaper(f: number, x: number, y: number, dir: number, lift: number, actor?: any): void; hitReact(actor: any, dir: number): void
-  presence(): void
+  presence(): void; recoil(k: number): void
   toast(h: string, p?: string, ms?: number): void; note(text: string): void
   unlock(): void; syncCursor(): void
 };
@@ -205,7 +213,8 @@ export function mountDuel(host: DuelHost) {
   function stopRun() {
     if (run) try { run.stop(); } catch (e) { console.error("[duel] stop", e); }
     run = null; gameHud.replaceChildren(); hooks.fire.length = hooks.bullet.length = hooks.hit.length = 0;
-    host.move.lock = false; host.move.speed = 1; host.move.noFire = false; host.move.ghost = null;
+    host.move.lock = false; host.move.speed = 1; host.move.noFire = false; host.move.jumps = 2; host.move.ghost = null;
+    host.move.view = null; host.move.noTags = false; host.move.gun = ""; host.move.fireGap = 250; host.move.bulletSpeed = 0; host.move.ads = false; host.move.reload = -1;
     const a = host.actor("me"); if (a?.doll) a.doll.anim.arms = null;
     for (const p of match?.players || []) { const v = host.actor(p.peer); if (v?.doll) v.doll.anim.arms = null; }
   }
@@ -219,7 +228,9 @@ export function mountDuel(host: DuelHost) {
       grid: { W, H, S, wx, wz, tX, tY, y0: floorY(m.floor), topAt: host.topAt, fl },
       me: { get f() { return me.f; }, get x() { return me.x; }, get y() { return me.y; }, get h() { return me.h; }, get up() { return me.up; }, get jz() { return me.jz; }, get jv() { return me.jv; }, get moving() { return me.moving; }, get running() { return me.runHold || me.runToggle; }, get act() { return me.act?.name || null; } },
       place: (x, y, h) => host.place(x, y, h),
-      lock: (on) => { host.move.lock = !!on; }, speed: (k) => { host.move.speed = k > 0 ? k : 1; }, canFire: (on) => { host.move.noFire = !on; },
+      lock: (on) => { host.move.lock = !!on; }, speed: (k) => { host.move.speed = k > 0 ? k : 1; }, canFire: (on) => { host.move.noFire = !on; }, doubleJump: (on) => { host.move.jumps = on ? 2 : 1; },
+      view: (mode) => { host.move.view = mode; }, tags: (on) => { host.move.noTags = !on; }, gun: (look) => { host.move.gun = look || ""; },
+      fireGap: (ms) => { host.move.fireGap = ms > 0 ? ms : 250; }, bulletSpeed: (v) => { host.move.bulletSpeed = v > 0 ? v : 0; }, recoil: (k) => host.recoil(k), ads: (on) => { host.move.ads = !!on; }, reloading: (r) => { host.move.reload = r === null ? -1 : Math.min(1, Math.max(0, r)); },
       jump: () => host.jump(), bounce: (v) => host.bounce(v),
       doll: (who) => whoActor(who)?.doll || null,
       pos: (who) => { const a = whoActor(who); if (!a) return null; if (a === host.actor("me")) return { f: me.f, x: me.x, y: me.y, h: me.h, up: me.up, jz: me.jz, presence: null }; const s = a.presence || {}; return { f: s.f, x: a.x, y: a.y, h: s.h ?? 0, up: +s.u || 0, jz: a.jz || 0, presence: s }; },

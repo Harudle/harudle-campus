@@ -14,9 +14,11 @@ export function fileStore(path = join(tmpdir(), "harudle-duels.json")) {
   return { load() { try { return JSON.parse(readFileSync(path, "utf8")); } catch { return null; } }, save(data) { writeFile(path, JSON.stringify(data)).catch(() => { }); } };
 }
 const UID_RE = /^(p_[0-9a-f]{16}|h_[0-9a-f-]{36})$/;
+// 개발 서버의 연습 상대: /대결 테스터 [종목]이면 신청 · 수락 없이 바로 경기가 열리고, 테스터는 제 자리에 서 있다(app.js가 가짜 크루로 세운다)
+export const TESTER = { peer: "tester", u: "p_7e57e57e57e57e57", name: "테스터" };
 const str = (v, n) => (typeof v === "string" ? v.slice(0, n) : "");
 
-export function createDuel({ peers, send = () => { }, now = Date.now, random = Math.random, store = fileStore(), games = SERVER_GAMES } = {}) {
+export function createDuel({ peers, send = () => { }, now = Date.now, random = Math.random, store = fileStore(), games = SERVER_GAMES, tester = null } = {}) {   // tester: { enter(m, spawn), leave() } 개발 서버에서만
   const invites = new Map();   // id → { id, game, from: { peer, u, name }, to: { peer, u, name }, expiresAt }
   const matches = new Map();   // id → 경기
   const seats = new Map();     // uid → { match, seat(0 · 1 · null=관전) }
@@ -92,6 +94,7 @@ export function createDuel({ peers, send = () => { }, now = Date.now, random = M
   }
   function close(m) {
     m.phase = "closed"; matches.delete(m.id);
+    if (tester && m.players.some((p) => p.u === TESTER.u)) tester.leave();
     const until = now() + DUEL.AFTER;
     for (const [u, pid] of [...m.players.map((p) => [p.u, p.peer]), ...m.watchers]) {
       if (seats.get(u)?.match === m) seats.delete(u);
@@ -148,6 +151,13 @@ export function createDuel({ peers, send = () => { }, now = Date.now, random = M
         const g = duelGame(msg.game), to = peers.get(msg.to), tu = to?.uid;
         if (!g) return oops(pid, "game", "그런 종목은 없어요");
         if (!games[g.id] || !arenaOfGame(g.id)) return oops(pid, "not_ready", `${g.name}은 아직 준비 중이에요`);
+        if (tester && msg.to === TESTER.peer) { // 개발 서버: 테스터와 바로 경기
+          if (seats.has(u) || sending(u)) return oops(pid, "busy_me", s ? "경기나 관전이 끝난 뒤에 신청해 주세요" : "보낸 신청이 끝난 뒤에 다시 해 주세요");
+          if (seats.has(TESTER.u)) return oops(pid, "busy", "테스터가 다른 경기 중이에요");
+          const m = start(g.id, [{ u, peer: pid, name: nameOf(pid) }, { ...TESTER }]);
+          tester.enter(m, m.spawns[1]);
+          return;
+        }
         if (!to || !tu) return oops(pid, "unknown", "그 크루를 찾지 못했어요");
         if (tu === u) return oops(pid, "self", "나 자신에게는 신청할 수 없어요");
         if (seats.has(u) || sending(u)) return oops(pid, "busy_me", s ? "경기나 관전이 끝난 뒤에 신청해 주세요" : "보낸 신청이 끝난 뒤에 다시 해 주세요");
