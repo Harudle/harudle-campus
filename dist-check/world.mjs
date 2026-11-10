@@ -38,7 +38,7 @@ var wz = (ty) => ty * S - H * S / 2;
 var tX = (x) => (x + W * S / 2) / S;
 var tY = (z) => (z + H * S / 2) / S;
 var floorY = (f) => (f - 11) * FH;
-var FLOOR_INFO = { 11: "\uBC30\uC6C0\uC774 \uC2DC\uC791\uB418\uB294 \uACF5\uAC04", 12: "\uD568\uAED8, \uB610 \uB530\uB85C \uD559\uC2B5\uC758 \uACF5\uAC04", 13: "\uBAB0\uC785\uD558\uACE0 \uBC1C\uD45C\uD558\uB294 \uACF5\uAC04", 14: "\uB180\uACE0 \uC26C\uC5B4 \uAC00\uB294 \uB180\uC774\uD130" };
+var FLOOR_INFO = { 11: "\uBC30\uC6C0\uC774 \uC2DC\uC791\uB418\uB294 \uACF5\uAC04", 12: "\uD568\uAED8, \uB610 \uB530\uB85C \uD559\uC2B5\uC758 \uACF5\uAC04", 13: "\uBAB0\uC785\uD558\uACE0 \uBC1C\uD45C\uD558\uB294 \uACF5\uAC04", 14: "\uD558\uB8E8\uB4E4 \uC6D4\uB4DC" };
 var DECK_H = 0.25;
 var STEP_LAND = FH * 6 / 27;
 var STAIR_L = [
@@ -73,16 +73,18 @@ function makeFloor(f) {
     F("elev", 36, y, 1, 2, { turn: -Math.PI / 2, raw: true });
     F("xbanner", 35, y, 1, 2, { style: i, turn: Math.PI, raw: true });
   });
-  closed(51, 1, 5, 12, "\uACF5\uC870\uC2E4");
-  F("acunit", 52, 3, 3, 2);
-  F("acunit", 52, 7, 3, 2);
-  if (f === 13) {
-    R(47, 12, 9, 12, "\uD654\uC7A5\uC2E4", { closed: true, raw: true });
-    Z(48, 13, 7, 10, "\uD654\uC7A5\uC2E4", "", { npc: false, tint: "#E3EEF3", raw: true });
-  } else closed(47, 12, 9, 11, "\uD654\uC7A5\uC2E4", "#E3EEF3");
-  F("door", 47, 15, 1, 2);
-  F("door", 47, 19, 1, 2);
-  F("wc", 49, 14, 5, 7);
+  if (f !== 14) {
+    closed(51, 1, 5, 12, "\uACF5\uC870\uC2E4");
+    F("acunit", 52, 3, 3, 2);
+    F("acunit", 52, 7, 3, 2);
+    if (f === 13) {
+      R(47, 12, 9, 12, "\uD654\uC7A5\uC2E4", { closed: true, raw: true });
+      Z(48, 13, 7, 10, "\uD654\uC7A5\uC2E4", "", { npc: false, tint: "#E3EEF3", raw: true });
+    } else closed(47, 12, 9, 11, "\uD654\uC7A5\uC2E4", "#E3EEF3");
+    F("door", 47, 15, 1, 2);
+    F("door", 47, 19, 1, 2);
+    F("wc", 49, 14, 5, 7);
+  }
   const meetings = (names, desc, wx0 = 33) => {
     const w = 7, ex = wx0 + w + 2;
     [[wx0, 0, "e"], [wx0, 5, "e"], [ex, 0, "w"], [ex, 5, "w"]].forEach(([x, y, s], i) => {
@@ -286,47 +288,76 @@ function makeFloor(f) {
     F("highbar", 34, 38, 17, 1, { raw: true });
   }
   if (f === 14) {
-    R(1, 1, 14, 11, "\uB178\uB798\uBC29", { doors: [{ s: "e", from: 7, len: 2 }] });
-    Z(2, 2, 12, 9, "\uB178\uB798\uBC29", "\uB9C8\uC774\uD06C \uB450 \uAC1C\uC640 \uBBF8\uB7EC\uBCFC. \uD68C\uC2DD 2\uCC28\uB294 \uC5EC\uAE30\uC11C \uD574\uACB0\uD574\uC694.", { tint: "#F3E9FF" });
-    F("karaoke", 3, 2, 6, 1);
-    F("sofa", 3, 7, 7, 2);
-    F("coffee", 5, 5, 3, 1);
-    F("mirrorball", 6, 4, 1, 1);
-    F("speaker", 11, 2, 1, 1);
-    F("speaker", 2, 2, 1, 1);
-    R(1, 12, 14, 11, "\uAC8C\uC784\uBC29", { doors: [{ s: "e", from: 4, len: 2 }] });
-    Z(2, 13, 12, 9, "\uAC8C\uC784\uBC29", "\uC624\uB77D\uAE30\uC640 \uCF58\uC194 \uAC8C\uC784. \uBBF8\uC158 \uB05D\uB09C \uB0A0 \uD55C \uD310\uC529 \uBD99\uC5B4\uC694.", { tint: "#E8F0FF" });
-    for (const x of [3, 5, 7, 9]) F("arcade", x, 13, 1, 1);
-    F("tv", 3, 18, 4, 1);
-    F("beanbag", 3, 20, 2, 2, { yaw: Math.PI });
-    F("beanbag", 6, 20, 2, 2, { yaw: Math.PI });
-    F("sofa", 9, 19, 4, 2);
-    Z(16, 1, 17, 10, "\uD2B8\uB7A8\uD384\uB9B0", "\uC62C\uB77C\uAC00\uBA74 \uC800\uC808\uB85C \uD1B5\uD1B5 \uD280\uC5B4\uC694. \uBA38\uB9AC \uC2DD\uD788\uAE30\uC5D0 \uB531\uC774\uC5D0\uC694.", { tint: "#FFF8DC" });
-    F("trampoline", 17, 2, 5, 5);
-    F("trampoline", 23, 2, 5, 5);
-    F("trampoline", 17, 7, 4, 3, { small: true });
-    F("plant", 30, 2, 2, 2);
-    R(34, 1, 13, 9, "\uBCFC\uD480", { doors: [{ s: "s", from: 5, len: 3 }] });
-    Z(35, 2, 11, 7, "\uBCFC\uD480", "\uC54C\uB85D\uB2EC\uB85D \uACF5\uC774 \uAC00\uB4DD\uD55C \uBCFC\uD480. \uB4E4\uC5B4\uAC00\uBA74 \uBAB8\uC774 \uC3D9 \uC7A0\uACA8\uC694.", { tint: "#FFF1F0" });
-    F("ballpit", 36, 2, 8, 5);
-    F("slide", 44, 2, 2, 5);
-    Z(1, 24, 32, 9, "\uB180\uC774 \uAD11\uC7A5", "\uD0C1\uAD6C, \uBCF4\uB4DC\uAC8C\uC784, \uD3EC\uD1A0\uC874. \uC26C\uB294 \uC2DC\uAC04\uB9C8\uB2E4 \uC0AC\uB78C\uC774 \uBAA8\uC5EC\uC694.", { tint: "#E9F4E6" });
-    F("pingpong", 3, 26, 4, 2);
-    F("pingpong", 9, 26, 4, 2);
-    F("boardgame", 16, 26, 3, 2);
-    F("boardgame", 21, 26, 3, 2);
-    F("sculpture", 27, 26, 3, 3);
-    F("planter", 2, 32, 30, 1);
-    F("parasol", 16, 30, 2, 2);
-    F("parasol", 21, 30, 2, 2);
-    R(34, 24, 13, 9, "\uC27C\uD130", { doors: [{ s: "n", from: 5, len: 3 }] });
-    Z(35, 25, 11, 7, "\uC27C\uD130", "\uC870\uC6A9\uD788 \uB215\uAC70\uB098 \uAE30\uB300\uC5B4 \uC26C\uB294 \uBC29. \uBE48\uBC31\uC774 \uB109\uB109\uD574\uC694.", { tint: "#EEF0F8" });
-    for (const [x, y] of [[36, 26], [39, 26], [42, 26], [36, 29], [39, 29]]) F("beanbag", x, y, 2, 2, { yaw: Math.PI });
-    F("sofa", 42, 29, 4, 2);
-    F("plant", 44, 25, 2, 2);
-    closed(47, 23, 9, 10, "\uCC3D\uACE0");
-    F("crates", 49, 25, 4, 3);
-    F("crates", 49, 29, 3, 2);
+    const R2 = { raw: true };
+    Z(1, 1, 54, 10, "\uBA54\uC778 \uC804\uC2DC\uC2E4", "\uD558\uB8E8\uB4E4\uC5D0\uC11C \uC9C0\uAE08 \uAC00\uC7A5 \uC0AC\uB791\uBC1B\uB294 \uB124\uCEF7\uB9CC\uD654\uB97C \uAC70\uB294 \uBA54\uC778 \uC804\uC2DC\uC2E4\uC774\uC5D0\uC694. \uBCF4\uB77C \uCE74\uD3AB \uB05D \uD070 \uC561\uC790\uAC00 1\uC704\uC608\uC694. \uC561\uC790\uB97C \uB204\uB974\uBA74 \uD06C\uAC8C \uBCF4\uACE0, \uC774\uC824\uC5D0 \uB2E4 \uAC19\uC774 \uADF8\uB9BC\uC744 \uADF8\uB9B4 \uC218 \uC788\uC5B4\uC694.", { tint: "#FFF6D6", ...R2 });
+    F("runway", 31, 3, 4, 9, R2);
+    F("showwall", 29, 1, 8, 1, { src: "work", slots: [0], big: true, sign: "\uAC00\uC7A5 \uC0AC\uB791\uBC1B\uC740 \uB9CC\uD654", ...R2 });
+    F("showwall", 13, 1, 15, 1, { src: "work", slots: [7, 5, 3, 1], ...R2 });
+    F("showwall", 38, 1, 15, 1, { src: "work", slots: [2, 4, 6, 8], ...R2 });
+    [14, 17, 20, 23, 26].forEach((x, i) => F("showframe", x, 7, 1, 1, { src: "work", slot: 9 + i * 2, ...R2 }));
+    [38, 41, 44, 47].forEach((x, i) => F("showframe", x, 7, 1, 1, { src: "work", slot: 10 + i * 2, ...R2 }));
+    F("scoopstand", 2, 2, 8, 4, { sign: "\uD558\uB8E8\uB4E4 \uC791\uAC00 \uCCB4\uD5D8", hint: "\uB9CC\uD654 \uADF8\uB9AC\uAE30", view: "author", action: "\uC791\uAC00 \uCCB4\uD5D8\uD558\uAE30", keeper: true, ...R2 });
+    F("drawingeasel", 3, 7, 2, 2, R2);
+    F("sketchstand", 7, 8, 1, 1, R2);
+    F("phonestand", 50, 2, 4, 2, R2);
+    for (const x of [17, 23, 41, 46]) F("bench", x, 10, 2, 1, R2);
+    F("plant", 29, 3, 1, 1, R2);
+    F("plant", 36, 3, 1, 1, R2);
+    Z(1, 12, 26, 15, "\uC791\uAC00 \uC804\uC2DC\uC2E4", "\uD558\uB8E8\uB4E4 \uC778\uAE30 \uC791\uAC00 \uC5EC\uB35F \uBA85\uC758 \uBC29\uC774\uC5D0\uC694. \uBC29\uB9C8\uB2E4 \uADF8 \uC791\uAC00\uC758 \uB9CC\uD654\uAC00 \uAC78\uB824 \uC788\uACE0, \uC568\uBC94\uBD81\uC73C\uB85C \uBAA8\uB4E0 \uB9CC\uD654\uB97C \uB118\uACA8 \uBCFC \uC218 \uC788\uACE0, \uBC29\uBA85\uB85D\uC5D0 \uC751\uC6D0\uC744 \uB0A8\uAE38 \uC218 \uC788\uC5B4\uC694.", { tint: "#F7F3FF", npc: false, ...R2 });
+    const ZONE_TINTS = ["#E6DDF6", "#FFE9B5", "#FFD9E2", "#D5EFE3", "#D7E8FB", "#FFE2CC", "#DCD3FA", "#F6DFF4"];
+    [13, 21].forEach((y, row) => [2, 8, 14, 20].forEach((x, col) => {
+      const i = row * 4 + col;
+      R(x, y, 6, 6, "", { raw: true, doors: [{ s: "s", from: 1, len: 4 }] });
+      Z(x + 1, y + 1, 4, 4, `\uC791\uAC00\uC758 \uBC29 ${i + 1}`, "", { tint: ZONE_TINTS[i], npc: false, ...R2 });
+      F("showwall", x + 1, y + 1, 4, 1, { src: `a${i}`, slots: [0, 1], plate: i, ...R2 });
+      F("showframe", x + 4, y + 3, 1, 1, { src: "cheer", slot: i, ...R2 });
+      F("albumstand", x + 1, y + 3, 1, 1, { slot: i, ...R2 });
+    }));
+    Z(11, 28, 7, 11, "\uD034\uC988 \uC544\uCF00\uC774\uB4DC", "\uD558\uB8E8\uB4E4 \uB9CC\uD654\uB85C \uB178\uB798\uC640 \uB4DC\uB77C\uB9C8\xB7\uC601\uD654\uB97C \uB9DE\uD788\uB294 \uD034\uC988 \uC544\uCF00\uC774\uB4DC\uC608\uC694. \uC591\uC606 \uBC29\uC5D0 \uB4E4\uC5B4\uAC00 \uC561\uC790\uB97C \uB204\uB974\uBA74 \uBB38\uC81C\uB97C \uD480\uACE0, \uBE48 \uC561\uC790\uC5D0 \uB0B4 \uBB38\uC81C\uB97C \uAC78\uC5B4\uC694.", { tint: "#EDE6FB", checker: ["#F1EBFC", "#DFD4F6"], ...R2 });
+    F("marquee", 11, 28, 7, 1, { text: "\uD034\uC988 \uC544\uCF00\uC774\uB4DC", color: "#9A82E6", post: 16757703, posts: true, size: 3.4, y0: 2.6, ...R2 });
+    F("claw", 11, 30, 1, 1, { color: 16757703, ...R2 });
+    F("claw", 17, 30, 1, 1, { color: 10275061, ...R2 });
+    F("hbballoon", 11, 38, 1, 1, R2);
+    F("hbballoon", 17, 38, 1, 1, R2);
+    F("beanbag", 12, 33, 2, 2, R2);
+    F("beanbag", 15, 33, 2, 2, R2);
+    const quizRoom = (x, door, room, title, look) => {
+      const inner = x + 1, side = door === "e" ? x + 8 : x + 1, far = door === "e" ? x + 1 : x + 8;
+      R(x, 28, 10, 11, "", { raw: true, wall: look.wall, doors: [{ s: door, from: 7, len: 3 }] });
+      Z(inner, 29, 8, 9, title, "", { tint: look.floor[0], checker: look.floor, npc: false, ...R2 });
+      F("showwall", inner, 29, 8, 1, { src: room, slots: [0, 1, 2, 3], wallColor: 16777215, ...R2 });
+      F("marquee", inner, 29, 8, 1, { text: title, color: look.sign, size: 3.6, ...R2 });
+      F("showwall", far, 31, 1, 6, { src: room, slots: [4, 5, 6], face: far === x + 1 ? "e" : "w", wallColor: 16777215, ...R2 });
+      F("showwall", side, 30, 1, 4, { src: room, slots: [7, 8], face: side === x + 1 ? "e" : "w", wallColor: 16777215, ...R2 });
+      const mid = x + 3;
+      F("beanbag", mid, 35, 2, 2, R2);
+      F("beanbag", mid + 2, 35, 2, 2, R2);
+      F("floaters", x + 4, 32, 2, 2, { chars: look.chars, colors: look.charColors, ...R2 });
+    };
+    quizRoom(1, "e", "song", "\uB178\uB798 \uB9DE\uCD94\uAE30 \uBC29", { wall: 16770026, floor: ["#FFEEF2", "#FFDCE5"], sign: "#FF8FA8", chars: ["\u266A", "\u266B", "\u266A", "\u266C", "\u266B"], charColors: ["#FF7FA3", "#9A82E6", "#FFB84D"] });
+    F("jukebox", 2, 30, 1, 1, R2);
+    F("mic", 2, 37, 1, 1, R2);
+    quizRoom(18, "w", "drama", "\uB4DC\uB77C\uB9C8\xB7\uC601\uD654 \uB9DE\uCD94\uAE30 \uBC29", { wall: 14543867, floor: ["#EAF3FF", "#D6E7FB"], sign: "#6FB2EC", chars: ["\u2605", "\u2726", "\u2605", "\u2727", "\u2605"], charColors: ["#FFC94D", "#6FB2EC", "#9A82E6"] });
+    F("clapper", 26, 30, 1, 1, R2);
+    F("popcorn", 26, 37, 1, 1, R2);
+    R(40, 13, 13, 26, "", { raw: true, wall: 16181202, doors: [{ s: "w", from: 20, len: 4 }] });
+    Z(41, 14, 11, 24, "\uB9B4\uB808\uC774 \uB9CC\uD654 \uC18C\uC124\uAD00", "\uB124\uCEF7\uB9CC\uD654\uB97C \uD55C \uD654\uC529 \uC774\uC5B4 \uADF8\uB9AC\uB294 \uB9B4\uB808\uC774 \uC18C\uC124\uAD00\uC774\uC5D0\uC694. \uB05D\uC758 \uC774\uC824\uC774 \uCD5C\uC2E0 \uD654, \uC67C\uCABD \uBCBD \uD544\uB984\uC774 \uC9C0\uB09C \uD654\uC608\uC694. \uB204\uB974\uBA74 \uCC98\uC74C\uBD80\uD130 \uB118\uACA8 \uBCF4\uACE0 \uB2E4\uC74C \uD654\uB97C \uC774\uC5B4 \uADF8\uB824\uC694.", { tint: "#D9B48A", planks: ["#D9B48A", "#CDA57A"], ...R2 });
+    F("runway", 44, 17, 5, 21, R2);
+    F("wallsign", 41, 14, 11, 1, { text: "\uB9B4\uB808\uC774 \uB9CC\uD654 \uC18C\uC124\uAD00", size: 4, ...R2 });
+    F("showframe", 46, 15, 1, 1, { src: "relay", slot: 0, big: true, ...R2 });
+    F("showwall", 41, 17, 1, 16, { src: "relay", slots: [4, 3, 2, 1], style: "film", face: "e", ...R2 });
+    F("relayscroll", 51, 17, 1, 16, { text: "\uC55E\uC0AC\uB78C\uC758 \uB9C8\uC9C0\uB9C9 \uCEF7\uC744 \uBCF4\uACE0, \uB2E4\uC74C \uB124 \uCEF7\uC744 \uC774\uC5B4 \uADF8\uB824\uC694. \uC774 \uC774\uC57C\uAE30\uB294 \uB05D\uB098\uC9C0 \uC54A\uC544\uC694.", face: "w", ...R2 });
+    for (const y of [21, 27]) {
+      F("bench", 42, y, 2, 1, R2);
+      F("bench", 49, y, 2, 1, R2);
+    }
+    F("bench", 49, 33, 2, 1, R2);
+    Z(28, 27, 10, 12, "\uC624\uB298\uC758 \uD2B9\uC885", "\uD558\uB8E8\uB4E4 \uC778\uAE30 \uB9CC\uD654\uB97C \uC2E0\uBB38\uC73C\uB85C \uC5EE\uC740 \uAC00\uD310\uB300\uC608\uC694. \uC55E\uC5D0\uC11C F\uB97C \uB204\uB974\uBA74 \uC624\uB298\uC758 \uD2B9\uC885\uC744 \uD3BC\uCCD0 \uBD10\uC694. \uC11C\uCABD\uC740 \uD034\uC988 \uC544\uCF00\uC774\uB4DC, \uB3D9\uCABD \uBB38\uC740 \uB9B4\uB808\uC774 \uB9CC\uD654 \uC18C\uC124\uAD00\uC774\uC5D0\uC694.", { tint: "#F8F6FF", npc: false, ...R2 });
+    F("bench", 29, 29, 2, 1, R2);
+    F("bench", 35, 29, 2, 1, R2);
+    F("scoopstand", 30, 33, 6, 3, { face: "n", ...R2 });
+    F("plant", 28, 37, 1, 1, R2);
+    F("plant", 37, 37, 1, 1, R2);
   }
   return { f, rooms, furn, zones, portals, calls };
 }
@@ -394,7 +425,7 @@ function furnCells(fl, o, set) {
   if (WALK_THROUGH.has(o.kind)) return;
   for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) set(x, y);
 }
-var WALK_THROUGH = /* @__PURE__ */ new Set(["hbmat", "poster", "walldeco", "linelight", "bleacher", "arcbleacher", "flight", "brickdeck", "pebbles", "redsteps", "mirrorball", "trampoline", "ballpit"]);
+var WALK_THROUGH = /* @__PURE__ */ new Set(["hbmat", "runway", "neonsign", "marquee", "floaters", "wallsign", "poster", "walldeco", "linelight", "bleacher", "arcbleacher", "flight", "brickdeck", "pebbles", "redsteps", "mirrorball", "trampoline", "ballpit"]);
 var ELEV_SPAWN = [32.5, 15.5];
 for (const fl of Object.values(FLOORS)) {
   const g = new Uint8Array(W * H);

@@ -7,6 +7,9 @@ import { AVATAR_COLOR_PARTS, AVATAR_COLORS, AVATAR_OPTIONS, AVATAR_PRESETS, LOCK
 import { dropDoll, makeDoll } from "./dolls";
 import { avatarPreview } from "../scene/avatarPreviewStore";
 import { createEnvironment } from "./environment";
+import { openWorldWindow } from "../worldFloor";
+import { loadShowcase, type ShowItem } from "../worldShowcase";
+import { drawFrame as drawEaselFrame, drawPaper as drawEaselPaper } from "../../world/src/scene/gallery/easelDrawing";
 import { createCityscape } from "./cityscape";
 import { mountMediaControls } from "../media/controller";
 import { mountStartrack } from "../startrack/controller";
@@ -160,6 +163,105 @@ const board = (parent, w, h, tex, x, y, z, ry = 0) => {
   m.position.set(x, y, z); m.rotation.y = ry; parent.add(m); return m;
 };
 
+/* 14층 하루들 월드 액자(showframe): 그림은 내용(showcase)이 오면 캔버스에 그린다. 층을 짓기 전에 쓰이므로 여기 둔다 */
+const SHOW_W = 512, SHOW_H = 600, SHOW_BAND = 88;
+// 작가 전시실(a0~a7)은 월드 작가 방 바닥색(ZONE_COLORS)과 같은 색 액자
+const ZONE_FRAMES = [0xE6DDF6, 0xFFE9B5, 0xFFD9E2, 0xD5EFE3, 0xD7E8FB, 0xFFE2CC, 0xDCD3FA, 0xF6DFF4];
+const SHOW_FRAME: Record<string, number> = { work: 0xFFD97A, relay: 0xB9A6EC, song: 0xF7A6B5, drama: 0x7DB3F0, cheer: 0xFFE9B5, ...Object.fromEntries(ZONE_FRAMES.map((c, i) => [`a${i}`, c])) };
+const SHOW_EMPTY: Record<string, string> = { work: "전시 준비 중", relay: "다음 화를 기다려요", song: "불러오는 중", drama: "불러오는 중", cheer: "작가를 기다려요" };
+const showSlots: any[] = [];
+// 작가 방 문패: 작가 이름은 내용이 와야 알아서 나중에 그린다
+const showPlates: { cv: HTMLCanvasElement; tex: any; slot: number }[] = [];
+let showcase: Record<string, ShowItem[]> | null = null, showcaseAt = 0, showcaseLoading = false;
+const showItem = (slot) => slot.fixed ?? showcase?.[slot.src]?.[slot.slot] ?? null;
+const showImages = new Map<string, Promise<HTMLImageElement>>();
+const showImage = (url) => { if (!showImages.has(url)) { const img = new Image(); img.crossOrigin = "anonymous"; img.src = url; showImages.set(url, img.decode().then(() => img)); } return showImages.get(url); };
+// 액자 그림 판 하나를 parent에 붙이고 등록한다. 위치(격자)는 nearShow가 처음 쓸 때 실제 자리에서 읽는다(돌려 세운 벽도 그대로 맞는다)
+function showSlot(parent, src, index, fw, x, y, z, reach = 2) {
+  const cv = document.createElement("canvas"); cv.width = SHOW_W; cv.height = SHOW_H;
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  const m = board(parent, fw, fw * SHOW_H / SHOW_W, tex, x, y, z); m.userData.noMerge = true;
+  const slot = { src, slot: index, x: undefined, y: undefined, reach, cv, tex, mesh: m, url: null };
+  m.userData.show = slot; showSlots.push(slot); paintShow(slot);
+}
+// 내용이 정해진 자리(큰 휴대폰처럼): 데이터를 받지 않고 그 항목을 그대로 쓴다
+function fixedSlot(mesh, item, reach = 2) { const slot = { fixed: item, x: undefined, y: undefined, reach, mesh }; mesh.userData.show = slot; showSlots.push(slot); }
+// 하루들 월드 큰 휴대폰 화면: 월드는 하루들을 화면에 그대로 띄우지만, 3D 판에는 웹을 못 넣어서 하루들 피드처럼 그린다(인기 만화가 오면 그 그림으로)
+const PHONE_W = 360, PHONE_H = 720;
+const phoneCanvas = document.createElement("canvas"); phoneCanvas.width = PHONE_W; phoneCanvas.height = PHONE_H;
+const phoneTex = new THREE.CanvasTexture(phoneCanvas); phoneTex.colorSpace = THREE.SRGBColorSpace; phoneTex.anisotropy = 4;
+function paintPhone() { // 하루들 모바일 첫 화면 모양(월드 휴대폰은 이 화면을 실제로 띄운다): 위에 + 버튼·Harudle 로고, 분류 탭, 한 편씩 크게 내려가는 피드, 아래 메뉴
+  const g = phoneCanvas.getContext("2d"), w = PHONE_W, h = PHONE_H, works = showcase?.work ?? [], ink = "#2B2140", gray = "#8F8BA0", purple = "#7355DA", navTop = h - 64;
+  const font = (size, weight = 700) => `${weight} ${size}px ${HAND}`;
+  g.fillStyle = "#FFFFFF"; g.fillRect(0, 0, w, h);
+  g.fillStyle = "#E9E2FC"; g.beginPath(); g.arc(42, 34, 27, 0, Math.PI * 2); g.fill(); g.fillStyle = "#FFFFFF"; g.beginPath(); g.arc(42, 34, 21, 0, Math.PI * 2); g.fill();   // 만들기(+) 버튼
+  g.strokeStyle = purple; g.lineWidth = 3; g.beginPath(); g.moveTo(34, 34); g.lineTo(50, 34); g.moveTo(42, 26); g.lineTo(42, 42); g.stroke();
+  g.fillStyle = ink; g.font = font(30, 800); g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("Harudle", w / 2, 34);   // 로고
+  g.font = font(15); g.textAlign = "left";
+  ["전체", "일상", "연애", "직장", "학교"].forEach((t, i) => { g.fillStyle = i ? gray : purple; g.fillText(t, 20 + i * 44, 84); });
+  g.fillStyle = purple; g.fillRect(18, 98, 30, 3); g.fillStyle = "#ECE8F4"; g.fillRect(16, 106, w - 32, 1);
+  g.fillStyle = gray; g.textAlign = "right"; g.fillText("↻   최신순 ⌄", w - 18, 84);
+  const post = (it, y) => { // 글쓴이 줄 → 네컷 → 좋아요·댓글·보내기
+    const p = it?.post; g.fillStyle = "#F1ECFF"; g.beginPath(); g.arc(38, y + 14, 13, 0, Math.PI * 2); g.fill();
+    g.fillStyle = ink; g.font = font(15); g.textAlign = "left"; g.textBaseline = "middle"; g.fillText(`${p?.nickname ?? "하루들 작가"}  ›  ${p?.category ?? "일상"}`, 60, y + 14, w - 110);
+    g.fillStyle = gray; g.textAlign = "right"; g.fillText("···", w - 20, y + 12);
+    const iy = y + 40, side = w - 56; g.fillStyle = "#FAFAFC"; g.fillRect(28, iy, side, side); g.strokeStyle = "#E3DEEE"; g.lineWidth = 1; g.strokeRect(28, iy, side, side);
+    if (it?.image) showImage(it.image).then((img) => { g.save(); g.beginPath(); g.rect(0, 0, w, navTop); g.clip(); g.drawImage(img, 28, iy, side, side); g.restore(); phoneTex.needsUpdate = true; }).catch(() => {});
+    const ay = iy + side + 28; g.fillStyle = ink; g.font = font(17); g.textAlign = "left";
+    g.fillText(`♡ ${p?.likes ?? 0}`, 24, ay); g.fillText(`▢ ${p?.comments ?? 0}`, 88, ay); g.fillText("➤", 150, ay);
+    return ay + 34;
+  };
+  const next = post(works[0], 118); post(works[1], next);
+  g.fillStyle = "#FFFFFF"; g.fillRect(0, navTop, w, h - navTop); g.fillStyle = "#ECE8F4"; g.fillRect(0, navTop, w, 1);   // 아래 메뉴
+  [["⌂", "홈"], ["▦", "네컷 모아보기"], ["⚙", "설정"]].forEach(([icon, t], i) => { const cx = w * (i + .5) / 3; g.fillStyle = i ? gray : purple; g.textAlign = "center"; g.font = font(20); g.fillText(icon, cx, navTop + 22); g.font = font(12); g.fillText(t, cx, navTop + 48); });
+  phoneTex.needsUpdate = true;
+}
+paintPhone();
+// 휴대폰 옆 "크게 열기" 받침대 판, 휴대폰 위 말풍선
+const phoneKioskTex = canvasTex(256, 256, (g, w, h) => { g.fillStyle = "#7355DA"; g.fillRect(0, 0, w, h); g.fillStyle = "#FFFFFF"; g.textAlign = "center"; g.textBaseline = "middle"; g.font = `800 ${h * .34}px ${HAND}`; g.fillText("⤢", w / 2, h * .3); g.font = `800 ${h * .22}px ${HAND}`; g.fillText("크게 열기", w / 2, h * .72); });
+const phoneBubbleTex = canvasTex(640, 200, (g, w, h) => {
+  g.fillStyle = "#FFFFFF"; g.strokeStyle = "#2B2140"; g.lineWidth = 8; g.beginPath(); g.roundRect(6, 6, w - 12, h - 60, 50); g.fill(); g.stroke();
+  g.beginPath(); g.moveTo(w / 2 - 34, h - 58); g.lineTo(w / 2, h - 10); g.lineTo(w / 2 + 34, h - 58); g.fill(); g.stroke(); g.fillRect(w / 2 - 30, h - 66, 60, 12);
+  g.fillStyle = "#7355DA"; g.font = `800 66px ${HAND}`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("하루들 직접 써 보기", w / 2, (h - 54) / 2 + 4, w - 60);
+});
+function paintShow(slot) {
+  if (slot.fixed) return;
+  if (slot.paint) { slot.paint(slot); return; }
+  const item = showItem(slot), g = slot.cv.getContext("2d"), w = SHOW_W, h = SHOW_H;
+  const text = (t, y, size, color = "#111118") => { g.fillStyle = color; g.font = `700 ${size}px ${HAND}`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(t, w / 2, y, w - 40); };
+  g.fillStyle = "#FFFFFF"; g.fillRect(0, 0, w, h);
+  if (!item) { text(showcase ? SHOW_EMPTY[slot.src] ?? "작가를 기다려요" : "불러오는 중…", h / 2, 40, "#8F8BA0"); slot.tex.needsUpdate = true; return; }
+  g.fillStyle = "#FFF8DC"; g.fillRect(0, h - SHOW_BAND, w, SHOW_BAND); g.fillStyle = "#111118"; g.fillRect(0, h - SHOW_BAND - 3, w, 3);
+  text(item.caption, h - SHOW_BAND / 2, 34);
+  if (!item.image) { text(item.caption.startsWith("+") ? "+" : "✎", (h - SHOW_BAND) / 2, 160, "#B9A6EC"); slot.tex.needsUpdate = true; return; }
+  text("그림 불러오는 중…", (h - SHOW_BAND) / 2, 34, "#8F8BA0"); slot.tex.needsUpdate = true;
+  slot.url = item.image;
+  showImage(item.image).then((img) => { if (slot.url !== item.image) return; g.fillStyle = "#FFFFFF"; g.fillRect(0, 0, w, h - SHOW_BAND - 3); const side = h - SHOW_BAND - 3; g.drawImage(img, (w - side) / 2, 0, side, side); slot.tex.needsUpdate = true; }).catch(() => {});
+}
+
+function plateSlot(parent, index, w, x, y, z) {
+  const cv = document.createElement("canvas"); cv.width = 512; cv.height = 96;
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+  const m = board(parent, w, w * 96 / 512, tex, x, y, z); m.userData.noMerge = true;
+  const plate = { cv, tex, slot: index }; showPlates.push(plate); paintPlate(plate);
+}
+function paintPlate(plate) {
+  const g = plate.cv.getContext("2d"), name = showcase?.plate?.[plate.slot]?.caption ?? `작가 전시실 ${plate.slot + 1}`;
+  g.fillStyle = "#7355DA"; g.fillRect(0, 0, 512, 96); g.fillStyle = "#FFFFFF"; g.font = `700 48px ${HAND}`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(name, 256, 50, 480);
+  plate.tex.needsUpdate = true;
+}
+// 메인 전시실의 함께 그리는 이젤: 월드 서버의 지금 그림(/easel/art)을 판에 그린다
+const EASEL_PX = 512;
+const easelCanvas = document.createElement("canvas"); easelCanvas.width = EASEL_PX; easelCanvas.height = EASEL_PX;
+const easelTex = new THREE.CanvasTexture(easelCanvas); easelTex.colorSpace = THREE.SRGBColorSpace;
+let easelAt = 0, easelLoading = false;
+function paintEasel(segs) { const g = easelCanvas.getContext("2d"); drawEaselPaper(g, EASEL_PX, segs); drawEaselFrame(g, EASEL_PX); easelTex.needsUpdate = true; }
+paintEasel([]);
+function refreshEasel() {
+  if (easelLoading) return; easelLoading = true; easelAt = performance.now();
+  fetch("/easel/art", { cache: "no-store", credentials: "omit" }).then((r) => (r.ok ? r.json() : null)).then((d) => { if (d && Array.isArray(d.segs)) paintEasel(d.segs); }).catch(() => {}).finally(() => { easelLoading = false; });
+}
+
 /* ════════════════ 4. 월드 빌더: 층 하나 = 종이 디오라마 한 판 ════════════════ */
 const C = { white: 0xffffff, wood: 0xEBD3AE, woodD: 0xC99E6B, gray: 0xCFCBD6, grayD: 0x9A97A3, dark: 0x2E2C38, brick: 0xE2A08A, leaf: 0x8FCFA3, olive: 0xB9C27A, sofa: 0xD9A877, mint: 0xD7E4DD, lav: 0xFFE27A, glass: 0xBFD9F0, red: 0xE46F6F, coffee: 0x8C6A4F };
 function floorTexture(fl) {
@@ -167,6 +269,9 @@ function floorTexture(fl) {
   return canvasTex(W * P, H * P, (g) => {
     g.fillStyle = "#FBFAFD"; g.fillRect(0, 0, W * P, H * P);
     for (const z of fl.zones) if (z.tint) { g.fillStyle = z.tint; g.fillRect(z.x * P, z.y * P, z.w * P, z.h * P); }
+    // 14층 월드 바닥 무늬: checker는 퀴즈 아케이드 두 칸 바둑판, planks는 릴레이 소설관 세로 나무판
+    for (const z of fl.zones) if (z.checker) for (let yy = 0; yy < z.h; yy += 2) for (let xx = 0; xx < z.w; xx += 2) { g.fillStyle = z.checker[((xx + yy) / 2) % 2]; g.fillRect((z.x + xx) * P, (z.y + yy) * P, Math.min(2, z.w - xx) * P, Math.min(2, z.h - yy) * P); }
+    for (const z of fl.zones) if (z.planks) for (let xx = 0; xx < z.w; xx++) { g.fillStyle = z.planks[xx % 2]; g.fillRect((z.x + xx) * P, z.y * P, P, z.h * P); g.fillStyle = "rgba(120,80,40,.18)"; for (let yy = (xx * 3) % 5; yy < z.h; yy += 5) g.fillRect((z.x + xx) * P, (z.y + yy) * P, P, 2); }
     for (const r of fl.rooms) if (r.closed) { g.fillStyle = "#E6E5EC"; g.fillRect(r.x * P, r.y * P, r.w * P, r.h * P); }
     g.fillStyle = "#E3E0EA"; for (let y = 1; y < H; y++) for (let x = 1; x < W; x++) g.fillRect(x * P - 1.5, y * P - 1.5, 3, 3);
     for (const z of fl.zones) if (z.name === "엘리베이터 홀") { g.strokeStyle = "rgba(150,150,160,.35)"; g.lineWidth = 1.5; for (let ty = z.y; ty <= z.y + z.h; ty += 1.5) { g.beginPath(); g.moveTo(z.x * P, ty * P); g.lineTo((z.x + z.w) * P, ty * P); g.stroke(); } for (let tx = z.x; tx <= z.x + z.w; tx += 1.5) { g.beginPath(); g.moveTo(tx * P, z.y * P); g.lineTo(tx * P, (z.y + z.h) * P); g.stroke(); } }   // 큰 석재 타일
@@ -220,7 +325,7 @@ function buildFloor(fl) {
   }
   // 방 벽(행성 회의실은 유리)
   for (const r of fl.rooms) {
-    const col = r.ring ? C.grayD : r.closed ? 0xD5D3DD : C.white, h = r.ring ? 0.45 : WALL;
+    const col = r.wall ?? (r.ring ? C.grayD : r.closed ? 0xD5D3DD : C.white), h = r.ring ? 0.45 : WALL;   // wall: 14층 월드 방 벽색
     for (const [s, a, b] of wallSegs(r)) {
       // 층 바깥 테두리와 겹치는 면은 그리지 않는다: 바깥 통유리 창틀과 같은 자리라 겹쳐서 깜빡인다(충돌은 바깥 테두리가 막는다)
       if ((s === "e" && r.x + r.w === W) || (s === "w" && r.x === 0) || (s === "n" && r.y === 0) || (s === "s" && r.y + r.h === H)) continue;
@@ -460,6 +565,54 @@ const coverMat = (k) => coverMats[k] || (coverMats[k] = new THREE.MeshBasicMater
   for (const wd of t.split(" ")) { const nx = cur ? cur + " " + wd : wd; if (g.measureText(nx).width > cw - 32 && cur) { lines.push(cur); cur = wd; } else cur = nx; } lines.push(cur);
   lines.forEach((l, i) => g.fillText(l, 16, 22 + i * 34)); g.fillRect(16, 26 + lines.length * 34, 40, 4);
 }) }));
+// 남쪽을 보게 만든 14층 월드 벽(showwall·relayscroll)을 face e/w면 돌려 세운다: 칸 가운데에 돌린 묶음을 두고 그 안에서는 길이·두께를 바꿔 쓴다
+function facing(G, o, x, z, w, d) {
+  if (o.face !== "e" && o.face !== "w") return [G, x, z, w, d];
+  const P = new THREE.Group(); P.position.set(x, 0, z); P.rotation.y = o.face === "e" ? Math.PI / 2 : -Math.PI / 2; G.add(P);
+  return [P, 0, 0, d, w];
+}
+// 퀴즈 아케이드 네온 간판: 번진 색 글자 위에 흰 글자(월드 NeonSign처럼)
+function neonTex(text, color) {
+  return canvasTex(768, 128, (g, w, h) => {
+    let size = 78; g.font = `800 ${size}px ${HAND}`; while (size > 20 && g.measureText(text).width > w * .88) { size -= 2; g.font = `800 ${size}px ${HAND}`; }
+    g.textAlign = "center"; g.textBaseline = "middle"; g.shadowColor = color; g.fillStyle = color;
+    for (const blur of [30, 16]) { g.shadowBlur = blur; g.fillText(text, w / 2, h / 2); }
+    g.shadowBlur = 5; g.fillStyle = "#FFFFFF"; g.fillText(text, w / 2, h / 2);
+  });
+}
+function neon(parent, text, color, w, x, y, z) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, w / 6), new THREE.MeshBasicMaterial({ map: neonTex(text, color), transparent: true, depthWrite: false, side: THREE.DoubleSide, toneMapped: false }));
+  m.position.set(x, y, z); m.userData.noMerge = true; parent.add(m); return m;
+}
+// 퀴즈 아케이드 전구 간판: 둥근 파스텔 판에 흰 글씨(진한 테두리), 가장자리를 따라 전구가 붙는다
+function marqueeTex(text, bg) {
+  return canvasTex(1024, 204, (g, w, h) => {
+    g.fillStyle = bg; g.beginPath(); g.roundRect(6, 6, w - 12, h - 12, 60); g.fill();
+    g.strokeStyle = "#FFFFFF"; g.lineWidth = 6; g.setLineDash([18, 14]); g.beginPath(); g.roundRect(30, 30, w - 60, h - 60, 40); g.stroke(); g.setLineDash([]);
+    let size = 96; g.font = `800 ${size}px ${HAND}`; while (size > 24 && g.measureText(text).width > w * .8) { size -= 2; g.font = `800 ${size}px ${HAND}`; }
+    g.textAlign = "center"; g.textBaseline = "middle"; g.lineJoin = "round"; g.lineWidth = 14; g.strokeStyle = "#2B2140"; g.strokeText(text, w / 2, h / 2 + 4); g.fillStyle = "#FFFFFF"; g.fillText(text, w / 2, h / 2 + 4);
+  });
+}
+// 투명 바탕에 기호 하나(떠다니는 음표·별)
+const glyphTex = (ch, color) => canvasTex(128, 128, (g, w, h) => { g.font = `800 104px ${HAND}`; g.textAlign = "center"; g.textBaseline = "middle"; g.lineJoin = "round"; g.lineWidth = 10; g.strokeStyle = "#FFFFFF"; g.strokeText(ch, w / 2, h / 2); g.fillStyle = color; g.fillText(ch, w / 2, h / 2); });
+const glyph = (parent, ch, color, size, x, y, z) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(size, size), new THREE.MeshBasicMaterial({ map: glyphTex(ch, color), transparent: true, depthWrite: false, side: THREE.DoubleSide })); m.position.set(x, y, z); m.userData.noMerge = true; parent.add(m); return m; };
+const jukeboxTex = canvasTex(256, 320, (g, w, h) => {
+  const cols = ["#FF9EB5", "#FFD97A", "#9FE0C2", "#9CC8F5", "#C9B8F0"]; g.fillStyle = "#FFF6EC"; g.fillRect(0, 0, w, h);
+  cols.forEach((c, i) => { g.strokeStyle = c; g.lineWidth = 16; g.beginPath(); g.arc(w / 2, h * .42, 100 - i * 18, Math.PI, 0); g.stroke(); });
+  g.fillStyle = "#2B2140"; g.font = `800 64px ${HAND}`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("♪", w / 2, h * .36);
+  g.fillStyle = "#7355DA"; g.fillRect(w * .16, h * .55, w * .68, h * .2); g.fillStyle = "#FFFFFF"; g.font = `700 30px ${HAND}`; g.fillText("오늘의 노래", w / 2, h * .65);
+  g.fillStyle = "#2B2140"; for (let i = 0; i < 5; i++) g.fillRect(w * .2, h * .8 + i * 12, w * .6, 5);
+});
+const popcornTex = canvasTex(256, 256, (g, w, h) => {
+  for (let i = 0; i < 8; i++) { g.fillStyle = i % 2 ? "#FFFFFF" : "#FF8FA8"; g.fillRect(i * w / 8, 0, w / 8, h); }
+  g.fillStyle = "#FFD97A"; g.beginPath(); g.roundRect(w * .12, h * .34, w * .76, h * .32, 24); g.fill(); g.strokeStyle = "#2B2140"; g.lineWidth = 6; g.stroke();
+  g.fillStyle = "#2B2140"; g.font = `800 50px ${HAND}`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("팝콘", w / 2, h / 2 + 2);
+});
+const clapperTex = canvasTex(256, 220, (g, w, h) => {
+  g.fillStyle = "#2B2140"; g.fillRect(0, 0, w, h);
+  for (let i = 0; i < 6; i++) { g.fillStyle = i % 2 ? "#2B2140" : "#FFFFFF"; g.beginPath(); g.moveTo(i * 48, 0); g.lineTo(i * 48 + 40, 0); g.lineTo(i * 48 + 24, 46); g.lineTo(i * 48 - 16, 46); g.fill(); }
+  g.fillStyle = "#FFFFFF"; g.font = `700 30px ${HAND}`; g.textAlign = "left"; g.textBaseline = "middle"; g.fillText("SCENE 1", 18, 90); g.fillText("TAKE 4", 18, 130); g.fillStyle = "#9CC8F5"; g.fillText("하루들 극장", 18, 175);
+});
 function buildFurn(G, o, fl) {
   if (o.bench === "w" && !o.shifted) { // 벤치에 붙인 테이블: 앉을 다리 자리만큼 동쪽으로 살짝 띄워 그린다(앉는 자리도 같이 옮긴다)
     const g = new THREE.Group(); g.position.x = .35; G.add(g); const n0 = SEAT_SINK ? SEAT_SINK.length : 0;
@@ -878,7 +1031,14 @@ function buildFurn(G, o, fl) {
         else box(G, S, hn + .9, .06, 0xC9CCD3, wx(x + .5), 0, wz(y) + .03, { line: .008 });
       } break;
     case "stairsdeco": for (let i = 0; i < o.h; i++) box(G, w - .1, (i % 4 + 1) * .12, S, 0xDCDAE3, x, 0, wz(o.y + i + .5), { line: .01, cast: false }); break;
-    case "bench": box(G, w - .1, .3, d * .6, C.wood, x, 0, z); for (const s of [-1, 1]) box(G, .06, .3, d * .5, C.woodD, x + s * (w / 2 - .2), 0, z, { line: 0 }); ball(G, .12, 0xFFD43B, x - .3, .4, z, { line: .008 }); break;
+    case "bench": if (fl.f === 14) { // 14층(하루들 월드) 벤치: 노란 공 대신 흰 다리 위 둥근 파스텔 방석(자리마다 색이 돌아간다)
+        const c = [0xDCD3FA, 0xFFD9E2, 0xD5EFE3, 0xD7E8FB, 0xFFE9B5][(o.x + o.y) % 5];
+        for (const s of [-1, 1]) box(G, .08, .22, d * .5, 0xFFFFFF, x + s * (w / 2 - .22), 0, z, { line: .006 });
+        box(G, w - .14, .06, d * .62, 0xFFFFFF, x, .2, z, { line: .008 });
+        const cush = solidMesh(new RoundedBoxGeometry(w - .24, .1, d * .56, 3, .045), c, { line: .012 }); cush.position.set(x, .3, z); G.add(cush);
+        for (let i = 1; i < Math.round(w / .5); i++) box(G, .02, .012, d * .5, 0xFFFFFF, x - (w - .24) / 2 + i * (w - .24) / Math.round(w / .5), .35, z, { line: 0, cast: false });   // 방석 바느질 선
+        break; }
+      box(G, w - .1, .3, d * .6, C.wood, x, 0, z); for (const s of [-1, 1]) box(G, .06, .3, d * .5, C.woodD, x + s * (w / 2 - .2), 0, z, { line: 0 }); ball(G, .12, 0xFFD43B, x - .3, .4, z, { line: .008 }); break;
     case "beanbag": { // 누울 수 있는 큰 빈백: 납작한 몸통 + 등받이 쪽 볼록
       const c = [0xFFD43B, 0xF7A6A0, 0x7DB3F0, 0xC9B8F0][(o.x + o.y) % 4], r = Math.min(w, d) / 2 - .06, yaw = o.yaw || 0;
       const s2 = solidMesh(new THREE.SphereGeometry(r, 20, 12), c, { line: .02 }); s2.scale.set(1, .26, 1.05); s2.position.set(x, r * .14, z); G.add(s2);
@@ -1065,6 +1225,155 @@ function buildFurn(G, o, fl) {
     case "mirrorball": { cyl(G, .01, .01, .7, C.dark, x, 1.7, z, { line: 0, cast: false }); const m = new THREE.Mesh(new THREE.IcosahedronGeometry(.22, 1), new THREE.MeshStandardMaterial({ color: 0xE8ECF5, metalness: .9, roughness: .15, flatShading: true })); m.position.set(x, 1.6, z); G.add(m); m.userData.noMerge = true; spinners.push(m);
       for (let i = 0; i < 9; i++) { const a = i * 2.39, rr = .5 + i * .18; const s2 = new THREE.Mesh(new THREE.CircleGeometry(.09, 10), new THREE.MeshBasicMaterial({ color: [0xFFD43B, 0xF7A6A0, 0x7DB3F0][i % 3], transparent: true, opacity: .55 })); s2.rotation.x = -Math.PI / 2; s2.position.set(x + Math.cos(a) * rr, .012, z + Math.sin(a) * rr); G.add(s2); } break; }
     case "speaker": box(G, .4, 1.1, .36, C.dark, x, 0, z); for (const yy of [.35, .8]) cyl(G, .12, .12, .02, 0x55525F, x, yy, z + .19, { line: 0 }).rotation.x = Math.PI / 2; break;
+    case "showframe": { // 14층 하루들 월드 액자(남쪽을 본다): 나무 두 다리 위 색 테두리 액자. big이면 소설관 가운데 큰 이젤. 그림은 내용이 오면 paintShow가 그린다
+      const g2 = new THREE.Group(); g2.position.set(x, 0, z); if (o.big) g2.scale.setScalar(1.7); if (o.face) g2.rotation.y = o.face === "e" ? Math.PI / 2 : -Math.PI / 2; G.add(g2);
+      for (const sx of [-1, 1]) box(g2, .06, .62, .06, C.woodD, sx * .3, 0, -.06, { line: .006 });
+      if (o.big) { const leg = box(g2, .06, 1.5, .06, C.woodD, 0, 0, -.32, { line: .006 }); leg.rotation.x = -.25; }   // 큰 이젤은 뒷다리 하나 더
+      box(g2, .96, 1.1, .07, SHOW_FRAME[o.src] ?? 0xFFFFFF, 0, .5, -.05, { line: .012 });
+      showSlot(g2, o.src, o.slot, .86, 0, 1.05, -.012, o.big ? 2.8 : 2);
+      break; }
+    case "showwall": { const [P, sx, sz, sw, sd] = facing(G, o, x, z, w, d); // face e/w면 서쪽/동쪽 가장자리에 세워 옆을 본다. 14층 하루들 월드 전시 벽(남쪽을 본다): 흰 벽에 색 액자를 slots 순서로 왼쪽부터 건다. style film은 검은 필름 띠(구멍 줄), big이면 큰 액자 하나
+      const film = o.style === "film", ww = sw - .2, wh = o.big ? 2.2 : 1.7, n = o.slots.length, fw = o.big ? 1.45 : .86, cy = o.big ? 1.12 : .92;
+      box(P, ww, wh, .16, film ? 0x2B2140 : o.wallColor ?? 0xFFFFFF, sx, 0, sz - sd / 2 + .12, { line: .012 });
+      if (film) for (const hy of [.2, wh - .2]) for (let i = 0; i < Math.floor(ww / .45); i++) box(P, .2, .12, .02, 0xFFFFFF, sx - ww / 2 + .3 + i * .45, hy - .06, sz - sd / 2 + .21, { line: 0 });   // 필름 구멍
+      for (let i = 0; i < n; i++) {
+        const fx = sx - ww / 2 + (i + .5) * ww / n;
+        box(P, fw + .1, fw * SHOW_H / SHOW_W + .1, .05, film ? 0xFFFFFF : SHOW_FRAME[o.src] ?? 0xFFFFFF, fx, cy - (fw * SHOW_H / SHOW_W + .1) / 2, sz - sd / 2 + .22, { line: .008 });
+        showSlot(P, o.src, o.slots[i], fw, fx, cy, sz - sd / 2 + .255);
+      }
+      if (o.plate !== undefined) plateSlot(P, o.plate, Math.min(ww, 2.6), sx, wh + .32, sz - sd / 2 + .12);
+      if (o.sign) { board(P, Math.min(ww, 3.2), .55, signTex(o.sign, { bg: film ? "#B9A6EC" : "#7355DA", fg: "#FFFFFF", size: 64 }), sx, wh + .4, sz - sd / 2 + .12); for (const k of [-1, 1]) if (o.big) ball(P, .14, 0xFFD43B, sx + k * 1.9, wh + .4, sz - sd / 2 + .12, { line: .01 }); }
+      break; }
+    case "marquee": { // 퀴즈 아케이드 전구 간판(남쪽을 본다): 벽 위에 띄우거나 o.posts면 두 기둥 위 아치. 판 색 o.color, 기둥 o.post
+      const mw = Math.min(w - .2, o.size ?? 3.6), mh = mw / 5, my = o.y0 ?? 2.3, mz = z - d / 2 + (o.posts ? .16 : .3);
+      if (o.posts) for (const k of [-1, 1]) { cyl(G, .1, .12, my, o.post ?? 0xFFFFFF, x + k * (mw / 2 + .12), 0, mz, { line: .008 }); ball(G, .16, 0xFFD97A, x + k * (mw / 2 + .12), my + .1, mz, { line: .008 }); }
+      const tex = marqueeTex(o.text, o.color ?? "#FF9EB5"); const m = new THREE.Mesh(new THREE.PlaneGeometry(mw, mh), new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide, toneMapped: false }));
+      m.position.set(x, my, mz); m.userData.noMerge = true; G.add(m);
+      const n = Math.round(mw / .28); for (let i = 0; i <= n; i++) for (const k of [-1, 1]) { const b2 = new THREE.Mesh(new THREE.SphereGeometry(.04, 8, 6), new THREE.MeshBasicMaterial({ color: i % 2 ? 0xFFF3B0 : 0xFFFFFF, toneMapped: false })); b2.position.set(x - mw / 2 + .2 + i * (mw - .4) / n, my + k * (mh / 2 + .03), mz + .02); b2.userData.noMerge = true; G.add(b2); }
+      break; }
+    case "claw": { // 퀴즈 아케이드 인형 뽑기 기계(남쪽을 본다): 파스텔 몸통, 유리 상자 안에 동글동글 인형, 위에 집게
+      const c = o.color ?? 0xFFB3C7;
+      box(G, .8, .75, .7, c, x, 0, z, { line: .01 }); box(G, .5, .08, .2, 0xFFFFFF, x, .55, z + .36, { line: .006 }); ball(G, .05, 0xFF7FA3, x - .12, .68, z + .4, { line: .004 }); cyl(G, .015, .015, .12, 0x2B2140, x + .1, .63, z + .4, { line: 0 }); ball(G, .04, 0x7355DA, x + .1, .77, z + .4, { line: 0 });
+      const glass = new THREE.Mesh(new THREE.BoxGeometry(.76, .8, .66), new THREE.MeshStandardMaterial({ color: 0xE6F4FF, transparent: true, opacity: .28, roughness: .1, depthWrite: false })); glass.position.set(x, 1.15, z); glass.userData.noMerge = true; G.add(glass);
+      [[-.2, -.15, 0xFFD97A], [.05, -.1, 0x9FE0C2], [.22, .12, 0xC9B8F0], [-.12, .15, 0x9CC8F5], [.15, -.2, 0xFFFFFF], [-.25, .05, 0xFF9EB5]].forEach(([dx, dz, cc]) => { ball(G, .11, cc, x + dx, .86, z + dz, { line: .006 }); ball(G, .04, cc, x + dx - .06, .96, z + dz, { line: .003 }); ball(G, .04, cc, x + dx + .06, .96, z + dz, { line: .003 }); });
+      box(G, .8, .16, .7, c, x, 1.55, z, { line: .01 }); board(G, .7, .13, signTex("인형 뽑기", { bg: "#FFFFFF", fg: "#7355DA", size: 60 }), x, 1.63, z + .36);
+      cyl(G, .01, .01, .3, 0x9EA3AA, x + .05, 1.25, z, { line: 0, cast: false }); for (const k of [-1, 1]) { const arm = box(G, .015, .14, .015, 0x9EA3AA, x + .05 + k * .04, 1.12, z, { line: 0 }); arm.rotation.z = k * .4; }
+      break; }
+    case "jukebox": { // 노래 방 주크박스(남쪽을 본다): 둥근 지붕의 파스텔 상자, 앞에 무지개 아치
+      box(G, .8, 1.05, .55, 0xFFB3C7, x, 0, z, { line: .01 }); const top = cyl(G, .4, .4, .55, 0xFFB3C7, x, 1.05 - .275, z, { line: .01 }); top.rotation.x = Math.PI / 2; top.position.y = 1.05;
+      board(G, .66, .82, jukeboxTex, x, .6, z + .285); box(G, .86, .1, .6, 0xFFD97A, x, 0, z, { line: .008 }); break; }
+    case "mic": { // 노래 방 스탠드 마이크
+      cyl(G, .16, .2, .04, 0xFF8FA8, x, 0, z, { line: .004 }); cyl(G, .02, .02, 1.3, 0xE4E2F0, x, 0, z, { line: 0 }); const head = ball(G, .09, 0xF4F2FA, x, 1.38, z + .02, { line: .006 }); head.scale.y = 1.3; cyl(G, .06, .06, .05, 0xFF7FA3, x, 1.27, z + .02, { line: 0 }); break; }
+    case "popcorn": { // 드라마·영화 방 팝콘 수레: 분홍 줄무늬 몸통, 노란 팝콘이 소복
+      box(G, .8, .8, .6, 0xFFFFFF, x, .12, z, { line: .01 }); board(G, .78, .78, popcornTex, x, .52, z + .305);
+      for (const k of [-1, 1]) cyl(G, .12, .12, .05, 0x2B2140, x + k * .3, 0, z + .32, { line: 0 }).rotation.z = Math.PI / 2;
+      for (let i = 0; i < 14; i++) ball(G, .07, i % 3 ? 0xFFF3C4 : 0xFFD97A, x + Math.sin(i * 2.3) * .26, .96 + (i % 4) * .05, z + Math.cos(i * 1.7) * .18, { line: .003 });
+      for (const k of [-1, 1]) cyl(G, .02, .02, .55, 0xFF8FA8, x + k * .36, .92, z, { line: 0 }); box(G, .9, .08, .7, 0xFF8FA8, x, 1.47, z, { line: .008 }); break; }
+    case "clapper": { // 드라마·영화 방 큰 슬레이트(남쪽을 본다): 나무 받침 위에 세운 "하루들 극장" 슬레이트
+      for (const k of [-1, 1]) { const leg = box(G, .05, 1.1, .05, C.woodD, x + k * .25, 0, z, { line: .004 }); leg.rotation.z = -k * .1; }
+      board(G, .8, .7, clapperTex, x, 1.2, z + .04); const bar = box(G, .82, .1, .05, 0xFFFFFF, x - .02, 1.56, z + .04, { line: .006 }); bar.rotation.z = .18; break; }
+    case "floaters": { // 공중에 천천히 도는 기호(o.chars, o.colors): 노래 방 음표·드라마 방 별
+      const chars = o.chars ?? ["♪", "♫"], cols = o.colors ?? ["#FF7FA3", "#7355DA"];
+      chars.forEach((ch, i) => { const a = i * 2.4, r = .25 + (i % 3) * .3, g2 = new THREE.Group(); g2.position.set(x + Math.cos(a) * r, 1.5 + (i % 3) * .35, z + Math.sin(a) * r); G.add(g2); glyph(g2, ch, cols[i % cols.length], .75, 0, 0, 0); spinners.push(g2); });
+      break; }
+    case "neonsign": { // 퀴즈 아케이드 네온 간판(남쪽을 본다): 어두운 벽 위나 기둥 두 개 위에 단다. o.posts면 기둥에 세운 아치
+      const nw = Math.min(w - .2, o.size ?? 3.6), ny = o.y0 ?? 2.25, nz = z - d / 2 + (o.posts ? .16 : .3);   // 벽에 걸 때는 문제 액자 벽(1.7m) 위에 띄운다
+      if (o.posts) { for (const sx of [-1, 1]) box(G, .14, ny + .2, .14, 0x2A2058, x + sx * (nw / 2 + .1), 0, nz, { line: .008 }); box(G, nw + .4, nw / 6 + .2, .1, 0x2A2058, x, ny - nw / 12 - .1, nz - .06, { line: .01 }); }
+      neon(G, o.text, o.color ?? "#FF7FA3", nw, x, ny, nz);
+      break; }
+    case "wallsign": // 벽 위쪽 글씨판(남쪽을 본다): 릴레이 소설관 이름
+      board(G, Math.min(w - .2, o.size ?? 3.4), Math.min(w - .2, o.size ?? 3.4) / 8, signTex(o.text, { bg: o.bg ?? "#F6E7D2", fg: o.fg ?? "#5B3FC4", size: 72, w: 1024, h: 128 }), x, o.y0 ?? WALL - .45, z - d / 2 + .1);
+      break;
+    case "relayscroll": { // 릴레이 소설관 두루마리(face w면 동쪽 벽에서 서쪽을 본다): 줄 친 종이에 안내 글, 양 끝 나무 막대
+      const [P, sx, sz, sw, sd] = facing(G, o, x, z, w, d), len = sw - .4, back = sz - sd / 2 + .08;
+      const tex = canvasTex(2048, 96, (g, cw, ch) => { g.fillStyle = "#FFFBF2"; g.fillRect(0, 0, cw, ch); g.strokeStyle = "#D9CCF5"; g.lineWidth = 3; for (let yy = ch * .2; yy < ch; yy += ch * .2) { g.beginPath(); g.moveTo(0, yy); g.lineTo(cw, yy); g.stroke(); }
+        g.fillStyle = "#5B3FC4"; g.font = `700 30px ${HAND}`; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(o.text, cw / 2, ch / 2, cw - 40); });
+      board(P, len, .5, tex, sx, 1.3, back + .02);
+      for (const ex of [-1, 1]) cyl(P, .06, .06, .7, 0xB9855A, sx + ex * len / 2, .95, back + .06);
+      break; }
+    case "drawingeasel": { // 14층 메인 전시실 함께 그리는 네컷 이젤(남쪽을 본다): 월드 이젤처럼 나무 세 다리, 판에는 지금 그림. 바닥에 붓
+      const g2 = new THREE.Group(); g2.position.set(x, 0, z); G.add(g2);
+      for (const sx of [-1, 1]) { const leg = box(g2, .07, 2.1, .07, C.woodD, sx * .55, 0, 0, { line: .006 }); leg.rotation.z = -sx * .12; }
+      { const leg = box(g2, .07, 2.1, .07, C.woodD, 0, 0, -.45, { line: .006 }); leg.rotation.x = -.3; }
+      box(g2, 1.3, .06, .14, C.woodD, 0, .62, .04, { line: .006 });   // 판 받침
+      box(g2, 1.3, 1.3, .06, 0xFFFFFF, 0, .68, .02, { line: .01 });
+      const scr = board(g2, 1.2, 1.2, easelTex, 0, 1.33, .06); scr.userData.noMerge = true;
+      fixedSlot(scr, { view: "easel", image: null, caption: "", action: "이젤에 같이 그리기" }, 2.6);
+      const brush = new THREE.Group(); brush.position.set(.9, .03, .7); brush.rotation.y = .6; g2.add(brush);
+      box(brush, .06, .06, .7, C.woodD, 0, 0, 0, { line: .004 }); box(brush, .09, .09, .14, 0x7355DA, 0, 0, .4, { line: .004 });
+      board(g2, 1.6, .36, signTex("다 같이 그리는 네컷", { bg: "#FFD97A", fg: "#2B2140", size: 56 }), 0, 2.28, .05);
+      break; }
+    case "sketchstand": { // 이젤 옆 스케치북 받침대(남쪽을 본다): 지난 그림이 넘어간 스케치북을 펼쳐 둔다
+      const g2 = new THREE.Group(); g2.position.set(x, 0, z); G.add(g2);
+      cyl(g2, .06, .08, .9, C.woodD, 0, 0, 0, { line: .006 }); box(g2, .7, .05, .5, C.wood, 0, .9, 0, { line: .008 });
+      const pages = box(g2, .62, .04, .44, 0xFFFFFF, 0, .95, 0, { line: .006 }); pages.rotation.x = -.35;
+      box(g2, .02, .05, .44, 0x7355DA, 0, .97, 0, { line: 0 }).rotation.x = -.35;
+      const tag = board(g2, .9, .26, signTex("지난 그림 스케치북", { bg: "#FFFFFF", fg: "#7355DA", size: 52 }), 0, 1.35, 0); tag.userData.noMerge = true;
+      fixedSlot(tag, { view: "sketchbook", image: null, caption: "", action: "스케치북 넘겨 보기" }, 2);
+      break; }
+    case "albumstand": { // 작가의 방 앨범북 받침대(남쪽을 본다): 벽에 다 못 거는 그 작가 만화를 앨범으로 모두 넘겨 본다. 표지 글은 내용이 오면 그린다
+      const g2 = new THREE.Group(); g2.position.set(x, 0, z); G.add(g2);
+      cyl(g2, .06, .08, .85, C.woodD, 0, 0, 0, { line: .006 }); box(g2, .8, .05, .56, C.wood, 0, .85, 0, { line: .008 });
+      const book = new THREE.Group(); book.position.set(0, .92, 0); book.rotation.x = -.35; g2.add(book);
+      box(book, .74, .05, .5, ZONE_FRAMES[o.slot] ?? 0x7355DA, 0, -.02, 0, { line: .008 });   // 표지(방 색)
+      for (const k of [-1, 1]) { box(book, .34, .04, .46, 0xFFFBF2, k * .18, .02, 0, { line: .004 }); box(book, .26, .01, .26, 0xFFFFFF, k * .18, .06, -.02, { line: .002 }); }   // 펼친 두 쪽에 그림 자리
+      box(book, .02, .06, .48, 0x2B2140, 0, .02, 0, { line: 0 });
+      const cv = document.createElement("canvas"); cv.width = 512; cv.height = 150;
+      const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+      const tag = board(g2, 1.1, 1.1 * 150 / 512, tex, 0, 1.5, 0); tag.userData.noMerge = true;
+      const slot = { src: "album", slot: o.slot, x: undefined, y: undefined, reach: 2, mesh: tag, cv, tex,
+        paint: (sl) => { const g = sl.cv.getContext("2d"), it = showItem(sl); g.fillStyle = "#7355DA"; g.fillRect(0, 0, 512, 150); g.strokeStyle = "#2B2140"; g.lineWidth = 8; g.strokeRect(4, 4, 504, 142);
+          g.fillStyle = "#FFFFFF"; g.textAlign = "center"; g.textBaseline = "middle"; g.font = `700 54px ${HAND}`; g.fillText("📖 앨범북", 256, 52, 480);
+          g.fillStyle = "#FFD97A"; g.font = `700 40px ${HAND}`; g.fillText(it ? it.caption : "더 보기", 256, 112, 480); sl.tex.needsUpdate = true; } };
+      tag.userData.show = slot; showSlots.push(slot); paintShow(slot);
+      break; }
+    case "runway": { // 14층 전시관 보라 카펫(밟고 지나간다): 하루들 월드 메인 전시실처럼 가운데 흰 점선
+      box(G, w - .3, .02, d, 0xB9A6EC, x, 0, z, { line: .008, cast: false });
+      for (const sx of [-1, 1]) for (let i = 0; i < Math.floor(d / .7); i++) box(G, .08, .025, .36, 0xFFFFFF, x + sx * (w / 2 - .55), 0, z - d / 2 + .35 + i * .7, { line: 0, cast: false });
+      break; }
+    case "phonestand": { // 14층 큰 하루들 휴대폰(남쪽을 본다, 월드처럼 살짝 돌려 세움): 월드 HarudlePhone 모양을 0.6배로. 보라 받침대, 검은 몸통, 카메라 구멍, 옆 버튼,
+      // 화면에는 하루들 피드, 오른쪽에 "크게 열기" 받침대, 위에 "하루들 직접 써 보기" 말풍선. 화면이나 받침대를 누르거나 앞에서 F → 하루들 크게 열기
+      const k = .6, SW = 2.4 * k, SH = 4.8 * k, BW = SW + .24 * k, BH = SH + (.24 + .2) * k, BD = .2 * k, ST = .3 * k, BY = ST + BH / 2;
+      const g2 = new THREE.Group(); g2.position.set(x - .4, 0, z); g2.rotation.y = -.5; G.add(g2);
+      const rb = (bw, bh, bd, r, c, px, py, pz, line = .012) => { const m = solidMesh(new RoundedBoxGeometry(bw, bh, bd, 3, r), c, { line }); m.position.set(px, py, pz); g2.add(m); return m; };
+      rb(1.9 * k, ST, 1.2 * k, .05, 0x7355DA, 0, ST / 2, 0);
+      rb(BW, BH, BD, .11, 0x2B2140, 0, BY, 0);
+      const cam2 = new THREE.Mesh(new THREE.CircleGeometry(.025, 16), new THREE.MeshBasicMaterial({ color: 0x000000 })); cam2.position.set(0, BY + BH / 2 - .08, BD / 2 + .004); cam2.userData.noMerge = true; g2.add(cam2);
+      rb(.04, .36, .05, .012, 0xC3B3F8, BW / 2 + .012, BY + .6, 0, .006);
+      const scr = new THREE.Mesh(new THREE.PlaneGeometry(SW, SH), new THREE.MeshBasicMaterial({ map: phoneTex, toneMapped: false })); scr.position.set(0, BY - .025, BD / 2 + .006); scr.userData.noMerge = true; g2.add(scr);
+      const item = { view: "phone", image: null, caption: "", action: "하루들 크게 열기" };
+      fixedSlot(scr, item, 3);
+      // 크게 열기 받침대(월드 OpenKiosk)
+      const kx = 2.4 * k, kz = .4 * k;
+      cyl(g2, .05, .05, 1.6 * k, 0xFFFDF7, kx, 0, kz, { line: .006 }); rb(.9 * k, .07, .9 * k, .03, 0x7355DA, kx, .035, kz);
+      const kp = new THREE.Group(); kp.position.set(kx, 2.05 * k, kz); kp.rotation.x = -.3; g2.add(kp);
+      const kb = solidMesh(new RoundedBoxGeometry(1.3 * k, 1.3 * k, .07, 3, .03), 0x7355DA, { line: .008 }); kp.add(kb);
+      const kl = new THREE.Mesh(new THREE.PlaneGeometry(1.16 * k, 1.16 * k), new THREE.MeshBasicMaterial({ map: phoneKioskTex, toneMapped: false })); kl.position.z = .04; kl.userData.noMerge = true; kp.add(kl);
+      fixedSlot(kl, item, 2.4);
+      const bub = new THREE.Mesh(new THREE.PlaneGeometry(2.9 * k, 2.9 * k * 200 / 640), new THREE.MeshBasicMaterial({ map: phoneBubbleTex, transparent: true, side: THREE.DoubleSide, toneMapped: false })); bub.position.set(0, ST + BH + .42, .02); bub.userData.noMerge = true; g2.add(bub);
+      break; }
+    case "scoopstand": { // 14층 오늘의 특종 가판대(남쪽을 본다, face n이면 북쪽): 하루들 월드 로비처럼 보라·흰 줄무늬 차양, 신문 더미, 간판.
+      // 월드 로비처럼 매대 뒤에 하루들 기자, 앞 양옆에 손 흔드는 하루와 두들이가 있다(모양은 하루들 월드 캐릭터)
+      const g2 = new THREE.Group(); g2.position.set(x, 0, z); if (o.face === "n") g2.rotation.y = Math.PI; G.add(g2); const sw = Math.min(w - .4, 4.4), sd = Math.min(d - .4, 2), front = sd / 2 - .4;
+      box(g2, sw, .03, sd, 0xEDE7FF, 0, 0, 0, { line: .008, cast: false });   // 바닥 깔판
+      box(g2, sw, .82, .8, 0x7355DA, 0, 0, front); box(g2, sw + .08, .06, .88, 0xFFFFFF, 0, .82, front, { line: .01 });   // 보라 매대와 흰 상판
+      for (const [i, c] of [0xFFD97A, 0xF7A6B5, 0xB9A6EC, 0x7DB3F0].entries()) { const nx = -sw / 2 + .55 + i * (sw - 1.1) / 3; box(g2, .62, .12 + (i % 2) * .06, .44, 0xFFFFFF, nx, .88, front + .08, { line: .008 }); box(g2, .5, .02, .3, c, nx, 1.0 + (i % 2) * .06, front + .08, { line: 0 }); }   // 신문 더미
+      for (const sx of [-1, 1]) box(g2, .1, 1.6, .1, 0xFFFFFF, sx * (sw / 2 - .1), .88, front + .3, { line: .008 });
+      box(g2, sw - .1, 2.2, .1, 0xEDE7FF, 0, 0, -sd / 2 + .08, { line: .01 });   // 뒷벽
+      for (let i = 0; i < 8; i++) { const st = box(g2, sw / 8 + .02, .07, sd + .5, i % 2 ? 0xFFFFFF : 0x8B6FE8, -sw / 2 + (i + .5) * sw / 8, 2.42, .12, { line: .008 }); st.rotation.x = .28; }   // 줄무늬 차양
+      for (let i = 0; i < 8; i++) ball(g2, sw / 16, i % 2 ? 0xFFFFFF : 0xEDE7FF, -sw / 2 + (i + .5) * sw / 8, 2.26, sd / 2 + .32, { line: .008 });   // 차양 끝 둥근 술
+      board(g2, 2.4, .6, signTex(o.sign ?? "오늘의 특종", { bg: "#7355DA", fg: "#FFFFFF", size: o.sign ? 56 : 70 }), 0, 2.95, .05);
+      board(g2, 1.3, .32, signTex(o.hint ?? "눌러 보세요!", { bg: "#FFFFFF", fg: "#7355DA", size: 60 }), 0, 3.42, .06);
+      const standDoll = (kind, dx, dz, yaw, dy = 0) => {
+        const blob = new THREE.Mesh(blobGeo, blobMat); blob.position.y = .012; blob.renderOrder = 1; blob.visible = dy === 0;
+        const doll = makeDoll(kind, null, blob); doll.root.position.set(dx, dy, dz); doll.turn.rotation.y = yaw; doll.root.userData.noMerge = true; g2.add(doll.root);
+      };
+      standDoll("harudle", 0, -.25, 0, .3);                       // 매대 뒤 하루들 기자(발판 위에 서서 매대 너머로 보인다)
+      if (!o.keeper) { // keeper만이면 작가 체험 부스: 매대 뒤 하루들만
+        standDoll("haru", sw / 2 + .75, sd / 2 + .55, -.35);          // 앞 오른쪽: 손 흔드는 하루
+        standDoll("dog", -sw / 2 - .7, sd / 2 + .6, .55);              // 앞 왼쪽: 두들이
+      }
+      break; }
     case "arcade": { const c = [0xF15B5B, 0x7DB3F0, 0xFFD43B, 0x7FCFAE][(o.x >> 1) % 4]; box(G, .5, 1.25, .5, c, x, 0, z); box(G, .44, .36, .02, C.dark, x, .75, z + .26, { line: .005 }); board(G, .4, .3, arcadeTex(["#F15B5B", "#7DB3F0", "#FFD43B", "#7FCFAE"][(o.x >> 1) % 4]), x, .93, z + .28);
       box(G, .5, .06, .22, C.dark, x, .58, z + .34, { line: .005 }); cyl(G, .015, .015, .1, C.dark, x - .1, .64, z + .34, { line: 0 }); ball(G, .035, 0xF15B5B, x - .1, .76, z + .34, { line: 0 }); ball(G, .03, 0xFFD43B, x + .1, .66, z + .34, { line: 0 }); break; }
     case "trampoline": { const r = Math.min(w, d) / 2 - .1; cyl(G, r, r, .14, 0x2F6FDB, x, .04, z, { seg: 32 }); const mat2 = new THREE.Mesh(new THREE.CircleGeometry(r - .12, 32), toon(0x1C1C26)); mat2.rotation.x = -Math.PI / 2; mat2.position.set(x, .19, z); mat2.receiveShadow = true; G.add(mat2);
@@ -1702,8 +2011,8 @@ function batchStatic(root, skip) {
     const mesh = new THREE.Mesh(merged, bk.mat); mesh.castShadow = bk.cast; mesh.receiveShadow = bk.recv; mesh.renderOrder = bk.order; root.add(mesh);
     for (const { m } of bk.items) m.parent.remove(m);
   }
-  // 비어 버린 묶음 정리
-  const prune = (o) => { for (const ch of [...o.children]) { if (skip.has(ch)) continue; prune(ch); if (ch.type === "Group" && !ch.children.length && !ch.userData.noMerge) o.remove(ch); } };
+  // 비어 버린 묶음 정리(noMerge 안쪽은 건드리지 않는다: 가판대 캐릭터처럼 React가 나중에 채우는 빈 묶음이 있다)
+  const prune = (o) => { for (const ch of [...o.children]) { if (skip.has(ch) || ch.userData.noMerge) continue; prune(ch); if (ch.type === "Group" && !ch.children.length && !ch.userData.noMerge) o.remove(ch); } };
   prune(root);
 }
 function batchFloor(fl, g) {
@@ -1935,6 +2244,8 @@ function jump() { // 땅에서 한 번, 공중에서 한 번 더(더블 점프)
   if (me.lie || me.seat) { standUp(); return; }
   const air = me.jz > .001 || me.jv > 0; if (air && me.jumps >= 2) return;
   me.jumps = air ? 2 : 1; me.jv = air ? 4.2 : 4.6; if (air) spawnFx(starTex, meDoll.root.position, 3, .5, .2); me.jc++; sendPresence(true);
+  // 14층: 뛰어들 수 있는 그림(꽃게 게임 만화) 앞에서 점프하면 월드처럼 그림 속으로 뛰어들어 게임을 시작한다
+  const sl = nearShow(); if (sl && showItem(sl)?.dive && !inWorld) { spawnFx(starTex, meDoll.root.position, 8, .9, .4); setTimeout(() => { if (me.f === 14 && !inWorld) openShow("crab"); }, 380); }
 }
 function useSkill(name) { if (!SKILLS[name]) return;
   if (name === "read") { // 책은 앉거나 빈백에 누워서만. 한 번 더 누르면 덮는다
@@ -1978,6 +2289,7 @@ const keys = new Set();
 const MOVE = { KeyW: "w", KeyA: "a", KeyS: "s", KeyD: "d", ArrowUp: "arrowup", ArrowDown: "arrowdown", ArrowLeft: "arrowleft", ArrowRight: "arrowright" };
 const SKILL_KEY = { Digit1: "draw", Digit2: "wave", Digit3: "heart", Numpad1: "draw", Numpad2: "wave", Numpad3: "heart", KeyZ: "dance" };   // Z: 춤(한 번 누르면 계속, 다시 누르면 멈춤)
 addEventListener("keydown", (e) => {
+  if (inWorld) return;   // 14층 하루들 월드가 떠 있으면 캠퍼스 키는 쉰다
   if (relockOnKey && e.code !== "Escape" && (e.target as HTMLElement).tagName !== "INPUT") { relockOnKey = false; if (inside() && !locked() && !uiOpen()) lockMouse(); }   // Esc로 설정창을 닫은 뒤 첫 키에서 다시 둘러보기
   if (!easelEd.hidden) { // 그림판이 열려 있으면 게임 키는 쉰다
     if (e.code === "Escape") { e.preventDefault(); closeEasel(false); }
@@ -2148,16 +2460,18 @@ function aimAt(cx, cy) {   // 화면에서 누른 곳(바닥)으로의 방향. �
   const g = ray.intersectObject(FLOORS[me.f].slab, false)[0]; if (!g) return me.h;
   return Math.atan2(tX(g.point.x) - me.x, tY(g.point.z) - me.y);
 }
-function boothHit(cx, cy) {   // 커서가 보일 때 바로가기·이젤을 눌렀으면 바로 처리
-  if (me.f !== 12 || !(linkBoards.length || ezBoards.length)) return false;
+function boothHit(cx, cy) {   // 커서가 보일 때 바로가기·이젤·14층 액자를 눌렀으면 바로 처리
+  const boards = me.f === 12 ? [...linkBoards, ...ezBoards] : me.f === 14 ? showSlots.map((sl) => sl.mesh) : [];
+  if (!boards.length) return false;
   ndc.set(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
-  if (!ray.intersectObjects([...linkBoards, ...ezBoards], false)[0]) return false;
+  if (!ray.intersectObjects(boards, false)[0]) return false;
   clickAt(cx, cy); return true;
 }
 function clickAt(cx, cy) {
   stopFollow();
   ndc.set(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1); ray.setFromCamera(ndc, camera);
   if (me.f === 12 && linkBoards.length) { const lh = ray.intersectObjects(linkBoards, false)[0]; if (lh) { openLink(lh.object.userData.link); return; } }   // 바로가기 장치를 눌렀다
+  if (me.f === 14 && showSlots.length) { const sh = ray.intersectObjects(showSlots.map((sl) => sl.mesh), false)[0]; if (sh) { openItem(showItem(sh.object.userData.show)); return; } }   // 14층 액자를 눌렀다
   if (me.f === 12 && ezBoards.length) { const eh = ray.intersectObjects(ezBoards, false)[0]; if (eh && eh.object.userData.wb) { if (nearWb(4)) { openEasel("wb"); return; } } else if (eh && nearFurn("painteasel", 3.2)) { tryEasel(); return; } }   // 이젤·화이트보드를 눌렀다   // 이젤을 눌렀다
   const hit = ray.intersectObjects(NPCS.filter((n) => n.f === me.f && n.doll.root.visible).map((n) => n.doll.root), true).find((h) => h.object !== (h.object.parent as any)?.userData?.blob && !(h.object as any).isPoints);
   let npcIdx = -1; for (let q: THREE.Object3D | null = hit ? hit.object : null; q; q = q.parent) if (q.userData.npc !== undefined) { npcIdx = q.userData.npc; break; }
@@ -2222,6 +2536,8 @@ function standUp() {
 const atCall = () => floor.calls.some((k) => inRect({ x: k.x - .2, y: k.y - .3, w: k.w + .4, h: k.h + .6 }, me.x, me.y));
 const nearStartrackScreen = () => !me.lie && !me.seat && me.f === 13 && me.x >= 11.2 && me.x <= 14.6 && Math.abs(me.y - 24.5) <= 5 && canControlStartrack({ f: me.f, x: me.x, y: me.y, rm: roomKeyAt(me.f, me.x, me.y) });
 function interact() {
+  const stand = nearScoop(); if (stand) { openShow(stand.view ?? "scoop"); return; }
+  const sh = nearShow(); if (sh) { openItem(showItem(sh)); return; }
   if (!me.lie && !me.seat && me.f === 12) { if (nearWb(2.4)) { openEasel("wb"); return; } if (me.brush && nearFurn("painteasel", 2.1)) { tryEasel(); return; } if (nearFurn("brushcup", 1.7)) { toggleBrush(); return; } if (nearFurn("painteasel", 2.1)) { tryEasel(); return; } if (nearFurn("linkkiosk", 1.7)) { openLink("https://www.harudle.com/"); return; } if (nearFurn("instaboard", 1.7)) { openLink("https://www.instagram.com/harudle.official/"); return; } }   // 하루들 부스: 붓 꽂이 · 함께 그리는 이젤   // 붓을 들었으면 이젤이 먼저
   if (nearStartrackScreen()) { startrack.openSettings(); return; }
   { const fr = nearFridge(); if (fr) { fr.want = !fr.want; return; } }   // 냉장고 앞: 문 열기·닫기
@@ -2268,10 +2584,40 @@ function closePicker() { picker.hidden = true; (document.activeElement as HTMLEl
 document.getElementById("pickClose").onclick = closePicker;
 picker.addEventListener("click", (e) => { if (e.target === picker) closePicker(); });
 const fade = document.getElementById("fade"); let lastPortal = 0;
+// 14층은 하루들 월드: 캠퍼스에서는 14층 엘리베이터 앞에 서 있는 것으로 두고, 월드를 화면 위에 띄운 동안 캠퍼스는 멈춘다
+let inWorld = false;
 function goFloor(f, spawn) {
   fade.style.opacity = "1";
-  setTimeout(() => { if (me.brush) { me.brush = false; } standUp(); me.f = f; floor = FLOORS[f]; [me.x, me.y] = nearestFree(floor, spawn[0], spawn[1]); me.jz = 0; me.jv = 0; me.up = 0; dog.x = me.x - 1; dog.y = me.y + .5; me.path = null; curZone = null; showFloors(); refreshRoomTags(); updateFloorHud(); sendPresence(true); cam.target.set(wx(me.x), floorY(f), wz(me.y)); fade.style.opacity = "0"; }, 250);
+  setTimeout(() => { if (me.brush) { me.brush = false; } standUp(); me.f = f; floor = FLOORS[f]; [me.x, me.y] = nearestFree(floor, spawn[0], spawn[1]); me.jz = 0; me.jv = 0; me.up = 0; dog.x = me.x - 1; dog.y = me.y + .5; me.path = null; curZone = null; showFloors(); refreshRoomTags(); updateFloorHud(); sendPresence(true); cam.target.set(wx(me.x), floorY(f), wz(me.y)); fade.style.opacity = "0"; if (f === 14 && (!showcase || performance.now() - showcaseAt > SHOWCASE_EVERY)) refreshShowcase(); }, 250);
 }
+// 14층 하루들 월드 창: 액자·가판대를 누르거나 앞에서 F. 창이 떠 있는 동안 캠퍼스는 멈춘다
+function openItem(item) { if (!item) return; if (item.link) openLink(item.link); else openShow(item.view); }
+function openShow(view) {
+  if (inWorld || !view) return;
+  if (locked()) document.exitPointerLock();
+  inWorld = true; keys.clear(); me.runHold = false; me.path = null; me.goal = null; me.moving = false; sendPresence(true);
+  openWorldWindow(view, { avatar: myAv, name: LS.get("ww.name") }, { onClose: () => { inWorld = false; if (view === "easel") refreshEasel(); }, onChanged: () => refreshShowcase() });
+}
+// 14층 방에 거는 하루들 월드 내용(src/worldShowcase.ts). 14층에 처음 올 때와 10분마다(이미지 주소가 15분이면 만료된다), 무언가 올린 뒤에 받는다
+function refreshShowcase() {
+  if (showcaseLoading) return; showcaseLoading = true;
+  const counts: Record<string, number> = {};
+  for (const o of FLOORS[14].furn) for (const i of o.kind === "showframe" ? [o.slot] : o.kind === "showwall" ? o.slots : []) counts[o.src] = Math.max(counts[o.src] ?? 0, i + 1);
+  refreshEasel();
+  loadShowcase(counts).then((next) => { showcase = next; showcaseAt = performance.now(); showSlots.forEach(paintShow); showPlates.forEach(paintPlate); paintPhone(); }).finally(() => { showcaseLoading = false; });
+}
+const SHOWCASE_EVERY = 10 * 60 * 1000;
+// 14층에 있는 동안 이젤 그림을 가끔 새로 받는다(다른 사람이 그린 것)
+window.setInterval(() => { if (me.f === 14 && !inWorld && !document.hidden) refreshEasel(); }, 15000);
+const nearShow = () => {
+  if (me.f !== 14 || me.lie || me.seat) return null;
+  let best = null, bd = Infinity; for (const sl of showSlots) {
+    if (sl.x === undefined) { sl.mesh.getWorldPosition(v3); sl.x = tX(v3.x); sl.y = tY(v3.z); }
+    const d = Math.hypot(sl.x - me.x, sl.y - me.y); if (d > sl.reach) continue; if (d < bd && showItem(sl)) { bd = d; best = sl; } }
+  return best;
+};
+// 가판대가 넓어서 가운데가 아니라 가판대 가장자리까지 거리로 본다
+const nearScoop = () => (me.f === 14 && !me.lie && !me.seat && FLOORS[14].furn.find((o) => o.kind === "scoopstand" && Math.hypot(Math.max(o.x - me.x, 0, me.x - o.x - o.w), Math.max(o.y - me.y, 0, me.y - o.y - o.h)) < 2.2)) || null;
 // 층 바로가기 버튼은 없다: 다른 층은 엘리베이터나 계단으로만 간다
 function updateFloorHud() { document.querySelector("#floorBadge b").textContent = me.f + "F"; document.querySelector("#floorBadge span").textContent = FLOOR_INFO[me.f]; }
 // 처음 온 사람에게 세 장짜리 안내: F 상호작용 → V 시점 → Tab 인벤토리
@@ -2419,7 +2765,7 @@ function closeChat() { sayInput.blur(); lockMouse(); }
 document.getElementById("sayForm").addEventListener("submit", (e) => { e.preventDefault(); const v = sayInput.value.trim(); if (v) { sendChat(v); sayInput.value = ""; } closeChat(); });
 sayInput.addEventListener("keydown", (e) => { if (e.code === "Escape") { e.preventDefault(); sayInput.value = ""; holdLock = true; closeChat(); holdLock = false; menuQuietUntil = performance.now() + 800; relockOnKey = true; } else if (e.code === "Tab") { e.preventDefault(); setChatTab(CHAT_TABS[(CHAT_TABS.indexOf(chatTab) + (e.shiftKey ? 2 : 1)) % 3]); } });   // Esc: 채팅만 닫고 설정창은 안 띄운다(고정은 다음 키에서) · 입력 중 Tab: 근처 → 전체 → 개인
 let curZone = null, toastTimer = 0; const toast = document.getElementById("zoneToast");
-function showToast(h, p, ms = 3800) { toast.querySelector("h2").textContent = h; toast.querySelector("p").textContent = p; toast.style.opacity = "1"; clearTimeout(toastTimer); toastTimer = setTimeout(() => (toast.style.opacity = "0"), ms); }
+function showToast(h, p, ms = 3800) { toast.querySelector("h2").textContent = h; toast.querySelector("p").textContent = p; toast.style.opacity = "1"; clearTimeout(toastTimer); toastTimer = window.setTimeout(() => (toast.style.opacity = "0"), ms); }
 function checkZone() {
   let z = null; for (const zz of floor.zones) if (inRect(zz, me.x, me.y) && zz.desc) { if (!z || zz.w * zz.h < z.w * z.h) z = zz; }
   if (z !== curZone) { curZone = z; if (z) showToast(z.name, "", 2400); }   // 들어가면 공간 이름만
@@ -2806,8 +3152,8 @@ function step(dt, t) {
   }
   checkZone();
   const near = nearNPC(), call = atCall(), bag = nearBag(), seat = nearSeat();
-  const ez0 = !me.lie && !me.seat && nearFurn("painteasel", 2.1), cup = !(me.brush && ez0) && !me.lie && !me.seat && nearFurn("brushcup", 1.7), ez = !cup && ez0, site = !cup && !ez && nearFurn("linkkiosk", 1.7), insta = !cup && !ez && !site && nearFurn("instaboard", 1.7), wb = !me.lie && !me.seat && nearWb(2.4), fr = nearFridge(), screenNear = nearStartrackScreen();   // 하루들 부스
-  actBtn.hidden = !(me.lie || me.seat || near || bag || call || seat || cup || ez || site || insta || wb || fr || screenNear); actBtn.textContent = screenNear ? "스타트랙 영상 설정" : wb ? "화이트보드에 쓰기" : fr ? (fr.want ? "냉장고 닫기" : "냉장고 열기") : cup ? (me.brush ? "붓 꽂기" : "붓 들기") : ez ? "함께 그리기" : site ? "하루들 바로가기" : insta ? "인스타 바로가기" : me.lie || me.seat ? "일어나기" : seat && !(near && Math.hypot(seat.x - me.x, seat.y - me.y) > .55) ? "앉기" : near ? `${withJosa(near.p.nick, "와", "과")} 대화하기` : bag ? "빈백에 눕기" : "엘리베이터 타기";
+  const ez0 = !me.lie && !me.seat && nearFurn("painteasel", 2.1), cup = !(me.brush && ez0) && !me.lie && !me.seat && nearFurn("brushcup", 1.7), ez = !cup && ez0, site = !cup && !ez && nearFurn("linkkiosk", 1.7), insta = !cup && !ez && !site && nearFurn("instaboard", 1.7), wb = !me.lie && !me.seat && nearWb(2.4), fr = nearFridge(), scoop = nearScoop(), shown = !scoop && nearShow(), screenNear = !scoop && !shown && nearStartrackScreen();   // 하루들 부스
+  actBtn.hidden = !(me.lie || me.seat || near || bag || call || seat || cup || ez || site || insta || wb || fr || scoop || shown || screenNear); actBtn.textContent = screenNear ? "스타트랙 영상 설정" : scoop ? scoop.action ?? "오늘의 특종 보기" : shown ? showItem(shown).action : wb ? "화이트보드에 쓰기" : fr ? (fr.want ? "냉장고 닫기" : "냉장고 열기") : cup ? (me.brush ? "붓 꽂기" : "붓 들기") : ez ? "함께 그리기" : site ? "하루들 바로가기" : insta ? "인스타 바로가기" : me.lie || me.seat ? "일어나기" : seat && !(near && Math.hypot(seat.x - me.x, seat.y - me.y) > .55) ? "앉기" : near ? `${withJosa(near.p.nick, "와", "과")} 대화하기` : bag ? "빈백에 눕기" : "엘리베이터 타기";
   if (me.say && Date.now() - me.sayAt > 6000) { me.say = ""; sendPresence(true); }
 }
 const tgt = new THREE.Vector3();
@@ -2870,5 +3216,5 @@ fontsReady.then(() => {
   if (new URLSearchParams(location.search).has("debug")) Object.assign((window as any).__t, { city, camera, startrack });
 });
 
-return { frame(dt: number) { if (!ready) return; const t = performance.now() / 1000; step(Math.min(.05, dt), t); render(Math.min(.05, dt), t); startrack.frame(); } };
+return { frame(dt: number) { if (!ready || inWorld) return; const t = performance.now() / 1000; step(Math.min(.05, dt), t); render(Math.min(.05, dt), t); startrack.frame(); } };
 }

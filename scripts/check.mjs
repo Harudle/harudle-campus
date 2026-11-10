@@ -1,5 +1,5 @@
 // 배포 전 검사: 하나라도 실패하면 배포하지 않는다 (서버 감독이 새 커밋마다 돌린다)
-//   1. 서버 코드 문법
+//   1. 서버 코드 문법 (14층 하루들 월드 서버 dist-server 포함)
 //   2. 빌드 결과(dist)가 지금 소스로 만든 것인지 (npm run build를 빼먹지 않았는지)
 //   3. 빌드된 페이지 스크립트 문법
 //   4. 층 배치: 엘리베이터에서 모든 방·문·계단에 걸어서 닿는지, 닫힌 방엔 못 들어가는지, 어디서든 빠져나올 수 있는지
@@ -17,6 +17,14 @@ const ok = (m) => console.log('✓', m)
 
 for (const f of ['server.js', 'app.js', 'weather.js', 'server/startrack.js', 'src/startrack/shared.mjs', 'src/startrack/projection.mjs', 'workers/media-watchdog/index.js', ...['server/media', 'server/auth'].flatMap((dir) => readdirSync(dir).filter((name) => name.endsWith('.js')).map((name) => join(dir, name)))]) {
   try { execFileSync(process.execPath, ['--check', f], { stdio: 'pipe' }); ok(`${f} 문법`) } catch (e) { fail(f, e.stderr?.toString()) }
+}
+if (!existsSync('dist-server/world.mjs')) fail('dist-server가 없어요 — npm run build 후 커밋하세요')
+else {
+  const files = [], walk = (d) => { for (const e of readdirSync(d, { withFileTypes: true })) e.isDirectory() ? walk(join(d, e.name)) : e.name.endsWith('.mjs') && files.push(join(d, e.name)) }
+  walk('dist-server')
+  const before = bad
+  for (const f of files) { try { execFileSync(process.execPath, ['--check', f], { stdio: 'pipe' }) } catch (e) { fail('14층 월드 서버', f, e.stderr?.toString().slice(0, 600)) } }
+  if (bad === before) ok('14층 월드 서버 문법')
 }
 for (const [file, name] of [['scripts/weather.test.mjs', '날씨 갱신과 실패 처리'], ['scripts/solar.test.mjs', '판교의 해와 시간 변화'], ['scripts/traffic.test.mjs', '도로 위 차량 이동'], ['scripts/startrack-state.test.mjs', '스타트랙 공유 재생']]) {
   try { execFileSync(process.execPath, ['--test', file], { stdio: 'pipe' }); ok(name) }

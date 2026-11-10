@@ -423,3 +423,7 @@ body.sideTucked:not(.touch) #zoneToast{left:50%}
 #sideShow em{font-style:normal;font-weight:800}
 body.sideTucked:not(.touch) #sideShow{display:flex}
 #side.tucked #sideTab{display:none}
+
+/* 14층 하루들 월드 창(src/worldFloor.ts): 바탕이 비어 있어 14층이 뒤에 비쳐 보인다 */
+#worldWindow{position:fixed;inset:0;z-index:100}
+#worldWindow iframe{position:absolute;inset:0;width:100%;height:100%;border:0;display:block;color-scheme:normal;background:transparent}

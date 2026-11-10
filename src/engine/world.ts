@@ -27,8 +27,8 @@ export const tX = (x) => (x + (W * S) / 2) / S;            // 월드 → 격자
 export const tY = (z) => (z + (H * S) / 2) / S;
 export const floorY = (f) => (f - 11) * FH;
 
-/* ════════════════ 2. 층 데이터 (우테코 11·12·13층 공간 선택 도면 + 14층 놀이터) ════════════════ */
-export const FLOOR_INFO = { 11: "배움이 시작되는 공간", 12: "함께, 또 따로 학습의 공간", 13: "몰입하고 발표하는 공간", 14: "놀고 쉬어 가는 놀이터" };
+/* ════════════════ 2. 층 데이터 (우테코 11·12·13층 공간 선택 도면 + 14층 놀이터와 하루들 월드) ════════════════ */
+export const FLOOR_INFO = { 11: "배움이 시작되는 공간", 12: "함께, 또 따로 학습의 공간", 13: "몰입하고 발표하는 공간", 14: "하루들 월드" };
 // 12층 ㄱ자 계단: 동쪽으로 한 단, 층계참, 남쪽으로 한 단. 12층 바닥(0)에서 13층 바닥(FH)까지
 export const DECK_H = 0.25;   // 12층 라이브러리 벽돌 단 높이
 const STEP_LAND = FH * 6 / 27;
@@ -62,11 +62,13 @@ export function makeFloor(f) {
   for (const y of [17, 20]) F("poster", 29, y, 1, 1, { face: "e", at: 30 - .07 / S, raw: true }); F("poster", 36, 18.5, 1, 1, { face: "w", at: 36 + .07 / S, raw: true });   // 엘리베이터 석재 벽 면에
   [16, 20].forEach((y, i) => { F("elev", 36, y, 1, 2, { turn: -Math.PI / 2, raw: true }); F("xbanner", 35, y, 1, 2, { style: i, turn: Math.PI, raw: true }); });   // 홀에서 동쪽 벽을 보면 왼쪽(북)이 검은 배너, 오른쪽이 흰 배너(사진 그대로)
 
-  /* 오른쪽 기둥: 공조실 · 화장실(못 들어가는 방) */
+  /* 오른쪽 기둥: 공조실 · 화장실(못 들어가는 방). 14층은 하루들 월드라 없다 */
+  if (f !== 14) {
   closed(51, 1, 5, 12, "공조실"); F("acunit", 52, 3, 3, 2); F("acunit", 52, 7, 3, 2);   // 회의실 넷이 넓어진 만큼 동쪽으로 좁혔다
   if (f === 13) { R(47, 12, 9, 12, "화장실", { closed: true, raw: true }); Z(48, 13, 7, 10, "화장실", "", { npc: false, tint: "#E3EEF3", raw: true }); }   // 13층은 은하수가 올라올 자리만큼 짧다(넓힌 뒤 좌표)
   else closed(47, 12, 9, 11, "화장실", "#E3EEF3");
   F("door", 47, 15, 1, 2); F("door", 47, 19, 1, 2); F("wc", 49, 14, 5, 7);
+  }
 
   // 회의실 네 개: 서쪽 줄(문이 동쪽)과 동쪽 줄(문이 서쪽). west = [x, 폭]으로 서쪽 줄만 옮기거나 좁힐 수 있다
   // 회의실 넷: 서쪽 줄(문이 동쪽)과 동쪽 줄(문이 서쪽), 사이에 두 칸 복도. 모두 폭 7칸에 3칸짜리 테이블(의자 여섯)
@@ -258,26 +260,81 @@ export function makeFloor(f) {
   }
 
   if (f === 14) {
-    R(1, 1, 14, 11, "노래방", { doors: [{ s: "e", from: 7, len: 2 }] });
-    Z(2, 2, 12, 9, "노래방", "마이크 두 개와 미러볼. 회식 2차는 여기서 해결해요.", { tint: "#F3E9FF" });
-    F("karaoke", 3, 2, 6, 1); F("sofa", 3, 7, 7, 2); F("coffee", 5, 5, 3, 1); F("mirrorball", 6, 4, 1, 1); F("speaker", 11, 2, 1, 1); F("speaker", 2, 2, 1, 1);
-    R(1, 12, 14, 11, "게임방", { doors: [{ s: "e", from: 4, len: 2 }] });
-    Z(2, 13, 12, 9, "게임방", "오락기와 콘솔 게임. 미션 끝난 날 한 판씩 붙어요.", { tint: "#E8F0FF" });
-    for (const x of [3, 5, 7, 9]) F("arcade", x, 13, 1, 1);
-    F("tv", 3, 18, 4, 1); F("beanbag", 3, 20, 2, 2, { yaw: Math.PI }); F("beanbag", 6, 20, 2, 2, { yaw: Math.PI }); F("sofa", 9, 19, 4, 2);
-    Z(16, 1, 17, 10, "트램펄린", "올라가면 저절로 통통 튀어요. 머리 식히기에 딱이에요.", { tint: "#FFF8DC" });
-    F("trampoline", 17, 2, 5, 5); F("trampoline", 23, 2, 5, 5); F("trampoline", 17, 7, 4, 3, { small: true }); F("plant", 30, 2, 2, 2);
-    R(34, 1, 13, 9, "볼풀", { doors: [{ s: "s", from: 5, len: 3 }] });
-    Z(35, 2, 11, 7, "볼풀", "알록달록 공이 가득한 볼풀. 들어가면 몸이 쏙 잠겨요.", { tint: "#FFF1F0" });
-    F("ballpit", 36, 2, 8, 5); F("slide", 44, 2, 2, 5);
-    Z(1, 24, 32, 9, "놀이 광장", "탁구, 보드게임, 포토존. 쉬는 시간마다 사람이 모여요.", { tint: "#E9F4E6" });
-    F("pingpong", 3, 26, 4, 2); F("pingpong", 9, 26, 4, 2); F("boardgame", 16, 26, 3, 2); F("boardgame", 21, 26, 3, 2);
-    F("sculpture", 27, 26, 3, 3); F("planter", 2, 32, 30, 1); F("parasol", 16, 30, 2, 2); F("parasol", 21, 30, 2, 2);
-    R(34, 24, 13, 9, "쉼터", { doors: [{ s: "n", from: 5, len: 3 }] });
-    Z(35, 25, 11, 7, "쉼터", "조용히 눕거나 기대어 쉬는 방. 빈백이 넉넉해요.", { tint: "#EEF0F8" });
-    for (const [x, y] of [[36, 26], [39, 26], [42, 26], [36, 29], [39, 29]]) F("beanbag", x, y, 2, 2, { yaw: Math.PI });
-    F("sofa", 42, 29, 4, 2); F("plant", 44, 25, 2, 2);
-    closed(47, 23, 9, 10, "창고"); F("crates", 49, 25, 4, 3); F("crates", 49, 29, 3, 2);
+    /* 14층은 하루들 월드(github.com/Harudle/harudle-world)를 옮긴 층이다. 엘리베이터 홀만 다른 층과 같다.
+       북쪽 전체가 메인 전시실(홀 북쪽 문에서 보라 카펫이 "가장 사랑받은 만화"까지), 서쪽 위가 작가 전시실 여덟 곳, 서쪽 아래가 퀴즈 아케이드(노래·드라마 방), 동쪽이 릴레이 만화 소설관(긴 복도),
+       홀 남쪽 문 앞 광장이 월드 로비의 오늘의 특종 가판대다(엘리베이터 홀 쪽을 본다). 벽 없이 바닥 색과 전시 벽으로만 나눈다.
+       액자(showframe·showwall)에는 월드의 실제 내용이 걸리고(src/worldShowcase.ts), 누르면 그 창만 열린다.
+       위에서 보는 카메라가 남쪽에 있어서 전시 벽은 북쪽 가장자리에 두고 남쪽을 보게 한다 */
+    const R2 = { raw: true };
+
+    // 메인 전시실(월드 메인 전시실): 보라 카펫 끝 큰 액자가 1위, 북쪽 벽과 앞줄 이젤 액자에 인기순. 왼쪽에 작가 체험 부스와 함께 그리는 이젤,
+    // 오른쪽에 큰 하루들 휴대폰. 꽃게 게임 만화(지금은 1위 큰 액자)는 앞에서 점프하면 그림 속으로 뛰어든다
+    Z(1, 1, 54, 10, "메인 전시실", "하루들에서 지금 가장 사랑받는 네컷만화를 거는 메인 전시실이에요. 보라 카펫 끝 큰 액자가 1위예요. 액자를 누르면 크게 보고, 이젤에 다 같이 그림을 그릴 수 있어요.", { tint: "#FFF6D6", ...R2 });
+    F("runway", 31, 3, 4, 9, R2);
+    F("showwall", 29, 1, 8, 1, { src: "work", slots: [0], big: true, sign: "가장 사랑받은 만화", ...R2 });
+    F("showwall", 13, 1, 15, 1, { src: "work", slots: [7, 5, 3, 1], ...R2 });
+    F("showwall", 38, 1, 15, 1, { src: "work", slots: [2, 4, 6, 8], ...R2 });
+    [14, 17, 20, 23, 26].forEach((x, i) => F("showframe", x, 7, 1, 1, { src: "work", slot: 9 + i * 2, ...R2 }));
+    [38, 41, 44, 47].forEach((x, i) => F("showframe", x, 7, 1, 1, { src: "work", slot: 10 + i * 2, ...R2 }));
+    F("scoopstand", 2, 2, 8, 4, { sign: "하루들 작가 체험", hint: "만화 그리기", view: "author", action: "작가 체험하기", keeper: true, ...R2 });
+    F("drawingeasel", 3, 7, 2, 2, R2); F("sketchstand", 7, 8, 1, 1, R2);
+    F("phonestand", 50, 2, 4, 2, R2);
+    for (const x of [17, 23, 41, 46]) F("bench", x, 10, 2, 1, R2);
+    F("plant", 29, 3, 1, 1, R2); F("plant", 36, 3, 1, 1, R2);   // 카펫 끝 큰 액자 양옆(카펫 앞 길은 비운다)
+
+    // 작가 전시실 여덟 곳(월드처럼 받은 좋아요 합이 큰 작가 순): 남쪽이 트인 작은 방에 그 작가 만화와 응원 방명록
+    Z(1, 12, 26, 15, "작가 전시실", "하루들 인기 작가 여덟 명의 방이에요. 방마다 그 작가의 만화가 걸려 있고, 앨범북으로 모든 만화를 넘겨 볼 수 있고, 방명록에 응원을 남길 수 있어요.", { tint: "#F7F3FF", npc: false, ...R2 });
+    const ZONE_TINTS = ["#E6DDF6", "#FFE9B5", "#FFD9E2", "#D5EFE3", "#D7E8FB", "#FFE2CC", "#DCD3FA", "#F6DFF4"];
+    [13, 21].forEach((y, row) => [2, 8, 14, 20].forEach((x, col) => {
+      const i = row * 4 + col;
+      R(x, y, 6, 6, "", { raw: true, doors: [{ s: "s", from: 1, len: 4 }] });
+      Z(x + 1, y + 1, 4, 4, `작가의 방 ${i + 1}`, "", { tint: ZONE_TINTS[i], npc: false, ...R2 });
+      F("showwall", x + 1, y + 1, 4, 1, { src: `a${i}`, slots: [0, 1], plate: i, ...R2 });
+      F("showframe", x + 4, y + 3, 1, 1, { src: "cheer", slot: i, ...R2 });
+      F("albumstand", x + 1, y + 3, 1, 1, { slot: i, ...R2 });   // 벽에는 두 편만 걸려서, 나머지는 앨범북으로 모두 본다
+    }));
+
+    // 퀴즈 아케이드(월드 오락실): 다른 방처럼 파스텔로. 라벤더 바둑판 입구 홀에 전구 아치·인형 뽑기·풍선, 양옆에 분홍 노래 맞추기 방과 하늘색 드라마·영화 맞추기 방.
+    // 방마다 뒷벽에 문제 액자를 채우고(빈 액자는 내 문제 걸기) 옆 벽에도 건다. 노래 방엔 주크박스·마이크·떠다니는 음표, 드라마 방엔 팝콘 수레·슬레이트·별
+    Z(11, 28, 7, 11, "퀴즈 아케이드", "하루들 만화로 노래와 드라마·영화를 맞히는 퀴즈 아케이드예요. 양옆 방에 들어가 액자를 누르면 문제를 풀고, 빈 액자에 내 문제를 걸어요.", { tint: "#EDE6FB", checker: ["#F1EBFC", "#DFD4F6"], ...R2 });
+    F("marquee", 11, 28, 7, 1, { text: "퀴즈 아케이드", color: "#9A82E6", post: 0xFFB3C7, posts: true, size: 3.4, y0: 2.6, ...R2 });
+    F("claw", 11, 30, 1, 1, { color: 0xFFB3C7, ...R2 }); F("claw", 17, 30, 1, 1, { color: 0x9CC8F5, ...R2 });
+    F("hbballoon", 11, 38, 1, 1, R2); F("hbballoon", 17, 38, 1, 1, R2);
+    F("beanbag", 12, 33, 2, 2, R2); F("beanbag", 15, 33, 2, 2, R2);
+    const quizRoom = (x, door, room, title, look) => {
+      const inner = x + 1, side = door === "e" ? x + 8 : x + 1, far = door === "e" ? x + 1 : x + 8;   // side: 문 쪽 옆 벽(짧게), far: 반대쪽 옆 벽
+      R(x, 28, 10, 11, "", { raw: true, wall: look.wall, doors: [{ s: door, from: 7, len: 3 }] });
+      Z(inner, 29, 8, 9, title, "", { tint: look.floor[0], checker: look.floor, npc: false, ...R2 });
+      F("showwall", inner, 29, 8, 1, { src: room, slots: [0, 1, 2, 3], wallColor: 0xFFFFFF, ...R2 });
+      F("marquee", inner, 29, 8, 1, { text: title, color: look.sign, size: 3.6, ...R2 });
+      F("showwall", far, 31, 1, 6, { src: room, slots: [4, 5, 6], face: far === x + 1 ? "e" : "w", wallColor: 0xFFFFFF, ...R2 });
+      F("showwall", side, 30, 1, 4, { src: room, slots: [7, 8], face: side === x + 1 ? "e" : "w", wallColor: 0xFFFFFF, ...R2 });
+      const mid = x + 3; F("beanbag", mid, 35, 2, 2, R2); F("beanbag", mid + 2, 35, 2, 2, R2);
+      F("floaters", x + 4, 32, 2, 2, { chars: look.chars, colors: look.charColors, ...R2 });
+    };
+    quizRoom(1, "e", "song", "노래 맞추기 방", { wall: 0xFFE3EA, floor: ["#FFEEF2", "#FFDCE5"], sign: "#FF8FA8", chars: ["♪", "♫", "♪", "♬", "♫"], charColors: ["#FF7FA3", "#9A82E6", "#FFB84D"] });
+    F("jukebox", 2, 30, 1, 1, R2); F("mic", 2, 37, 1, 1, R2);
+    quizRoom(18, "w", "drama", "드라마·영화 맞추기 방", { wall: 0xDDEBFB, floor: ["#EAF3FF", "#D6E7FB"], sign: "#6FB2EC", chars: ["★", "✦", "★", "✧", "★"], charColors: ["#FFC94D", "#6FB2EC", "#9A82E6"] });
+    F("clapper", 26, 30, 1, 1, R2); F("popcorn", 26, 37, 1, 1, R2);
+
+    // 릴레이 만화 소설관(월드 그대로): 나무 바닥의 긴 복도에 보라 카펫이 끝의 이젤(최신 화)까지 이어진다. 왼쪽 벽 필름에 지난 화(안쪽일수록 최근),
+    // 오른쪽 벽 두루마리, 끝 벽에 이름. 홀 남쪽 광장에서 서쪽 문으로 들어간다
+    R(40, 13, 13, 26, "", { raw: true, wall: 0xF6E7D2, doors: [{ s: "w", from: 20, len: 4 }] });
+    Z(41, 14, 11, 24, "릴레이 만화 소설관", "네컷만화를 한 화씩 이어 그리는 릴레이 소설관이에요. 끝의 이젤이 최신 화, 왼쪽 벽 필름이 지난 화예요. 누르면 처음부터 넘겨 보고 다음 화를 이어 그려요.", { tint: "#D9B48A", planks: ["#D9B48A", "#CDA57A"], ...R2 });
+    F("runway", 44, 17, 5, 21, R2);
+    F("wallsign", 41, 14, 11, 1, { text: "릴레이 만화 소설관", size: 4, ...R2 });
+    F("showframe", 46, 15, 1, 1, { src: "relay", slot: 0, big: true, ...R2 });
+    F("showwall", 41, 17, 1, 16, { src: "relay", slots: [4, 3, 2, 1], style: "film", face: "e", ...R2 });
+    F("relayscroll", 51, 17, 1, 16, { text: "앞사람의 마지막 컷을 보고, 다음 네 컷을 이어 그려요. 이 이야기는 끝나지 않아요.", face: "w", ...R2 });
+    for (const y of [21, 27]) { F("bench", 42, y, 2, 1, R2); F("bench", 49, y, 2, 1, R2); }
+    F("bench", 49, 33, 2, 1, R2);
+
+    // 홀 남쪽 문 앞 광장: 월드 로비의 오늘의 특종 가판대가 북쪽(엘리베이터 홀)을 보고 서 있어, 남쪽 문을 나서면 앞면이 바로 보인다.
+    // 광장 서쪽은 퀴즈 아케이드, 동쪽 문은 릴레이 소설관
+    Z(28, 27, 10, 12, "오늘의 특종", "하루들 인기 만화를 신문으로 엮은 가판대예요. 앞에서 F를 누르면 오늘의 특종을 펼쳐 봐요. 서쪽은 퀴즈 아케이드, 동쪽 문은 릴레이 만화 소설관이에요.", { tint: "#F8F6FF", npc: false, ...R2 });
+    F("bench", 29, 29, 2, 1, R2); F("bench", 35, 29, 2, 1, R2);   // 문 앞 길(31~34열) 양옆에 벤치, 그 뒤로 가판대
+    F("scoopstand", 30, 33, 6, 3, { face: "n", ...R2 });
+    F("plant", 28, 37, 1, 1, R2); F("plant", 37, 37, 1, 1, R2);
   }
   return { f, rooms, furn, zones, portals, calls };
 }
@@ -302,7 +359,7 @@ export function furnCells(fl, o, set) {
   if (o.kind === "stadium") { for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) if (stadiumWall(o, x + .5, y + .5)) set(x, y); return; }
   if (WALK_THROUGH.has(o.kind)) return; for (let y = o.y; y < o.y + o.h; y++) for (let x = o.x; x < o.x + o.w; x++) set(x, y);
 }
-export const WALK_THROUGH = new Set(["hbmat", "poster", "walldeco", "linelight", "bleacher", "arcbleacher", "flight", "brickdeck", "pebbles", "redsteps", "mirrorball", "trampoline", "ballpit"]);
+export const WALK_THROUGH = new Set(["hbmat", "runway", "neonsign", "marquee", "floaters", "wallsign", "poster", "walldeco", "linelight", "bleacher", "arcbleacher", "flight", "brickdeck", "pebbles", "redsteps", "mirrorball", "trampoline", "ballpit"]);
 export const ELEV_SPAWN: [number, number] = [32.5, 15.5];   // 엘리베이터에서 내리는 자리(칸 한가운데)
 for (const fl of Object.values(FLOORS)) {
   const g = new Uint8Array(W * H); const set = (x, y) => { if (x >= 0 && y >= 0 && x < W && y < H) g[y * W + x] = 1; };

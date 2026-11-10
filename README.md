@@ -14,6 +14,7 @@
 - 판교 캠퍼스 기준 실제 시간에 따른 해와 달, 하늘과 빛, 날씨 예보에 따른 창밖 비와 눈
 - 캠퍼스 주변 건물과 도로, 하천을 참고한 창밖 풍경
 - 음성 연결을 켠 크루끼리 가까운 거리에서 대화하고, 회의실에서는 화면을 공유
+- **14층 하루들 월드**: 14층은 [하루들 월드](https://github.com/Harudle/harudle-world)를 옮긴 층이라 엘리베이터 홀 말고는 월드 공간만 있습니다. 북쪽 전체가 메인 전시실(보라 카펫 끝 "가장 사랑받은 만화", 벽과 앞줄 이젤 액자에 인기 네컷만화, 작가 체험 부스, 다 같이 그리는 네컷 이젤과 지난 그림 스케치북, 큰 하루들 휴대폰, 꽃게 게임 만화가 걸린 액자 앞에서 점프하면 그림 속으로 뛰어들어 게임 시작), 서쪽 위가 작가 전시실 여덟 곳(작가 만화, 그 작가 만화를 모두 넘겨 보는 앨범북, 응원 방명록), 서쪽 아래가 퀴즈 아케이드(파스텔 바둑판 바닥과 전구 간판, 인형 뽑기·주크박스·팝콘 수레 같은 소품, 가운데 입구 홀 양옆에 노래 맞추기 방·드라마·영화 맞추기 방, 방마다 뒷벽과 옆 벽에 문제 액자), 동쪽이 릴레이 만화 소설관(나무 바닥 긴 복도, 보라 카펫 끝 이젤에 최신 화, 왼쪽 벽 필름에 지난 화, 오른쪽 벽 두루마리)입니다. 엘리베이터 홀 남쪽 문 앞 광장에는 오늘의 특종 가판대가 홀 쪽을 보고 서 있어, 남쪽 문을 나서면 앞면이 바로 보입니다. 액자·부스·이젤·가판대를 누르거나 앞에서 F를 누르면 월드의 그 창이 그대로 열립니다. 이젤은 월드와 같은 실시간 이젤이라 여러 사람이 같은 그림에 그리고, 14층 이젤 판에는 15초마다 지금 그림(`/easel/art`)이 보입니다. 응원글·퀴즈·이어 그리기·이젤 그림은 캠퍼스 서버에 따로 저장되고, world.harudle.com과는 섞이지 않습니다
 
 ## 구조
 
@@ -38,7 +39,26 @@ server/media/          음성 제공자 선택과 LiveKit 접속 토큰 발급
 src/media/             음성 화면, 공간별 전달 규칙, 제공자별 연결 구현
 scripts/check.mjs      배포 전 검사 (빌드 최신 여부 · 문법 · 층 배치 · 끼임)
 dist/ · dist-check/    빌드 결과. 서버에는 빌드 도구가 없어서 저장소에 함께 올린다
+src/worldShowcase.ts   14층 액자에 거는 내용(인기 만화·작가 방·방명록·최신 화·사용자 퀴즈)을 받는다
+src/worldFloor.ts      14층 액자·가판대를 누르면 월드 창(/world/campus.html)을 캠퍼스 위에 띄운다
+world/                 하루들 월드 소스를 그대로 옮긴 것 (src/, server/, index.html)
+├─ server/campus.ts    캠퍼스 전용: 월드 서버를 app.js에 붙인다 (월드의 server/index.ts 대신)
+├─ campus/modal.tsx    캠퍼스 전용: 월드 3D 공간 없이 특종·만화·릴레이·퀴즈 창만 띄우는 페이지(campus.html)
+dist-server/world.mjs  world/server를 묶은 결과. app.js가 불러 쓴다
 ```
+
+### 14층 하루들 월드
+
+- 14층 배치는 `src/engine/world.ts`의 `f === 14`에 있습니다. 전시관과 소설관은 벽 없는 구역이고, 액자는 세워 두는 `showframe`과 벽에 거는 `showwall`(흰 전시 벽, `style: "film"`이면 필름 띠)로 `src`(work·a0~a7(작가 방)·cheer·crab·relay·song·drama)와 `slot`(몇 번째)을 정합니다. 위에서 보는 카메라가 남쪽에 있어서 액자는 되도록 남쪽을 보게 둡니다. 가판대는 `scoopstand`입니다. `showwall`·`showframe`·`relayscroll`에 `face: "e"|"w"`를 주면 옆 벽에 세워 안쪽을 봅니다. 방 벽색은 `R(..., { wall })`, 바닥 무늬는 구역의 `checker`(바둑판)·`planks`(나무판)입니다. 액자 그림은 14층에 처음 올 때와 10분마다, 무언가 올리거나 건 뒤에 다시 받습니다.
+- 액자를 누르면 `/world/campus.html#artwork=…`처럼 그 창만 캠퍼스 위에 띄웁니다(바탕이 비어 14층이 비쳐 보임). 월드의 Tailwind 스타일이 캠퍼스와 섞이지 않게 같은 주소의 페이지로 따로 엽니다. 하루들 월드 전체 화면(`/world/`)도 함께 빌드되지만 캠퍼스에서는 쓰지 않습니다. 월드의 Tailwind 스타일과 키 조작이 캠퍼스와 섞이지 않게 하려는 것입니다. 같은 주소라 저장 공간을 함께 쓰므로, 처음 들어가면 캠퍼스 캐릭터와 이름을 월드에 넘겨줍니다.
+- 월드 실시간 접속은 `/world/ws`, API는 월드와 같은 경로(`/cheers`, `/quizzes`, `/relay`, `/crab-game`, `/easel`, `/api/v1/feeds` 등)를 `app.js`가 받습니다. DB는 `.data/world/`(`WORLD_DATA_DIR`)에 두며 git에 올라가지 않고 배포(`git reset`)에도 지워지지 않습니다. 허용 주소는 `WORLD_ORIGINS`(기본 campus.harudle.com과 localhost)입니다.
+- **서버 Node 22.13 이상이 필요합니다** (`node:sqlite`). 그보다 낮으면 캠퍼스는 그대로 돌고, 14층 월드만 연결 안 됨으로 보입니다. 워커 로그에 `[world] 14층 하루들 월드를 켜지 못했어요`가 찍힙니다.
+- 월드의 큰 휴대폰 화면(하루들 바로 쓰기)은 www.harudle.com을 띄우는데, 하루들이 world.harudle.com에서만 띄우도록 허용해 두어서 캠퍼스에서는 비어 보입니다. 아래 `하루들 열기` 버튼은 동작합니다. 하루들 쪽 `frame-ancestors`에 campus.harudle.com을 더하면 풀립니다.
+- 월드가 바뀌면 하루들 월드 저장소의 `src/`, `server/`(`index.ts`·`metamoa.ts`·`staticSite.ts` 제외)를 `world/`에 다시 복사하고, 아래 캠퍼스 수정만 다시 붙인 뒤 `npm run build` 하면 됩니다.
+  - `world/src/data/presence.ts`: 실시간 주소 `/ws` → `/world/ws`
+  - `world/src/index.css`: `@import 'tailwindcss' source('..');`
+  - `world/index.html`: 스크립트 경로 `/world/src/main.tsx`, 제목
+
 
 하루들 월드 캐릭터가 바뀌면 `src/harudle/`의 파일을 다시 복사하고, `Avatar.tsx`의 pose 부분만 다시 붙이면 됩니다.
 
@@ -50,7 +70,7 @@ dist/ · dist-check/    빌드 결과. 서버에는 빌드 도구가 없어서 �
 
 ```bash
 npm install
-npm run serve   # 다른 창에서: 피드·실시간 서버 (http://localhost:8080)
+npm run serve   # 다른 창에서: 피드·실시간·14층 월드 서버 (http://localhost:8080)
 npm run dev     # 화면 개발 (Vite)
 npm run build   # tsc → dist/ → dist-artifact/(아티팩트용 한 파일) → 지문
 npm run check   # 배포 전 검사
