@@ -3196,6 +3196,7 @@ addEventListener("keydown", (e) => {
   if (duelUi?.key(e)) { e.preventDefault(); return; }   // 대결: 초대장 Y · N, 경기 중 종목 키
   if (c === "KeyG") { e.preventDefault(); if (!e.repeat) openWheel(); return; }   // G를 꾹: 감정표현 휠(떼면 고른 것)
   if (c === "KeyC") { e.preventDefault(); if (!e.repeat) fireFirework(); return; }   // C: 앞으로 폭죽
+  if (c === "KeyP") { e.preventDefault(); if (!e.repeat) captureView(); return; }   // P: 지금 모습 캡쳐
   if (c === "Backslash") { e.preventDefault(); if (!e.repeat) tuckSide(!sideTucked); return; }   // \: 사이드바 접기/펼치기
   if (c === "Tab") { e.preventDefault(); if (!e.repeat) toggleInv(); return; }
   if (!inv.hidden) { const k = { Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3, Numpad1: 0, Numpad2: 1, Numpad3: 2, Numpad4: 3 }[c]; if (k !== undefined) { e.preventDefault(); useItem(ITEMS[k].id); return; } }   // 인벤토리를 연 채로도 걷기·점프는 그대로
@@ -3255,6 +3256,7 @@ const joy = { on: false, x: 0, y: 0, id: -1, cx: 0, cy: 0 };
   mRun.onclick = () => { me.runToggle = !me.runToggle; mRun.setAttribute("aria-pressed", String(me.runToggle)); };
   document.getElementById("mJump").addEventListener("pointerdown", (e) => { e.preventDefault(); jump(); });
   document.getElementById("mInv").onclick = () => toggleInv();
+  document.getElementById("mSnap").onclick = () => captureView();
   document.getElementById("mFire").onclick = () => fireFirework(me.act?.name === "gun");   // 모바일: 종이 총을 들었으면 총알, 아니면 폭죽
   $all("#mPad [data-skill]").forEach((b) => (b.onclick = () => useSkill(b.dataset.skill)));
   const chatBtn = document.getElementById("mChat"), sayIn = $<HTMLInputElement>("sayInput");
@@ -3265,6 +3267,28 @@ addEventListener("blur", () => { keys.clear(); me.runHold = false; if (me.moving
 document.getElementById("viewBtn").onclick = () => { if (duelMove.view) showToast("지금은 시점을 바꿀 수 없어요", "사격 대결 중에는 1인칭으로만 봐요.", 1800); else setView({ top: "third", third: "first", first: "top" }[VIEW.mode]); };
 document.getElementById("rotL").onclick = () => (cam.yawT += Math.PI / 4);
 document.getElementById("rotR").onclick = () => (cam.yawT -= Math.PI / 4);
+// 지금 모습 캡쳐(P · 독의 📷 · /캡처): 장면을 한 번 더 그린 직후 캔버스를 PNG로 꺼낸다(R3F는 버퍼를 보존하지 않아 그린 직후에 읽어야 한다).
+// HUD는 DOM이라 사진에 안 들어가고 캠퍼스 장면만 담긴다. 공유창이 있는 기기(모바일)는 공유로, 아니면 파일로 내려받는다
+let snapBusy = false;
+function captureView() {
+  if (snapBusy) return; snapBusy = true;
+  const d = new Date(), two = (n) => String(n).padStart(2, "0"), stamp = `${d.getFullYear()}${two(d.getMonth() + 1)}${two(d.getDate())}-${two(d.getHours())}${two(d.getMinutes())}${two(d.getSeconds())}`;
+  const name = `하루들캠퍼스-${isArena(me.f) ? "대결장" : `${me.f}F`}-${stamp}.png`;
+  const flash = document.getElementById("snapFlash"); if (flash) { flash.classList.remove("on"); void flash.offsetWidth; flash.classList.add("on"); }   // 찰칵: 흰 번쩍임
+  try { renderer.render(scene, camera); } catch { snapBusy = false; showToast("캡쳐하지 못했어요", "잠시 뒤에 다시 해 보세요.", 2400); return; }
+  canvas.toBlob(async (blob) => {
+    snapBusy = false;
+    if (!blob) { showToast("캡쳐하지 못했어요", "잠시 뒤에 다시 해 보세요.", 2400); return; }
+    const file = new File([blob], name, { type: "image/png" });
+    if (TOUCH && typeof navigator.canShare === "function" && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: "하루들 캠퍼스" }); showToast("📷 지금 모습을 담았어요", "사진 앱이나 메신저로 보냈어요.", 2600); return; }
+      catch (e) { if ((e as any)?.name === "AbortError") return; }   // 공유창을 닫으면 조용히, 공유가 안 되면 내려받기로
+    }
+    const url = URL.createObjectURL(blob), a = document.createElement("a"); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 10000);
+    showToast("📷 지금 모습을 저장했어요", name, 3000);
+  }, "image/png");
+}
+document.getElementById("snapBtn").onclick = () => captureView();
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 let drag = null; const pointers = new Map();
 const pinchDist = () => { const [a, b] = [...pointers.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
@@ -3822,6 +3846,7 @@ const cmdHost: CommandHost = {
   dance: (style) => useSkill("dance", style),
   dances: DANCES,
   firework: () => fireFirework(),
+  snapshot: () => captureView(),
   floor: (f) => (isArena(me.f) ? chatNet({ k: "sys", text: "대결장에서는 층을 옮길 수 없어요 · /기권이나 /관전으로 나가요" }) : f === me.f ? chatNet({ k: "sys", text: `이미 ${f}F예요` }) : goFloor(f, ELEV_SPAWN)),
   follow: (id) => startFollow(id),
   stopFollow: () => (me.follow ? stopFollow() : chatNet({ k: "sys", text: "따라가는 중이 아니에요" })),
