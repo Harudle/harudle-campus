@@ -1426,7 +1426,7 @@ function buildFurn(G, o, fl) {
       SHOP_MINIS.forEach((gear, i) => { const m = makeChar(AVATAR_PRESETS[(i + 1) % AVATAR_PRESETS.length].config, gear); m.root.scale.setScalar(.3); m.root.position.set(vx - .28 + i * .28, top + .01, cz); live.add(m.root); });
       // 앞: 분홍 받침 위 투명 회전판에 대표 하루들 · 레어 펫. 둘레를 꼬마 별 셋이 함께 돌고, 받침 앞에 이름표
       const starGeo = (r, depth = .08) => { const sh = new THREE.Shape(); for (let i = 0; i < 10; i++) { const a = Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r * .45 : r; sh[i ? "lineTo" : "moveTo"](Math.cos(a) * rr, Math.sin(a) * rr); } sh.closePath(); return new THREE.ExtrudeGeometry(sh, { depth, bevelEnabled: true, bevelSize: r * .12, bevelThickness: r * .12, bevelSegments: 2 }); };
-      ([[makeChar(SHOP_HERO_LOOK, SHOP_HERO), -SW * .27, .9, "하트 효과 · 사원증 · 아아", "#FFA9BD"], [makePet(SHOP_PET), SW * .3, .72, "★ 레어 호랑이", "#FFD43B"]] as [any, number, number, string, string][]).forEach(([doll, px, sc, label, bg]) => {
+      ([[makeChar(SHOP_HERO_LOOK, SHOP_HERO), -SW * .27, .9, "하트 효과 · 사원증 · 아아", "#FFA9BD"], [makePet(SHOP_PET), SW * .3, .9, "★★ 초레어 독수리", "#FFD43B"]] as [any, number, number, string, string][]).forEach(([doll, px, sc, label, bg]) => {
         const pz = front - .62;
         cyl(g2, .4, .44, .1, PINK, px, base, pz, { line: .008 }); cyl(g2, .44, .44, .03, 0xFFFFFF, px, base + .1, pz, { line: .005 });
         cyl(live, .42, .42, .04, 0xF4FAFF, px, base + .13, pz, { mat: toon(0xF4FAFF, { opacity: .55 }), line: .005, cast: false });
@@ -2654,7 +2654,7 @@ const instaTex = canvasTex(512, 512, (g, w, h) => {
 // 하루들 부스 컷 상점: 앞 회전판의 대표 하루들 · 펫, 카운터 유리 진열장의 꼬마 하루들(장식 하나씩)
 // 회전판은 가게의 얼굴: 분홍 원피스에 리본 · 윙크한 하루들이 두근거리는 하트 효과 · 사원증 · 아아를, 옆엔 레어 호랑이
 const SHOP_HERO_LOOK: AvatarConfig = { ...AVATAR_PRESETS[0].config, head: "ribbon", face: "wink", outfit: "tunic", held: "none", outfitColor: "#FFA9BD", headColor: "#F0568A" };
-const SHOP_HERO = { fx: "fx_heart", neck: "neck_idcard", held: "held_coffee" }, SHOP_PET: PetKind = "tiger";
+const SHOP_HERO = { fx: "fx_heart", neck: "neck_idcard", held: "held_coffee" }, SHOP_PET: PetKind = "eagle";
 const SHOP_MINIS = [{ head: "head_headband", fx: "fx_heart" }, { held: "held_manuscript", fx: "fx_bubble" }, { neck: "neck_idcard", fx: "fx_bang" }];
 const shopFont = (wt, px) => `${wt} ${px}px "Pretendard","Apple SD Gothic Neo",sans-serif`;
 // 간판: 노란 판에 보라 글씨, 양옆 하트
@@ -2918,7 +2918,7 @@ function closeWheel(go) {
 /* ───── 내 펫과 놀기: 펫을 보고 F를 꾹(위에서 볼 땐 펫을 눌러도) → 마우스로 고르고 떼면 앉기 · 쓰다듬기 ─────
    앉기: 그 자리에 앉아 주인을 본다(멀리 가면 일어나 다시 따라온다, 한 번 더 고르면 일어나기). 쓰다듬기: 주인이 손을 뻗어 쓰다듬고, 펫마다 다르게 좋아한다(Pets.tsx) + 하트.
    펫 상태는 presence의 pt(1 앉음 · 2 쓰다듬는 중)로 남들에게도 보인다 */
-const PET_NAME = { doodle: "두들", cat: "고양이", panda: "판다", fox: "여우", zebra: "얼룩말", emu: "에뮤", tiger: "호랑이", bear: "불곰", duck: "러버덕", capybara: "카피바라", penguin: "펭귄", dragon: "용" };
+const PET_NAME = { doodle: "두들", cat: "고양이", panda: "판다", fox: "여우", zebra: "얼룩말", emu: "에뮤", tiger: "호랑이", bear: "불곰", duck: "러버덕", capybara: "카피바라", penguin: "펭귄", dragon: "용", eagle: "독수리" };
 const PAT_MS = 2800;
 const petName = () => PET_NAME[dog.doll.pet] || "펫";
 // 펫을 보고 있나(2.6칸 안): 들어가서 볼 땐 카메라가 보는 쪽 50° 안, 위에서 볼 땐 캐릭터가 바라보는 쪽 90° 안이거나 펫 위에 마우스를 올렸을 때
@@ -2933,13 +2933,14 @@ function nearPet() {
 }
 function openPetWheel() {
   if (wheel.open || inWorld || typing() || uiOpen() || duelUi?.active()) return;
-  wheel.kind = "pet"; wheel.list = [{ id: "sit", icon: "🐾", name: dog.act === "sit" ? "일어나기" : "앉기" }, { id: "pat", icon: "🤚", name: "쓰다듬기" }];
+  wheel.kind = "pet"; wheel.list = [{ id: "sit", icon: "🐾", name: dog.doll.pet === "eagle" ? (dog.act === "sit" ? "날려 보내기" : "어깨에 앉히기") : dog.act === "sit" ? "일어나기" : "앉기" }, { id: "pat", icon: "🤚", name: "쓰다듬기" }];
   wheel.open = true; wheel.vx = wheel.vy = 0; wheel.pick = -1; keys.clear(); me.runHold = false; renderWheel();
   const r = wheel.el.getBoundingClientRect(); wheel.cx = r.left + r.width / 2; wheel.cy = r.top + r.height / 2;
 }
 function petSit() {
-  if (dog.act === "sit" || (dog.act === "pet" && dog.after === "sit")) { dog.act = null; dog.after = null; showToast(`${withJosa(petName(), "가", "이")} 일어났어요`, "다시 졸졸 따라와요.", 1800); }
-  else { dog.act = "sit"; dog.after = null; showToast(`${withJosa(petName(), "가", "이")} 앉았어요`, "멀리 가면 일어나서 따라와요.", 2200); }
+  const bird = dog.doll.pet === "eagle";
+  if (dog.act === "sit" || (dog.act === "pet" && dog.after === "sit")) { dog.act = null; dog.after = null; showToast(bird ? "독수리를 날려 보냈어요" : `${withJosa(petName(), "가", "이")} 일어났어요`, bird ? "하늘을 날며 따라와요." : "다시 졸졸 따라와요.", 1800); }
+  else { dog.act = "sit"; dog.after = null; showToast(bird ? "독수리가 어깨에 앉았어요" : `${withJosa(petName(), "가", "이")} 앉았어요`, bird ? "걸어도 어깨에 앉은 채로 있어요. 한 번 더 고르면 날려 보내요." : "멀리 가면 일어나서 따라와요.", 2200); }
   sendPresence(true);
 }
 function petPat() {
@@ -3107,7 +3108,7 @@ function useSkill(name, style?: number) { if (!SKILLS[name]) return;   // style:
     me.path = null; startAct(me, "read"); me.ac++; me.an = "read"; me.as = me.act.seed; sendPresence(true); showToast("책을 펼쳤어요", "인벤토리에서 책을 다시 고르거나 일어나면 덮어요.", 2000); return;
   } if (name === "dance" && me.act?.name === "dance" && style === undefined) { endAct(me); sendPresence(true); return; } if (me.lie) standUp(); me.path = null; startAct(me, name, name === "dance" ? (style === undefined ? nextDance() : (lastDance = style)) : undefined); if (name === "dance") showToast(DANCES[me.act.style], "Z를 다시 누르거나 움직이면 멈춰요.", 1600); me.ac++; me.an = name; me.as = me.act.seed; sendPresence(true); }
 // act: 주인이 시킨 것(sit 앉아 있다 · pet 쓰다듬는 중, actUntil까지) · after: 쓰다듬기가 끝나면 돌아갈 것(앉아 있다 쓰다듬었으면 다시 앉는다)
-const dog = { x: ELEV_SPAWN[0] - 1, y: ELEV_SPAWN[1] + 1, moving: false, h: 0, doll: makePet(), act: null as "sit" | "pet" | null, after: null as "sit" | null, actUntil: 0 }; scene.add(dog.doll.root);
+const dog = { x: ELEV_SPAWN[0] - 1, y: ELEV_SPAWN[1] + 1, moving: false, run: false, sp: 4.2, dustAt: 0, z: 0, still: 0, ang: undefined as number | undefined, h: 0, doll: makePet(), act: null as "sit" | "pet" | null, after: null as "sit" | null, actUntil: 0 }; scene.add(dog.doll.root);
 const peers = new Map();
 const setPos = (d, f, x, y) => d.root.position.set(wx(x), floorY(f) + heightAt(FLOORS[f], x, y), wz(y));
 
@@ -4026,9 +4027,49 @@ function syncOccupancy() {
     else for (const o of floor.furn) if (o.kind === "beanbag" && !o.taken && Math.hypot(bagSpot(o).x - s.x, bagSpot(o).y - s.y) < .6) { o.taken = "peer"; break; } }
 }
 // 펫이 주인 뒤 오른쪽을 졸졸 따라간다(내 펫 · 다른 크루의 펫이 같이 쓴다)
-function followPet(pet: { x: number; y: number; h: number; moving: boolean }, tx: number, ty: number, th: number, dt: number) {
+// 주인이 달리거나 꽤 떨어지면 펫도 달린다(주인 달리기 7.3보다 조금 빠르게). 주인이 멈추고 가까워지면 다시 걷는다
+const PET_WALK = 4.2, PET_RUN = 8.4;
+function followPet(pet: { x: number; y: number; h: number; moving: boolean; run?: boolean; sp?: number }, tx: number, ty: number, th: number, dt: number, ownerRun = false) {
   const ddx = tx - Math.sin(th) * .9 + Math.cos(th) * .35 - pet.x, ddy = ty - Math.cos(th) * .9 - Math.sin(th) * .35 - pet.y, dd = Math.hypot(ddx, ddy); pet.moving = dd > .35;
-  if (dd > 6) { pet.x = tx; pet.y = ty; } else if (pet.moving) { const s = Math.min(dd, 6 * dt); pet.x += ddx / dd * s; pet.y += ddy / dd * s; pet.h = Math.atan2(ddx, ddy); }
+  pet.run = pet.run ? (ownerRun || dd > 1.2) && pet.moving : ownerRun || dd > 2.6;
+  pet.sp = lerp(pet.sp ?? PET_WALK, pet.run ? PET_RUN : PET_WALK, Math.min(1, dt * 6));   // 속도는 부드럽게 붙였다 뗀다
+  if (dd > 9) { pet.x = tx; pet.y = ty; } else if (pet.moving) { const s = Math.min(dd, pet.sp * dt); pet.x += ddx / dd * s; pet.y += ddy / dd * s; pet.h = Math.atan2(ddx, ddy); }
+}
+// 나는 펫(초레어 독수리): 걸으면 뒤쪽 위에서 활공, 달리면 낮게 내려와 옆에서 나란히, 멈추면 잠깐 맴돌다 주인 오른쪽 어깨에 내려앉는다.
+// 10초 넘게 서 있으면 머리 위를 크게 돈다. 앉히면(sit) 어깨에 앉아 있고, 주인이 앉거나 누웠으면(low) 어깨 대신 옆 바닥에 내려앉는다.
+// 높이(z)는 주인이 선 자리 기준이고, 층 천장보다 낮게 난다. 날개 모양은 doll.anim.fly · flap으로 Eagle(Pets.tsx)에 넘긴다
+const PERCH_Z = .62, PERCH_SIDE = .3, PERCH_AFTER = 1.4, CIRCLE_AFTER = 10;
+function flyPet(pet: any, f: number, ox: number, oy: number, oh: number, moving: boolean, run: boolean, act: string | null, low: boolean, dt: number) {
+  pet.still = moving ? 0 : (pet.still ?? 0) + dt;
+  const rx = Math.cos(oh), ry = -Math.sin(oh), fx = Math.sin(oh), fy = Math.cos(oh), top = (CEIL[f] ?? 4.4) - 1.3;   // 주인의 오른쪽 · 앞
+  const circling = !act && !moving && pet.still >= CIRCLE_AFTER, perch = !!act || (!moving && pet.still > PERCH_AFTER && !circling);
+  let tx: number, ty: number, tz: number, flap: number;
+  if (perch) { const side = low ? .75 : PERCH_SIDE; tx = ox + rx * side; ty = oy + ry * side; tz = low ? 0 : PERCH_Z; flap = .8; }
+  else if (circling) { pet.ang = (pet.ang ?? Math.atan2(pet.x - ox, pet.y - oy)) + dt * .65; tx = ox + Math.sin(pet.ang) * 1.8; ty = oy + Math.cos(pet.ang) * 1.8; tz = Math.min(2.1, top); flap = .12; }
+  else if (run) { tx = ox + rx * .8 + fx * .3; ty = oy + ry * .8 + fy * .3; tz = .95; flap = 1; }
+  else if (moving) { tx = ox - fx * .7 + rx * .35; ty = oy - fy * .7 + ry * .35; tz = Math.min(1.75, top); flap = .3; }
+  else { tx = ox - fx * .5 + rx * .55; ty = oy - fy * .5 + ry * .55; tz = Math.min(1.3, top); flap = .7; }   // 막 멈췄다: 잠깐 맴돌다 내려앉는다
+  if (!circling) pet.ang = undefined;
+  const dx = tx - pet.x, dy = ty - pet.y, d = Math.hypot(dx, dy);
+  if (d > 10) { pet.x = tx; pet.y = ty; pet.z = tz; }   // 층을 옮겼거나 순간이동했다
+  else if (d > .02) { const st = Math.min(d, (run ? 9.5 : perch ? 3.5 : 6.5) * dt); pet.x += dx / d * st; pet.y += dy / d * st; if (d > .08) pet.h = Math.atan2(dx, dy); }
+  pet.z = (pet.z ?? 0) + (tz - (pet.z ?? 0)) * Math.min(1, dt * (perch ? 4 : 2.5));
+  const landed = perch && ((pet.landed && d < .6) || (d < .06 && Math.abs(tz - pet.z) < .04));   // 한 번 앉으면 주인이 걸어도 어깨에 붙어 있는다
+  pet.landed = landed;
+  if (landed) { pet.x = tx; pet.y = ty; pet.z = tz; pet.h = oh; flap = 0; }   // 앉으면 주인과 같은 쪽을 본다(주인이 제자리에서 돌면 같이 돈다)
+  pet.moving = false; pet.run = run && !perch;
+  pet.doll.anim.fly = landed ? 0 : 1; pet.doll.anim.flap = flap;
+}
+// 나는 펫의 높이: 주인이 선 높이 + z. 그림자(blob)는 펫 아래 바닥에 남긴다
+function placeFlyer(pet: any, f: number, ox: number, oy: number, oup: number) {
+  const ground = floorY(f) + heightAt(FLOORS[f], pet.x, pet.y), base = floorY(f) + heightAt(FLOORS[f], ox, oy) + oup;
+  pet.doll.root.position.y = Math.max(ground, base + (pet.z ?? 0)); pet.doll.blob.position.y = ground - pet.doll.root.position.y + .012;
+}
+// 달리는 펫 발밑의 먼지
+const dustTex = fxTex((g) => { g.fillStyle = "#EDE9F7"; g.strokeStyle = "#111118"; g.lineWidth = 2.5; g.beginPath(); g.arc(24, 38, 13, 0, 7); g.arc(40, 36, 11, 0, 7); g.arc(32, 26, 12, 0, 7); g.fill(); g.beginPath(); g.arc(24, 38, 13, 2.2, 5.2); g.stroke(); g.beginPath(); g.arc(40, 36, 11, 4.3, 7.4); g.stroke(); g.beginPath(); g.arc(32, 26, 12, 3.6, 5.9); g.stroke(); });
+function petDust(pet: { run?: boolean; moving: boolean; dustAt?: number; doll: { root: THREE.Object3D; pet: PetKind } }, t: number) {
+  if (!pet.run || !pet.moving || !pet.doll.root.visible || pet.doll.pet === "dragon" || pet.doll.pet === "eagle" || t < (pet.dustAt ?? 0)) return;   // 나는 펫(용 · 독수리)은 먼지가 안 난다
+  pet.dustAt = t + .16; spawnFx(dustTex, pet.doll.root.position, 1, .25, .02);
 }
 function syncPeers(dt, t) {
   syncOccupancy();
@@ -4069,11 +4110,12 @@ function syncPeers(dt, t) {
     } else v.ox = v.oz = undefined;
     // 그 크루가 데리고 다니는 펫
     const pk = petOfSku(g?.pet);
-    if (pk !== (v.pet?.kind ?? null)) { dropDoll(v.pet?.doll); v.pet = pk ? { kind: pk, x: v.x - .6, y: v.y + .4, moving: false, h: 0, doll: makePet(pk) } : null; if (v.pet) scene.add(v.pet.doll.root); }
+    if (pk !== (v.pet?.kind ?? null)) { dropDoll(v.pet?.doll); v.pet = pk ? { kind: pk, x: v.x - .6, y: v.y + .4, moving: false, h: 0, z: 0, doll: makePet(pk) } : null; if (v.pet) scene.add(v.pet.doll.root); }
     if (v.pet) { // 그 크루가 펫을 앉혔거나 쓰다듬는 중(pt)이면 펫은 그 자리에서 주인을 본다
       const pa = s.pt === 1 ? "sit" : s.pt === 2 ? "pet" : null;
-      if (pa) { v.pet.moving = false; v.pet.h = Math.atan2(v.x - v.pet.x, v.y - v.pet.y); } else followPet(v.pet, v.x, v.y, typeof s.h === "number" ? s.h : 0, dt);
-      v.pet.doll.root.visible = vis; setPos(v.pet.doll, s.f, v.pet.x, v.pet.y); v.pet.doll.update(dt, t, v.pet.moving, v.pet.h); v.pet.doll.anim.petAct = pa;
+      if (pk === "eagle") flyPet(v.pet, s.f, v.x, v.y, typeof s.h === "number" ? s.h : 0, !!s.m, !!s.m && !!s.r, pa, !!(s.st || s.l), dt);
+      else if (pa) { v.pet.moving = false; v.pet.h = Math.atan2(v.x - v.pet.x, v.y - v.pet.y); } else followPet(v.pet, v.x, v.y, typeof s.h === "number" ? s.h : 0, dt, !!s.m && !!s.r);
+      v.pet.doll.root.visible = vis; setPos(v.pet.doll, s.f, v.pet.x, v.pet.y); if (pk === "eagle") placeFlyer(v.pet, s.f, v.x, v.y, +s.u || 0); v.pet.doll.update(dt, t, v.pet.moving, v.pet.h, 0, false, null, false, !!v.pet.run && v.pet.moving); petDust(v.pet, t); v.pet.doll.anim.petAct = pa;
       if (pa === "pet" && v.lastPt !== 2 && vis) spawnFx(heartTex, v.pet.doll.root.position, 3, .3, .7);
     }
     if (!isArena(s.f)) { if (s.pt === 2) { v.doll.anim.arms = patArms(t); v.patArms = true; } else if (v.patArms) { v.doll.anim.arms = null; v.patArms = false; } }   // 쓰다듬는 팔
@@ -4323,7 +4365,8 @@ function step(dt, t) {
     if (me.moving && me.patUntil > now) { me.patUntil = 0; dog.actUntil = 0; }
     if (dog.act === "pet" && now > dog.actUntil) { dog.act = dog.after; dog.after = null; sendPresence(true); }
     if (dog.act === "sit" && Math.hypot(me.x - dog.x, me.y - dog.y) > 5) { dog.act = null; sendPresence(true); }
-    if (dog.act) { dog.moving = false; dog.h = Math.atan2(me.x - dog.x, me.y - dog.y); } else followPet(dog, me.x, me.y, me.h, dt); }
+    if (dog.doll.pet === "eagle") flyPet(dog, me.f, me.x, me.y, me.h, me.moving, running() && me.moving, dog.act, !!(me.seat || me.lie), dt);   // 독수리는 날아서 따라오고 어깨에 앉는다
+    else if (dog.act) { dog.moving = false; dog.h = Math.atan2(me.x - dog.x, me.y - dog.y); } else followPet(dog, me.x, me.y, me.h, dt, running() && me.moving); }
   // 크루들은 제자리 근처를 서성인다
   for (const n of NPCS) {
     if (n.f !== me.f) continue; const fl = FLOORS[n.f];
@@ -4365,7 +4408,7 @@ function render(dt, t) {
   applyWobble(me);
   if (me.brush && !inBooth()) { me.brush = false; if (!easelEd.hidden) closeEasel(); showToast("붓은 부스 안에서만 써요", "붓 꽂이에 돌려놨어요.", 2200); sendPresence(true); }
   holdBrush(me, me.brush, ezPen.c);
-  setPos(dog.doll, me.f, dog.x, dog.y); dog.doll.update(dt, t, dog.moving, dog.h); dog.doll.anim.petAct = dog.act;
+  setPos(dog.doll, me.f, dog.x, dog.y); if (dog.doll.pet === "eagle") placeFlyer(dog, me.f, me.x, me.y, me.up); dog.doll.update(dt, t, dog.moving, dog.h, 0, false, null, false, dog.run && dog.moving); dog.doll.anim.petAct = dog.act; petDust(dog, t);
   if (me.patUntil > performance.now()) { meDoll.anim.arms = patArms(t); me.patArms = true; } else if (me.patArms) { meDoll.anim.arms = null; me.patArms = false; }   // 쓰다듬는 팔(대결 팔 자세는 건드리지 않게 내가 둔 것만 푼다)
   for (const n of NPCS) if (n.doll.root.visible) { setPos(n.doll, n.f, n.x, n.y); applyLie(n.doll, n.lie); n.doll.setSeated(n.seat); n.doll.update(dt, t, n.moving, n.lie ? 0 : n.seat ? n.seat.yaw : n.talk ? Math.atan2(me.x - n.x, me.y - n.y) : n.h, n.seed, performance.now() - n.sayAt < 2500, tickAct(n, dt));  applyWobble(n); }
   environment.frame(dt); updateTraffic(dt); tickFx(dt); tickMeteors(dt, environment.nightVisibility()); tickFireworks(dt);
@@ -4404,7 +4447,7 @@ fontsReady.then(() => {
   loadFeed(); joinRoom(); void loadAccount();
   ready = true;
   // 화면 점검용 손잡이: 주소 끝에 ?debug를 붙였을 때만
-  if (new URLSearchParams(location.search).has("debug")) (window as any).__ez = ezState; (window as any).__t = { peers, gl: renderer, Q, me, NPCS, cam, goFloor, setView, setMyAv, useSkill, jump, lieDown, sitDown, nearSeat, sendPresence, AVATAR_PRESETS, get floor() { return floor; } };
+  if (new URLSearchParams(location.search).has("debug")) (window as any).__ez = ezState; (window as any).__t = { peers, gl: renderer, Q, me, dog, NPCS, cam, goFloor, setView, setMyAv, useSkill, jump, lieDown, sitDown, nearSeat, sendPresence, AVATAR_PRESETS, get floor() { return floor; } };
   if (new URLSearchParams(location.search).has("debug")) Object.assign((window as any).__t, { city, camera, startrack, duel: duelUi });
 });
 

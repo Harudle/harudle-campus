@@ -23,6 +23,8 @@ export type DollAnim = {
   cross?: boolean  // 앉아서 다리 꼬기
   party?: boolean  // 클럽 파티: 두 팔을 번갈아 마구 흔들고 고개를 신나게 흔든다
   petAct: 'sit' | 'pet' | null // 펫(dog)만: 주인이 앉혔다 · 쓰다듬는 중
+  fly?: number   // 나는 펫(독수리)만: 떠 있으면 1, 앉아 있으면 0
+  flap?: number  // 나는 펫만: 날갯짓 세기(0 활공 ~ 1 힘차게)
   arms: number[] | null // 대결 종목이 정한 팔 자세 [오른팔 x, z, 왼팔 x, z](라디안). 있으면 다른 팔 동작보다 먼저(복싱 주먹 · 가드)
 }
 

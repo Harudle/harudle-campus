@@ -667,6 +667,16 @@ body.duelFps #cross{transition:opacity .1s;width:18px;height:18px;margin:-9px 0 
 #shop .glist li.ghead.rare{margin-top:10px}
 #shop .glist li.ghead.rare b{background:#FFD43B}
 #shop .glist li.ghead.rare::after{background:#C98A00;opacity:.6}
+/* 초레어: 무지갯빛 테두리 카드 · 무지개 띠 · 반짝이는 태그 */
+#shop .glist li.ultra{border:3px solid transparent;border-radius:14px;background:linear-gradient(135deg,#FFFFFF 40%,#F3EEFF) padding-box,linear-gradient(120deg,#FF8FB1,#FFD43B,#7DDBA3,#7DB3F0,#B39DDB,#FF8FB1) border-box;box-shadow:3px 4px 0 #7355DA}
+#shop .glist li.ultra.got{background:linear-gradient(135deg,#F4F0FD 40%,#EADFFF) padding-box,linear-gradient(120deg,#FF8FB1,#FFD43B,#7DDBA3,#7DB3F0,#B39DDB,#FF8FB1) border-box}
+#shop .glist li.ultra .gicon{background:radial-gradient(circle at 35% 30%,#FFF6D6,#E6DBFF)}
+#shop .glist i.ultra{font-style:normal;font-size:11px;padding:1px 7px;border-radius:999px;border:1.5px solid var(--ink);color:var(--ink);background:linear-gradient(90deg,#FFB3C9,#FFE27A,#A6EBC4,#A9CCF5,#CDB9F2);background-size:200% 100%;animation:ultraShine 3s linear infinite}
+@keyframes ultraShine{to{background-position:200% 0}}
+@media (prefers-reduced-motion:reduce){#shop .glist i.ultra{animation:none}}
+#shop .glist li.ghead.ultra{margin-top:10px}
+#shop .glist li.ghead.ultra b{background:linear-gradient(90deg,#FFB3C9,#FFE27A,#A6EBC4,#A9CCF5,#CDB9F2)}
+#shop .glist li.ghead.ultra::after{background:linear-gradient(90deg,#FF8FB1,#FFD43B,#7DDBA3,#7DB3F0,#B39DDB);opacity:.9;height:3px}
 #shop .glist i.rare{font-style:normal;font-size:11px;padding:1px 7px;border-radius:999px;background:#FFD43B;border:1.5px solid var(--ink);color:var(--ink)}
 #shop .glist li.rare .gicon{background:#FFF3C4}
 /* 감정표현 휠(G를 꾹): 화면 가운데 피자 모양(가진 프리미엄 감정표현만). 고른 칸은 노랑 */
