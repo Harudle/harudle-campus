@@ -2,6 +2,7 @@ import { createLiveKitProvider } from "./livekit.js";
 import { createDailyProvider } from "./daily.js";
 import { createMonthlyBudget } from "./monthly-budget.js";
 import { createFailoverRouter } from "./failover.js";
+import { createSelfHostedLiveKitProvider } from "./self-hosted.js";
 export { areaOf as mediaArea, canShareScreen as canShareInRoom } from "../../src/media/policy.mjs";
 
 // 새 제공자는 같은 join 인터페이스로 여기에 등록한다.
@@ -16,6 +17,7 @@ function budgetFromEnv(env, prefix) {
 }
 export function createMediaService(env = process.env, { onSwitch, cloudflareTest } = {}) {
   if ((env.MEDIA_PROVIDER || "livekit") === "livekit") return createLiveKitProvider(env);
+  if (env.MEDIA_PROVIDER === "self-hosted") return createSelfHostedLiveKitProvider(env);   // 직접 띄운 livekit-server: 예약 · 전환 없음
   const localExperiment = env.CAMPUS_BIND_HOST === "127.0.0.1" && env.MEDIA_EXPERIMENTAL === "local-only";
   if (env.MEDIA_PROVIDER === "daily" && localExperiment) {
     return createDailyProvider(env, { budget: budgetFromEnv(env, "DAILY") });

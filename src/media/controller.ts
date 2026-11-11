@@ -6,11 +6,11 @@ import { mountMeetings } from "./meetings";
 import { mountMicrophone } from "./microphone";
 import { mountSpeaking } from "./speaking";
 
-type Options = { requestJoin: (area: string) => Promise<MediaJoin>; requestRenew: () => Promise<number>; requestCloudflare: CloudflareRequest; requestMeeting: (operation: string, data?: Record<string, unknown>) => Promise<any>; notifyDailyReady?: () => void; notifyLeft?: () => void; acknowledgeSwitch?: (revision: number) => void; meetingChanged?: () => void; voiceChanged?: (state: VoiceState) => void; speakingChanged?: (peers: Set<string>) => void };
+type Options = { requestJoin: (area: string) => Promise<MediaJoin>; requestRenew: () => Promise<number>; requestCloudflare: CloudflareRequest; requestMeeting: (operation: string, data?: Record<string, unknown>) => Promise<any>; requestShare: (on: boolean) => Promise<void>; notifyDailyReady?: () => void; notifyLeft?: () => void; acknowledgeSwitch?: (revision: number) => void; meetingChanged?: () => void; voiceChanged?: (state: VoiceState) => void; speakingChanged?: (peers: Set<string>) => void };
 // 남들에게 보여 줄 내 음성 상태: 0 음성 연결 안 함 · 1 연결했지만 마이크 꺼짐 · 2 마이크 켜짐
 export type VoiceState = 0 | 1 | 2;
 
-export function mountMediaControls({ requestJoin, requestRenew, requestCloudflare, requestMeeting, notifyDailyReady = () => {}, notifyLeft = () => {}, acknowledgeSwitch = () => {}, meetingChanged = () => {}, voiceChanged = () => {}, speakingChanged = () => {} }: Options) {
+export function mountMediaControls({ requestJoin, requestRenew, requestCloudflare, requestMeeting, requestShare, notifyDailyReady = () => {}, notifyLeft = () => {}, acknowledgeSwitch = () => {}, meetingChanged = () => {}, voiceChanged = () => {}, speakingChanged = () => {} }: Options) {
   const dock = document.getElementById("mediaDock")!;
   const buttons = document.getElementById("mediaBtns")!;
   const voice = document.getElementById("voiceToggle") as HTMLButtonElement;
@@ -23,6 +23,7 @@ export function mountMediaControls({ requestJoin, requestRenew, requestCloudflar
   const screenList = document.getElementById("sharedScreenList")!;
   const collapse = document.getElementById("screensCollapse") as HTMLButtonElement;
   const elements = new Map<string, HTMLElement>();
+  const remoteScreens = new Set<string>();   // 남이 공유 중인 화면 트랙: 회의실 하나에 화면 하나라 있으면 내 공유 버튼을 잠근다
   let position: Position | null = null, peers: NearbyPeer[] = [];
   let provider: MediaProvider | null = null, providerArea = "";
   let wanted = false, connected = false, connecting = false, network = false;
@@ -54,8 +55,10 @@ export function mountMediaControls({ requestJoin, requestRenew, requestCloudflar
   function clearTracks() {
     speaking.clear();
     for (const element of elements.values()) element.remove();
-    elements.clear(); screens.hidden = true;
+    elements.clear(); remoteScreens.clear(); screens.hidden = true;
   }
+  // 공유를 끝내면(버튼 · 브라우저의 공유 중지 · 연결 종료) 서버의 자리를 비운다
+  const releaseShare = () => { void requestShare(false).catch(() => {}); };
   // 독 버튼: 아이콘은 그대로 두고 아래 글자(<b>)와 풍선 도움말만 바꾼다. 마이크 · 화면 공유는 늘 보이고, 못 쓸 때는 흐리게
   const label = (button: HTMLButtonElement, text: string, tip = text) => { button.querySelector("b")!.textContent = text; button.title = tip; button.setAttribute("aria-label", tip); };
   function render() {
@@ -70,8 +73,9 @@ export function mountMediaControls({ requestJoin, requestRenew, requestCloudflar
     const nextVoice: VoiceState = !wanted || !connected ? 0 : microphone ? 2 : 1;
     if (nextVoice !== voiceState) { voiceState = nextVoice; voiceChanged(voiceState); }
     const shareHere = !!position && canShareScreen(position);
-    screen.disabled = !wanted || !shareHere || !connected || connecting || actionBusy;
-    label(screen, sharing ? "공유 중지" : "화면 공유", !shareHere ? "회의실에서 음성을 연결하면 화면을 공유할 수 있어요" : !wanted ? "음성을 연결하면 화면을 공유할 수 있어요" : sharing ? "공유 중지" : "화면 공유");
+    const shareTaken = remoteScreens.size > 0 && !sharing;
+    screen.disabled = !wanted || !shareHere || !connected || connecting || actionBusy || shareTaken;
+    label(screen, sharing ? "공유 중지" : "화면 공유", !shareHere ? "회의실에서 음성을 연결하면 화면을 공유할 수 있어요" : !wanted ? "음성을 연결하면 화면을 공유할 수 있어요" : shareTaken ? "다른 크루가 화면을 공유하고 있어요. 한 회의실에서는 한 화면만 공유할 수 있어요" : sharing ? "공유 중지" : "화면 공유");
     screen.setAttribute("aria-pressed", String(sharing));
     resume.hidden = !wanted || !audioBlocked;
     // 상태 글은 알려야 할 때(오류 · 연결 중 · 회의 선택)만 띄운다. 평소 안내는 음성 버튼 풍선 도움말로
@@ -89,14 +93,16 @@ export function mountMediaControls({ requestJoin, requestRenew, requestCloudflar
         const figure = document.createElement("figure"); figure.className = "sharedScreen";
         const caption = document.createElement("figcaption"); caption.textContent = name === "내 화면" ? name : `${name}의 화면`;
         figure.append(element, caption); screenList.append(figure); elements.set(id, figure); screens.hidden = false;
+        if (!id.startsWith("local:")) { remoteScreens.add(id); render(); }
       },
       removeTrack(id) {
         speaking.remove(id);
         const element = elements.get(id);
         if (element) { element.remove(); elements.delete(id); }
         screens.hidden = !screenList.querySelector(".sharedScreen");
+        if (remoteScreens.delete(id)) render();
       },
-      screenSharingChanged(value) { if (current()) { sharing = value; render(); } },
+      screenSharingChanged(value) { if (current()) { if (sharing && !value) releaseShare(); sharing = value; render(); } },
       audioPlaybackChanged(playing) { if (current()) { audioBlocked = !playing; render(); } },
       dailyReady() { if (current()) notifyDailyReady(); },
       connectionLost() {
@@ -227,9 +233,19 @@ export function mountMediaControls({ requestJoin, requestRenew, requestCloudflar
   screen.onclick = async () => {
     if (!provider || !connected || !position || !canShareScreen(position) || actionBusy) return;
     actionBusy = true; message = ""; render();
-    try { await provider.setScreenShare(!sharing); }
-    catch { message = "화면 공유를 시작하지 못했어요. 브라우저에서 공유할 화면을 선택해 주세요."; }
-    finally { actionBusy = false; render(); }
+    try {
+      if (sharing) { await provider.setScreenShare(false); releaseShare(); }
+      else {
+        await requestShare(true);   // 회의실의 자리를 먼저 받는다(자체 호스팅은 이때 LiveKit 공유 권한도 받는다)
+        try { await provider.setScreenShare(true); }
+        catch (error) { releaseShare(); throw error; }
+      }
+    } catch (error: any) {
+      message = error?.message === "share_taken" ? "다른 크루가 이미 화면을 공유하고 있어요. 한 회의실에서는 한 화면만 공유할 수 있어요."
+        : error?.message === "share_unavailable" ? "지금은 화면을 공유할 수 없어요. 음성을 다시 연결해 주세요."
+        : error?.message === "rate_limited" ? "요청이 많아요. 잠시 후 다시 시도해 주세요."
+        : "화면 공유를 시작하지 못했어요. 브라우저에서 공유할 화면을 선택해 주세요.";
+    } finally { actionBusy = false; render(); }
   };
   resume.onclick = async () => {
     if (!provider) return;

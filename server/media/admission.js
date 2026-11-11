@@ -14,8 +14,10 @@ export function mediaClientAddress(request, trustProxy = false) {
 }
 
 // 사용량 예약 전에 전체 동시 참가와 같은 주소의 반복 발급을 제한한다.
+// 상한 200은 자체 호스팅 서버 한 대(t4g.small 회선) 기준. 무료 LiveKit Cloud는 app.js에서 20을 기본값으로 쓴다.
+export const MAX_MEDIA_PARTICIPANTS = 200;
 export function createMediaAdmission({ peers, maxParticipants = 20, perAddressPerMinute = 12, now = Date.now } = {}) {
-  if (!peers || !Number.isSafeInteger(maxParticipants) || maxParticipants < 2 || maxParticipants > 20 || !Number.isSafeInteger(perAddressPerMinute) || perAddressPerMinute < 2 || perAddressPerMinute > 120) throw new Error("invalid_media_config");
+  if (!peers || !Number.isSafeInteger(maxParticipants) || maxParticipants < 2 || maxParticipants > MAX_MEDIA_PARTICIPANTS || !Number.isSafeInteger(perAddressPerMinute) || perAddressPerMinute < 2 || perAddressPerMinute > 120) throw new Error("invalid_media_config");
   const requests = new Map();
   return {
     check(id, address) {

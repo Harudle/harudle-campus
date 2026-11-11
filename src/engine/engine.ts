@@ -3872,10 +3872,11 @@ let requestMediaJoin: (area: string) => Promise<MediaJoin> = async () => { throw
 let requestMediaRenew: () => Promise<number> = async () => { throw new Error("not_ready"); };
 let requestCloudflareMedia: (operation: string, data?: Record<string, unknown>) => Promise<any> = async () => { throw new Error("not_ready"); };
 let requestMeeting: (operation: string, data?: Record<string, unknown>) => Promise<any> = async () => { throw new Error("not_ready"); };
+let requestMediaShare: (on: boolean) => Promise<void> = async () => { throw new Error("not_ready"); };
 let acknowledgeMediaSwitch: (revision: number) => void = () => {};
 let notifyMediaLeft: () => void = () => {};
 let notifyDailyReady: () => void = () => {};
-const media = mountMediaControls({ speakingChanged: (peers) => { talkingPeers = peers; renderPlist(); }, requestJoin: (area) => requestMediaJoin(area), requestRenew: () => requestMediaRenew(), requestCloudflare: (operation, data) => requestCloudflareMedia(operation, data), requestMeeting: (operation, data) => requestMeeting(operation, data), notifyDailyReady: () => notifyDailyReady(), notifyLeft: () => notifyMediaLeft(), acknowledgeSwitch: (revision) => acknowledgeMediaSwitch(revision), meetingChanged: () => renderChat(), voiceChanged: (v) => { myVoice = v; queueMicrotask(() => sendPresence(true)); } });
+const media = mountMediaControls({ speakingChanged: (peers) => { talkingPeers = peers; renderPlist(); }, requestJoin: (area) => requestMediaJoin(area), requestRenew: () => requestMediaRenew(), requestCloudflare: (operation, data) => requestCloudflareMedia(operation, data), requestMeeting: (operation, data) => requestMeeting(operation, data), requestShare: (on) => requestMediaShare(on), notifyDailyReady: () => notifyDailyReady(), notifyLeft: () => notifyMediaLeft(), acknowledgeSwitch: (revision) => acknowledgeMediaSwitch(revision), meetingChanged: () => renderChat(), voiceChanged: (v) => { myVoice = v; queueMicrotask(() => sendPresence(true)); } });
 media.setAvailable(STANDALONE);
 const startrack = mountStartrack((message) => { if (!netUp) return false; sendPresence(true); netSend(message); return true; }, () => screenProjection(camera));
 function updateMediaWorld() { const x = Math.round(me.x * 100) / 100, y = Math.round(me.y * 100) / 100; const position = { f: me.f, x, y, rm: duelUi?.rm() || roomKeyAt(me.f, x, y) }; media.updateWorld(position, peerList); startrack.updateWorld(position); }
@@ -3922,6 +3923,7 @@ function wsRoom() {
   const pendingRenew = new Map<string, { resolve: (expiresAt: number) => void; reject: (error: Error) => void; timer: number }>();
   const pendingCloudflare = new Map<string, { resolve: (result: any) => void; reject: (error: Error) => void; timer: number }>();
   const pendingMeetings = new Map<string, { resolve: (result: any) => void; reject: (error: Error) => void; timer: number }>();
+  const pendingShare = new Map<string, { resolve: () => void; reject: (error: Error) => void; timer: number }>();
   const nameKey = "ww.name";
   let myName = LS.get(nameKey) || `크루${Math.floor(Math.random() * 900 + 100)}`; LS.set(nameKey, myName);
   const nameBtn = document.getElementById("nameBtn"), nameForm = document.getElementById("nameForm"), nameInput = $<HTMLInputElement>("nameInput");
@@ -3957,6 +3959,13 @@ function wsRoom() {
     pendingCloudflare.set(id, { resolve, reject, timer });
     send({ t: "media:cf", id, op: operation, data: data || {} });
   });
+  requestMediaShare = (on) => new Promise<void>((resolve, reject) => {
+    if (!ws || ws.readyState !== 1) { reject(new Error("not_ready")); return; }
+    const id = `s${++mediaSeq}`;
+    const timer = window.setTimeout(() => { pendingShare.delete(id); reject(new Error("timeout")); }, 10000);
+    pendingShare.set(id, { resolve, reject, timer });
+    send({ t: "media:share", id, on });
+  });
   requestMeeting = (operation, data) => new Promise((resolve, reject) => {
     if (!ws || ws.readyState !== 1) { reject(new Error("not_ready")); return; }
     // 회의 요청보다 현재 위치를 먼저 보내 서버와 화면의 회의실을 맞춘다.
@@ -3978,6 +3987,7 @@ function wsRoom() {
       if (m.t === "media:join") { const pending = pendingMedia.get(m.id); if (pending) { clearTimeout(pending.timer); pendingMedia.delete(m.id); if (m.join) pending.resolve(m.join); else pending.reject(new Error(m.error || "unavailable")); } }
       if (m.t === "media:renew") { const pending = pendingRenew.get(m.id); if (pending) { clearTimeout(pending.timer); pendingRenew.delete(m.id); if (Number.isSafeInteger(m.expiresAt)) pending.resolve(m.expiresAt); else pending.reject(new Error(m.error || "unavailable")); } }
       if (m.t === "media:cf") { const pending = pendingCloudflare.get(m.id); if (pending) { clearTimeout(pending.timer); pendingCloudflare.delete(m.id); if (!m.error) pending.resolve(m.result); else pending.reject(new Error(m.error)); } }
+      if (m.t === "media:share") { const pending = pendingShare.get(m.id); if (pending) { clearTimeout(pending.timer); pendingShare.delete(m.id); if (m.ok) pending.resolve(); else pending.reject(new Error(m.error || "unavailable")); } }
       if (m.t === "media:meeting") { const pending = pendingMeetings.get(m.id); if (pending) { clearTimeout(pending.timer); pendingMeetings.delete(m.id); if (!m.error) pending.resolve(m.result); else pending.reject(new Error(m.error)); } }
       if (m.t === "media:switch" && Number.isSafeInteger(m.revision)) media.switchProvider(m.revision);
       if (m.t === "me" && typeof m.u === "string") { myPub = m.u; renderChat(); }   // 서버가 정한 내 주소(게스트 p_… · 하루들 연동 h_…)

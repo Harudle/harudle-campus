@@ -20,6 +20,7 @@ import { createSwitchCoordinator } from "./server/media/switch-coordinator.js";
 import { createCloudflareTestService } from "./server/media/cloudflare-test.js";
 import { createMeetingRegistry } from "./server/media/meeting-registry.js";
 import { createMediaAdmission, mediaClientAddress } from "./server/media/admission.js";
+import { createScreenShareRegistry } from "./server/media/screen-share.js";
 import { createAuth } from "./server/auth/index.js";
 import { createStartrack } from "./server/startrack.js";
 import { canControlStartrack } from "./src/startrack/shared.mjs";
@@ -149,7 +150,9 @@ if (requiredOrigin) {
   const parsed = new URL(requiredOrigin);
   if (parsed.protocol !== "https:" || parsed.origin !== requiredOrigin || parsed.username || parsed.password) throw new Error("invalid_campus_origin");
 }
-if (process.env.NODE_ENV === "production" && process.env.MEDIA_PROVIDER === "managed-draft" && !requiredOrigin) throw new Error("invalid_campus_origin");
+// 자체 호스팅(self-hosted)은 직접 띄운 livekit-server 한 대를 쓴다: 예약 · 전환 없음. 운영에서는 관리 모드와 같이 출처 검사가 필요하다
+const selfHosted = process.env.MEDIA_PROVIDER === "self-hosted";
+if (process.env.NODE_ENV === "production" && (process.env.MEDIA_PROVIDER === "managed-draft" || selfHosted) && !requiredOrigin) throw new Error("invalid_campus_origin");
 const wss = new WebSocketServer({ noServer: true, maxPayload: cloudflareTestMode ? 131072 : 4096, verifyClient: ({ origin }) => !requiredOrigin || origin === requiredOrigin });
 server.on("upgrade", (req, socket, head) => {
   const { pathname } = new URL(req.url, "http://x");
@@ -177,7 +180,8 @@ const tester = process.env.NODE_ENV === "production" ? null : {
 };
 const duel = createDuel({ peers, tester, send: (pid, msg) => { const p = peers.get(pid); if (p?.ws.readyState === 1) p.ws.send(JSON.stringify(msg)); } });
 setInterval(() => duel.tick(), DUEL.TICK).unref();
-const admission = process.env.MEDIA_PROVIDER === "managed-draft" ? createMediaAdmission({ peers, maxParticipants: Number(process.env.MEDIA_MAX_PARTICIPANTS || 20), perAddressPerMinute: Number(process.env.MEDIA_JOIN_PER_IP_PER_MINUTE || 12) }) : null;
+// 동시 음성 인원: 무료 LiveKit Cloud는 20명, 자체 호스팅은 기본 50명(MEDIA_MAX_PARTICIPANTS로 조정, 최대 200)
+const admission = process.env.MEDIA_PROVIDER === "managed-draft" || selfHosted ? createMediaAdmission({ peers, maxParticipants: Number(process.env.MEDIA_MAX_PARTICIPANTS || (selfHosted ? 50 : 20)), perAddressPerMinute: Number(process.env.MEDIA_JOIN_PER_IP_PER_MINUTE || 12) }) : null;
 const mediaSwitch = createSwitchCoordinator(peers, process.env.MEDIA_PROVIDER === "managed-draft" ? 2000 : 15000);
 let managedStack = null;
 if (process.env.MEDIA_PROVIDER === "managed-draft") {
@@ -191,7 +195,7 @@ if (process.env.MEDIA_PROVIDER === "managed-draft") {
 }
 const cloudflareTest = process.env.MEDIA_PROVIDER === "managed-draft" ? managedStack?.cloudflare : cloudflareTestMode ? createCloudflareTestService(process.env, peers) : null;
 // 운영에서는 예약과 복구가 없는 단순 제공자를 실수로 켜지 않는다.
-const unmanagedProduction = process.env.NODE_ENV === "production" && process.env.MEDIA_PROVIDER !== "managed-draft";
+const unmanagedProduction = process.env.NODE_ENV === "production" && process.env.MEDIA_PROVIDER !== "managed-draft" && !selfHosted;
 const mediaService = unmanagedProduction ? { configured: false } : process.env.MEDIA_PROVIDER === "managed-draft" ? managedStack?.router || { configured: false } : process.env.MEDIA_PROVIDER === "cloudflare-test" ? cloudflareTest : createMediaService(process.env, { onSwitch: (change) => mediaSwitch.prepare(change), cloudflareTest });
 // 운영에서는 사용량 DB에 회의 목록을 함께 저장한다. 로컬 시험은 메모리만 사용한다.
 let meetings = null;
@@ -201,6 +205,9 @@ if (process.env.MEDIA_MEETINGS === "persistent") {
   const { openPersistentMeetings } = await import("./server/media/persistent-meetings.js");
   meetings = openPersistentMeetings({ path: process.env.MEDIA_STATE_PATH });
 } else if (process.env.MEDIA_MEETINGS_TEST === "local-only" && BIND_HOST === "127.0.0.1") meetings = createMeetingRegistry();
+else if (selfHosted) meetings = createMeetingRegistry();   // 자체 호스팅: 회의 목록은 워커 메모리(배포로 워커가 바뀌면 다시 만든다)
+// 회의실당 화면 공유 하나. 자체 호스팅은 LiveKit 권한까지 주고 거두고, 다른 제공자는 서버의 자리 확인만 한다
+const shares = mediaService.shares || createScreenShareRegistry();
 const workerId = randomBytes(6).toString("hex");
 let seq = 0, dirty = false;
 function retireMedia(peer) {
@@ -357,7 +364,7 @@ wss.on("connection", (ws, request) => {
       startrack.setPresent(id, canControlStartrack(me.presence));
       if (meetings && previousArea && (!me.presence || mediaArea(me.presence) !== previousArea)) {
         me.meetingId = null; me.meetingArea = null; me.dailyReady = false;
-        cloudflareTest?.disconnected?.(id); void retireMedia(me).catch(() => {}); mediaSwitch.left(id);
+        cloudflareTest?.disconnected?.(id); void retireMedia(me).catch(() => {}); mediaSwitch.left(id); void shares.stop(id);
       }
       dirty = true; cloudflareTest?.presenceChanged?.(); managedStack?.dailyPermissions.changed();
     }
@@ -374,7 +381,17 @@ wss.on("connection", (ws, request) => {
       ws.send(JSON.stringify({ t: "startrack:clock", sentAt: msg.sentAt, serverTime: Date.now() }));
     }
     if (msg.t === "media:switch-ack" && Number.isSafeInteger(msg.revision)) mediaSwitch.ack(id, msg.revision);
-    if (msg.t === "media:left") { me.dailyReady = false; me.mediaProvider = null; cloudflareTest?.disconnected?.(id); void retireMedia(me).catch(() => {}); mediaSwitch.left(id); managedStack?.dailyPermissions.changed(); }
+    if (msg.t === "media:left") { me.dailyReady = false; me.mediaProvider = null; cloudflareTest?.disconnected?.(id); void retireMedia(me).catch(() => {}); mediaSwitch.left(id); void shares.stop(id); managedStack?.dailyPermissions.changed(); }
+    // 화면 공유 자리: 켤 때 서버에 먼저 묻는다(회의실 하나에 하나). 끌 때는 자리를 비운다
+    if (msg.t === "media:share" && typeof msg.id === "string" && /^[a-zA-Z0-9-]{1,48}$/.test(msg.id)) {
+      const respond = (data) => { if (ws.readyState === 1) ws.send(JSON.stringify({ t: "media:share", id: msg.id, ...data })); };
+      const time = Date.now(); me.shareTimes = (me.shareTimes || []).filter((t) => time - t < 10000);
+      if (me.shareTimes.length >= 10) { respond({ error: "rate_limited" }); return; }
+      me.shareTimes.push(time);
+      if (msg.on !== true) { shares.stop(id).then(() => respond({ ok: true }), () => respond({ ok: true })); return; }
+      if (!me.mediaProvider || me.mediaJoining || !me.presence || !canShareInRoom(me.presence) || !me.mediaScope || me.mediaArea !== mediaArea(me.presence)) { respond({ error: "share_unavailable" }); return; }
+      shares.start(id, me.mediaScope).then(() => respond({ ok: true })).catch((error) => respond({ error: error?.message === "share_taken" ? "share_taken" : "unavailable" }));
+    }
     if (msg.t === "media:meeting" && meetings && typeof msg.id === "string" && /^[a-zA-Z0-9-]{1,48}$/.test(msg.id)) {
       const respond = (data) => { if (ws.readyState === 1) ws.send(JSON.stringify({ t: "media:meeting", id: msg.id, ...data })); };
       const now = Date.now(); me.meetingTimes = (me.meetingTimes || []).filter((t) => now - t < 60000);
@@ -443,6 +460,7 @@ wss.on("connection", (ws, request) => {
           catch (error) { sendMedia({ error: ["rate_limited", "room_full"].includes(error?.message) ? error.message : "unavailable" }); return; }
           me.mediaJoining = true;
           Promise.resolve().then(async () => {
+            await shares.stop(id);
             if (me.mediaRelease) await me.mediaRelease;
             if (me.mediaLease) await retireMedia(me);
             return mediaService.join({ identity: id, name: me.name, area, scope, canShare: canShareInRoom(me.presence) });
@@ -475,7 +493,7 @@ wss.on("connection", (ws, request) => {
     if (typeof msg.t === "string" && msg.t.startsWith("duel:")) void ready.then(() => { if (peers.has(id)) duel.message(id, msg); });   // uid가 정해진 뒤("id" 처리 다음)에 받는다
   });
   ws.on("pong", () => startrack.setPresent(id, canControlStartrack(peers.get(id)?.presence)));
-  ws.on("close", () => { const me = peers.get(id); duel.left(id); if (me) void retireMedia(me).catch(() => {}); startrack.setPresent(id, false); cloudflareTest?.disconnected?.(id); mediaSwitch.disconnected(id); peers.delete(id); managedStack?.dailyPermissions.changed(); dirty = true; });
+  ws.on("close", () => { const me = peers.get(id); duel.left(id); if (me) void retireMedia(me).catch(() => {}); void shares.stop(id); startrack.setPresent(id, false); cloudflareTest?.disconnected?.(id); mediaSwitch.disconnected(id); peers.delete(id); managedStack?.dailyPermissions.changed(); dirty = true; });
   ws.on("error", () => {});
 });
 setInterval(() => { // 초당 12번, 바뀐 게 있을 때만 모두에게 전체 상태를 보낸다
