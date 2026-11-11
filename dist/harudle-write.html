@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>하루들로 이동하는 중…</title>
+<style>
+  html,body{height:100%;margin:0}
+  body{display:grid;place-items:center;background:#F8F6FF;color:#2B2140;font-family:Pretendard,system-ui,-apple-system,"Apple SD Gothic Neo",sans-serif}
+  p{margin:0;font-size:16px}
+  a{color:#7355DA}
+</style>
+</head>
+<body>
+<p id="msg">하루들 네컷만화 만들기로 이동하는 중… <a id="go" href="https://www.harudle.com/diary-write">바로 가기</a></p>
+<script>
+// 캠퍼스 컷 상점 → 하루들 네컷만화 만들기로 가는 징검다리.
+//
+// 하루들 만들기 화면은 뒤로가기와 "만들기 끝난 뒤 이동"을 모두 "뒤로 한 칸"으로 한다(홈에서 들어온 것을 전제로).
+// 새 탭에서 만들기 화면을 바로 열면 돌아갈 곳이 없어 그 버튼들이 먹지 않는다.
+// 그래서 새 탭은 이 쪽을 먼저 열고, 여기서 만들기 화면으로 한 칸 넘어간다(기록에 이 쪽이 남는다).
+// 하루들에서 뒤로 한 칸 오면 다시 여기로 오고, 그때는 하루들 홈(피드)으로 바꿔 보낸다 → 홈에서 만들던 것과 같은 흐름이 된다.
+(function () {
+  var HOME = "https://www.harudle.com/", WRITE = "https://www.harudle.com/diary-write", KEY = "ww.harudleTrip";
+  function cameBack(e) {
+    try { if (sessionStorage.getItem(KEY) === "1") return true; } catch (_) {}
+    if (e && e.persisted) return true;   // 뒤로가기로 되살아난 화면
+    try { var nav = performance.getEntriesByType("navigation")[0]; if (nav && nav.type === "back_forward") return true; } catch (_) {}
+    return false;
+  }
+  addEventListener("pageshow", function (e) {
+    if (cameBack(e)) {
+      document.getElementById("msg").textContent = "하루들 홈으로 이동하는 중…";
+      location.replace(HOME);   // 이 쪽을 기록에서 지우고 하루들 홈으로
+      return;
+    }
+    try { sessionStorage.setItem(KEY, "1"); } catch (_) {}
+    // 화면이 다 뜬 뒤에 넘어가야 이 쪽이 기록에 남는다(뜨는 도중에 넘어가면 브라우저가 이 쪽을 덮어쓴다)
+    setTimeout(function () { location.href = WRITE; }, 80);
+  });
+})();
+</script>
+</body>
+</html>

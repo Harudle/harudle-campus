@@ -80,7 +80,7 @@ export function createShopUi(d: Deps) {
     const r = earn.reward;
     const how = !loggedIn ? `${earn.welcome ? `하루들과 처음 연동하면 ${earn.welcome}컷을 선물로 받고, ` : "하루들과 연동하고 "}피드에 네컷만화를 올리면 날마다 컷을 받아요.`
       : earn.today ? `오늘 컷은 이미 받았어요. 내일 하루들 피드에 네컷만화를 올리면 ${r}컷을 또 받아요.`
-      : `하루들에서 네컷만화를 만들어 피드에 올리고 돌아오면 ${r}컷을 바로 받아요. 하루에 한 번이에요.`;
+      : `하루들에서 네컷만화를 만들어 피드에 올리고 돌아오면 ${r}컷을 바로 받아요. 하루에 한 번이고, 연동한 하루들 계정으로 로그인해서 올려야 해요.`;
     earnBox.innerHTML = `<p><b>${short > 0 ? `${short}컷이 모자라요` : "컷 모으는 법"}</b></p><p>${esc(how)}</p><button type="button" class="btn lav" data-earn="go">네컷만화 만들러 가기 ↗</button>`;
   }
 

@@ -3752,7 +3752,7 @@ let gearTryTimer = 0;
 function setMyGear(g: unknown) { myGear = readGear(g); clearTimeout(gearTryTimer); showGear(myGear); }
 function tryGear(slot: string, sku: string) { clearTimeout(gearTryTimer); showGear(readGear({ ...(myGear || {}), [slot]: sku })); gearTryTimer = window.setTimeout(() => showGear(myGear), 8000); }
 // 컷이 모자랄 때: 하루들의 네컷만화 만들기 화면을 새 탭으로 열고(연동한 크루는 대개 로그인돼 있다. 아니면 하루들이 알아서 로그인 · 체험으로 보낸다), 돌아오면(창에 다시 초점) 바로 정산해서 방금 올린 네컷만화의 컷을 받는다
-function openHarudle() { leaveForTab(); window.open("https://www.harudle.com/diary-write", "_blank", "noopener"); showToast("네컷만화 만들기를 새 탭으로 열었어요", "네컷만화를 피드에 올리고 돌아오면 컷이 들어와요.", 5200); }
+function openHarudle() { leaveForTab(); window.open("/harudle-write.html", "_blank", "noopener"); showToast("네컷만화 만들기를 새 탭으로 열었어요", "연동한 하루들 계정으로 만들어 피드에 올리고 돌아오면 컷이 들어와요.", 6200); }   // 징검다리 쪽(static/harudle-write.html)을 거쳐야 하루들의 뒤로가기 · 만든 뒤 이동이 먹는다
 let lastSettleAt = 0;
 function resettle() { if (!account.user || Date.now() - lastSettleAt < 20_000) return; lastSettleAt = Date.now(); void loadWallet(300).then(() => shopUi.load()); }
 addEventListener("focus", () => { if (shopUi.takeWentOut()) { lastSettleAt = 0; resettle(); } else if (Date.now() - lastSettleAt > 10 * 60_000) resettle(); });   // 오래 떠 있다 돌아와도 한 번
