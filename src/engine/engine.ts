@@ -4,7 +4,7 @@ import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { AVATAR_COLOR_PARTS, AVATAR_COLORS, AVATAR_OPTIONS, AVATAR_PRESETS, LOCKED_OPTIONS, sanitizeAvatar, type AvatarConfig } from "../harudle/avatarData";
-import { dropDoll, makeDoll } from "./dolls";
+import { dollStore, dropDoll, makeDoll, restWhenHidden } from "./dolls";
 import { gearKey, readGear, type GearState } from "../scene/Gear";
 import { petOfSku, type PetKind } from "../scene/Pets";
 import { createShopUi } from "./shop";
@@ -69,10 +69,16 @@ const mats = new Map();
 const toon = (color, o: { map?: THREE.Texture; opacity?: number } = {}) => {
   const key = `${color}|${o.map ? o.map.uuid : ""}|${o.opacity || 1}`;
   if (mats.has(key)) return mats.get(key);
-  const m = new THREE.MeshToonMaterial({ color, gradientMap: gradient, map: o.map || grain });
+  const m = new THREE.MeshToonMaterial({ color, gradientMap: gradient, map: o.map || grain }); m.userData.toonKey = key;
   if (o.opacity) { m.transparent = true; m.opacity = o.opacity; m.depthWrite = false; }
   mats.set(key, m); return m;
 };
+// 색만 다른 불투명 종이 재질은 정적 묶기(batchStatic)에서 한 메시로 합친다: 색은 꼭짓점에 굽고, 재질은 흰색 하나(무늬마다)를 같이 쓴다.
+// toon()이 내준 재질만 해당한다(여럿이 나눠 쓰는 재질이라 나중에 색을 바꾸는 곳이 없다). 클럽 타일처럼 색이 바뀌는 것은 자기 재질을 따로 가진다
+const paintedMats = new Map<string, THREE.MeshToonMaterial>();
+const paintedToon = (map: THREE.Texture) => { let m = paintedMats.get(map.uuid); if (!m) paintedMats.set(map.uuid, (m = new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: gradient, map, vertexColors: true }))); return m; };
+const isSharedToon = (m) => !m.transparent && !!m.map && mats.get(`${m.userData.toonKey}`) === m;
+let paintMerge = true;   // ?debug에서 끄고 다시 지어 화면을 견줄 때만 바꾼다
 const inkMat = new THREE.MeshBasicMaterial({ color: INK, side: THREE.BackSide });
 const inkSoft = new THREE.MeshBasicMaterial({ color: 0x8F8BA0, side: THREE.BackSide });
 // 손그림 윤곽: 같은 모양을 조금 키워 뒷면만 먹색으로 그린다
@@ -2290,7 +2296,7 @@ function placeNPCs() {
       if (solid(fl, x, y) || !fl.reach[y * W + x] || fl.furn.some((o) => WALK_THROUGH.has(o.kind) && !o.kind.endsWith("bleacher") && inRect(o, x, y)) || fl.portals.some((pp) => inRect(pp, x, y)) || fl.calls.some((c) => inRect(c, x, y))) continue;
       if (used[f].some(([a, b]) => Math.abs(a - x) + Math.abs(b - y) < 3)) continue;
       used[f].push([x, y]);
-      const look = avFromSeed(String(p.nick)); const doll = makeChar(look);
+      const look = avFromSeed(String(p.nick)); const doll = restWhenHidden(makeChar(look));
       doll.root.userData.npc = NPCS.length;
       NPCS.push({ p, f, hx: x + .5, hy: y + .5, x: x + .5, y: y + .5, tx: x + .5, ty: y + .5, look, doll, wait: r() * 4, h: r() * Math.PI * 2, moving: false, seed: i, say: "", sayAt: 0 });
       scene.add(doll.root); break;
@@ -2375,6 +2381,11 @@ const camera = R3F.camera; camera.fov = 38; camera.near = .1; camera.far = 500; 
 const ambient = new THREE.HemisphereLight(0xffffff, 0xCFD6E8, 1.6); scene.add(ambient);
 const sun = new THREE.DirectionalLight(0xffffff, 1.5); sun.castShadow = true; sun.shadow.mapSize.set(narrow() ? 1024 : 2048, narrow() ? 1024 : 2048);
 Object.assign(sun.shadow.camera, { left: -40, right: 40, top: 28, bottom: -28, near: 1, far: 95 }); sun.shadow.bias = -.0006; scene.add(sun, sun.target);
+// 그림자 전용 메시(batchStatic의 그림자 묶음)가 쓰는 재질: 화면을 그릴 목록을 모을 때는 꺼 두고, 그림자 지도를 그리기 직전에만 켠다
+// (three.js는 한 프레임에서 장면 목록 모으기 → 그림자 지도 → 화면 순으로 돈다)
+const shadowOnlyMat = new THREE.MeshBasicMaterial(); shadowOnlyMat.visible = false;
+{ const before = scene.onBeforeRender; scene.onBeforeRender = function (...a: any[]) { shadowOnlyMat.visible = false; return (before as any).apply(this, a); };
+  const update = sun.shadow.updateMatrices; sun.shadow.updateMatrices = function (...a: any[]) { shadowOnlyMat.visible = true; return (update as any).apply(this, a); }; }
 const environment = createEnvironment({ scene, camera, ambient, sun, skyStars, moon, paintCity, ground: GROUND });
 const cam = { eye: undefined as number | undefined, close: false, ip: .3, ipT: .3, id: 3.2, idT: 3.2, look: 0, lookT: 0, yaw: -.35, pitch: .95, dist: narrow() ? 24 : 29, yawT: -.35, pitchT: .95, distT: narrow() ? 24 : 29, target: new THREE.Vector3() };
 const eyeV = new THREE.Vector3(), lookV = new THREE.Vector3(); let fpDt = 0;
@@ -2486,35 +2497,67 @@ function batchStatic(root, skip) {
     if (m.isMesh && !m.isInstancedMesh && !Array.isArray(m.material) && m.geometry?.attributes?.position) {
       const geo = m.geometry; if (!geo.boundingSphere) geo.computeBoundingSphere();
       c.copy(geo.boundingSphere.center).applyMatrix4(m.matrixWorld);
-      const key = [m.material.uuid, m.castShadow, m.receiveShadow, geo.index ? 1 : 0, m.renderOrder, Math.floor(tX(c.x) / BATCH_CELL), Math.floor(tY(c.z) / BATCH_CELL)].join("|");
-      let bk = buckets.get(key); if (!bk) buckets.set(key, (bk = { mat: m.material, cast: m.castShadow, recv: m.receiveShadow, order: m.renderOrder, items: [] }));
+      const paint = paintMerge && isSharedToon(m.material);   // 색만 다른 종이 재질은 무늬가 같으면 한 묶음
+      const key = [paint ? `paint:${m.material.map.uuid}` : m.material.uuid, m.castShadow, m.receiveShadow, geo.index ? 1 : 0, m.renderOrder, Math.floor(tX(c.x) / BATCH_CELL), Math.floor(tY(c.z) / BATCH_CELL)].join("|");
+      let bk = buckets.get(key); if (!bk) buckets.set(key, (bk = { mat: paint ? paintedToon(m.material.map) : m.material, paint, cast: m.castShadow, recv: m.receiveShadow, order: m.renderOrder, items: [], cell: `${geo.index ? 1 : 0}|${Math.floor(tX(c.x) / BATCH_CELL)}|${Math.floor(tY(c.z) / BATCH_CELL)}` }));
       bk.items.push({ m, mat: new THREE.Matrix4().multiplyMatrices(inv, m.matrixWorld) });
     }
     walk(ch);
   } };
   walk(root);
+  const casters = new Map<string, { m: THREE.Mesh; g: THREE.BufferGeometry }[]>();   // 구역마다 그림자를 드리우는 메시와, root 기준 자리만 담은 도형
+  const cast = (cell, m, g) => { const list = casters.get(cell); if (list) list.push({ m, g }); else casters.set(cell, [{ m, g }]); };
   for (const bk of buckets.values()) {
-    if (bk.items.length < 2) continue;
+    if (bk.items.length < 2) {   // 재질이 하나뿐이라 합치지 못한 것(색이 저마다인 소품): 메시는 그대로 두고 그림자만 묶음에 넣는다
+      const { m, mat } = bk.items[0];
+      if (bk.cast && plainShadow(bk.mat)) { const g = new THREE.BufferGeometry(); g.setAttribute("position", m.geometry.attributes.position.clone()); if (m.geometry.index) g.setIndex(m.geometry.index.clone()); g.applyMatrix4(mat); if (mat.determinant() < 0) flipWinding(g); cast(bk.cell, m, g); }
+      continue;
+    }
+    // 같은 높이에 겹쳐 놓인 면(바닥 위 깔개 같은 것)은 나중에 그린 쪽이 보인다. 합치기 전에는 재질을 만든 순서대로 그렸으므로 그 순서를 지킨다
+    if (bk.paint) bk.items.sort((a, b) => a.m.material.id - b.m.material.id);
     const geos = bk.items.map(({ m, mat }) => {
       const src = m.geometry, g = new THREE.BufferGeometry();
       g.setAttribute("position", src.attributes.position.clone()); if (src.attributes.normal) g.setAttribute("normal", src.attributes.normal.clone()); else g.computeVertexNormals();
       g.setAttribute("uv", src.attributes.uv ? src.attributes.uv.clone() : new THREE.BufferAttribute(new Float32Array(src.attributes.position.count * 2), 2));
       if (src.index) g.setIndex(src.index.clone());
+      if (bk.paint) { const col = m.material.color, n = src.attributes.position.count, a = new Float32Array(n * 3); for (let i = 0; i < n; i++) { a[i * 3] = col.r; a[i * 3 + 1] = col.g; a[i * 3 + 2] = col.b; } g.setAttribute("color", new THREE.BufferAttribute(a, 3)); }
       return g.applyMatrix4(mat);
     });
     const merged = mergeGeometries(geos, false); geos.forEach((g) => g.dispose()); if (!merged) continue;
     const mesh = new THREE.Mesh(merged, bk.mat); mesh.castShadow = bk.cast; mesh.receiveShadow = bk.recv; mesh.renderOrder = bk.order; root.add(mesh);
     for (const { m } of bk.items) m.parent.remove(m);
+    if (bk.cast && plainShadow(bk.mat)) { const g = new THREE.BufferGeometry(); g.setAttribute("position", merged.attributes.position); if (merged.index) g.setIndex(merged.index); cast(bk.cell, mesh, g); }   // 자리만 빌려 쓴다(묶으면서 복사된다)
+  }
+  // 그림자 묶음: 그림자 지도에는 재질이 상관없으니, 같은 구역에서 그림자를 드리우는 합친 메시들을 다시 하나로 묶은 그림자 전용 메시를 둔다.
+  // 그려지는 삼각형은 똑같아 그림자 모양은 그대로이고, 그림자 지도를 그리는 호출만 재질 수만큼 → 구역 수만큼으로 준다. 켜고 끄기는 setShadowProxies
+  const sets: { proxy: THREE.Mesh; src: THREE.Mesh[] }[] = [];
+  for (const list of casters.values()) {
+    if (list.length < 2) continue;
+    const merged = mergeGeometries(list.map((x) => x.g), false); if (!merged) continue;
+    const proxy = new THREE.Mesh(merged, shadowOnlyMat), src = list.map((x) => x.m); proxy.castShadow = false; proxy.receiveShadow = false; proxy.raycast = () => { }; proxy.userData.cs = false; root.add(proxy);
+    for (const m of src) m.userData.cs = true;
+    sets.push({ proxy, src });
   }
   // 비어 버린 묶음 정리(noMerge 안쪽은 건드리지 않는다: 가판대 캐릭터처럼 React가 나중에 채우는 빈 묶음이 있다)
   const prune = (o) => { for (const ch of [...o.children]) { if (skip.has(ch) || ch.userData.noMerge) continue; prune(ch); if (ch.type === "Group" && !ch.children.length && !ch.userData.noMerge) o.remove(ch); } };
   prune(root);
+  return sets;
 }
+// 뒤집힌 배율(거울상)로 놓인 메시는 자리를 구워 넣으면 면의 앞뒤가 바뀐다 → 삼각형 감는 방향을 되돌린다
+function flipWinding(g: THREE.BufferGeometry) {
+  const idx = g.index, pos = g.attributes.position as THREE.BufferAttribute;
+  if (idx) { for (let i = 0; i + 2 < idx.count; i += 3) { const a = idx.getX(i + 1); idx.setX(i + 1, idx.getX(i + 2)); idx.setX(i + 2, a); } return; }
+  for (let i = 0; i + 2 < pos.count; i += 3) { const x = pos.getX(i + 1), y = pos.getY(i + 1), z = pos.getZ(i + 1); pos.setXYZ(i + 1, pos.getX(i + 2), pos.getY(i + 2), pos.getZ(i + 2)); pos.setXYZ(i + 2, x, y, z); }
+}
+// 그림자 지도에서 재질과 상관없이 똑같이 그려지는 재질인지(앞면 · 불투명 · 잘라내기 없음)
+const plainShadow = (m) => m.visible && m.side === THREE.FrontSide && m.shadowSide == null && !m.transparent && !m.alphaTest && !m.alphaToCoverage && !m.displacementMap && !m.wireframe && !m.clippingPlanes?.length;
+// on: 그림자 묶음으로 드리운다(통째로 보이는 지금 층). 아니면 원래 메시가 따로 드리운다(뚫린 자리 둘레만 보이는 위·아래층은 보이는 것만 그림자가 져야 한다). off: 아무것도 드리우지 않는다
+function setShadowProxies(fl, on, off = false) { for (const s of fl.shadowSets || []) { s.proxy.castShadow = on && !off; for (const m of s.src) m.castShadow = !on && !off; } }
 function batchFloor(fl, g) {
   const special = new Set([fl.slab, fl.walls, fl.signs, fl.ceil, fl.lamps].filter(Boolean));
   for (const ch of g.children) if ((ch as any).isLineSegments) special.add(ch);   // 바닥 윤곽선
-  batchStatic(g, special);
-  for (const sub of [fl.walls, fl.signs, fl.ceil, fl.lamps]) if (sub) batchStatic(sub, new Set());
+  fl.shadowSets = batchStatic(g, special);
+  for (const sub of [fl.walls, fl.signs, fl.ceil, fl.lamps]) if (sub) fl.shadowSets.push(...batchStatic(sub, new Set()));
 }
 // 위·아래층은 뚫린 자리(void) 너머로만 보인다: 그 둘레(여유 칸 포함) 밖의 가구·벽은 그리지 않는다(그림자도 안 진다)
 const CULL_PAD = 3, cullBox = new THREE.Box3();
@@ -2536,6 +2579,7 @@ function showFloors() {
   if (above) groupOf(13).visible = true;
   // 12층에서 올려다볼 때 13층 가구 그림자가 바닥을 뚫고 12층에 떨어지지 않게
   if (floorGroups[13]) floorGroups[13].traverse((o) => { if (!o.isMesh) return; if (o.userData.cs === undefined) o.userData.cs = o.castShadow; o.castShadow = above ? false : o.userData.cs; });
+  for (const f of Object.keys(floorGroups)) setShadowProxies(FLOORS[f], +f === me.f, above && +f === 13);   // 지금 층은 그림자 묶음으로, 위·아래층은 메시마다
   for (const f of [11, 12, 13, 14]) { const fl = FLOORS[f]; if (!floorGroups[f]) continue; fl.walls.scale.y = inside() ? CEIL[f] / WALL : 1; fl.signs.position.y = inside() ? 1.15 : 0; if (fl.ceil) fl.ceil.visible = inside() && (f === me.f || (above && f === 13)); fl.lamps.visible = inside(); }
   const holes = below ? voidsOf(FLOORS[me.f]) : above ? voidsOf(FLOORS[13]) : null;
   for (const f of [11, 12, 13, 14]) if (floorGroups[f]) setCull(FLOORS[f], f === me.f ? null : holes);
@@ -3117,8 +3161,9 @@ const labelsEl = document.getElementById("labels");
 const v3 = new THREE.Vector3();
 function project(el, x, y, z, below = false) {
   v3.set(x, y, z).project(camera);
-  if (v3.z > 1 || v3.z < -1 || Math.abs(v3.x) > 1.2 || Math.abs(v3.y) > 1.2) { el.style.display = "none"; return; }
-  el.style.display = ""; el.style.transform = `translate(${(v3.x * .5 + .5) * innerWidth}px,${(-v3.y * .5 + .5) * innerHeight}px) translate(-50%,${below ? "0" : "-100%"})`;
+  if (v3.z > 1 || v3.z < -1 || Math.abs(v3.x) > 1.2 || Math.abs(v3.y) > 1.2) { if (el.style.display !== "none") el.style.display = "none"; return; }
+  const tf = `translate(${(v3.x * .5 + .5) * innerWidth}px,${(-v3.y * .5 + .5) * innerHeight}px) translate(-50%,${below ? "0" : "-100%"})`;
+  if (el.style.display) el.style.display = ""; if (el._tf !== tf) { el._tf = tf; el.style.transform = tf; }   // 서 있을 때는 같은 값이라 다시 쓰지 않는다
 }
 const mkLabel = (cls, text) => { const e = document.createElement("div"); e.className = `lbl ${cls}`; e.textContent = text; labelsEl.append(e); return e; };
 let roomTags = [];
@@ -4166,8 +4211,8 @@ function syncPeers(dt, t) {
     const s = p.presence || {}; if (typeof s.x !== "number" || !FLOORS[s.f]) continue;
     const g = readGear(p.g), l = avDecode(s.av) || avFromSeed(p.peer), key = `${avKey(l)}/${gearKey(g)}`;   // g: 서버가 붙여 준 상점 장식
     let v = peers.get(p.peer);
-    if (!v) { v = { doll: makeChar(l, g), key, x: s.x, y: s.y, tag: mkLabel("name-tag peer", "크루"), bub: mkLabel("bub", ""), zzz: mkZzz() }; v.bub.hidden = true; scene.add(v.doll.root); peers.set(p.peer, v); }
-    if (v.key !== key) { const vis0 = v.doll.root.visible; dropDoll(v.doll); v.doll = makeChar(l, g); v.doll.root.visible = vis0; scene.add(v.doll.root); v.key = key; }
+    if (!v) { v = { doll: restWhenHidden(makeChar(l, g)), key, x: s.x, y: s.y, tag: mkLabel("name-tag peer", "크루"), bub: mkLabel("bub", ""), zzz: mkZzz() }; v.bub.hidden = true; scene.add(v.doll.root); peers.set(p.peer, v); }
+    if (v.key !== key) { const vis0 = v.doll.root.visible; dropDoll(v.doll); v.doll = restWhenHidden(makeChar(l, g)); v.doll.root.visible = vis0; scene.add(v.doll.root); v.key = key; }
     v.x = lerp(v.x, s.x, Math.min(1, dt * 10)); v.y = lerp(v.y, s.y, Math.min(1, dt * 10));
     if (s.jc !== v.jc) { if (v.jc !== undefined) { const air = (v.jz || 0) > .05; v.jv = air ? 4.2 : 4.6; if (air && v.doll.root.visible) spawnFx(starTex, v.doll.root.position, 3, .5, .2); } v.jc = s.jc; }   // 공중에서 또 뛰면 더블 점프(별)
     if (s.fc !== v.fc) { if (v.fc !== undefined && v.doll.root.visible) { if (s.fk) { v.kickAt = performance.now() / 1000; shootPaper(s.f, v.x, v.y, +s.fh || 0, (+s.u || 0) + (s.fp === undefined ? 0 : v.jz || 0), v, s.fp === undefined ? null : +s.fp); } else launchFirework(s.f, v.x, v.y, +s.fh || 0, +s.u || 0); } v.fc = s.fc; }   // 다른 크루의 폭죽
@@ -4199,7 +4244,7 @@ function syncPeers(dt, t) {
     } else v.ox = v.oz = undefined;
     // 그 크루가 데리고 다니는 펫
     const pk = petOfSku(g?.pet);
-    if (pk !== (v.pet?.kind ?? null)) { dropDoll(v.pet?.doll); v.pet = pk ? { kind: pk, x: v.x - .6, y: v.y + .4, moving: false, h: 0, z: 0, doll: makePet(pk) } : null; if (v.pet) scene.add(v.pet.doll.root); }
+    if (pk !== (v.pet?.kind ?? null)) { dropDoll(v.pet?.doll); v.pet = pk ? { kind: pk, x: v.x - .6, y: v.y + .4, moving: false, h: 0, z: 0, doll: restWhenHidden(makePet(pk)) } : null; if (v.pet) scene.add(v.pet.doll.root); }
     if (v.pet) { // 그 크루가 펫을 앉혔거나 쓰다듬는 중(pt)이면 펫은 그 자리에서 주인을 본다
       const pa = s.pt === 1 ? "sit" : s.pt === 2 ? "pet" : null;
       if (isFlyer(pk)) flyPet(v.pet, s.f, v.x, v.y, typeof s.h === "number" ? s.h : 0, !!s.m, !!s.m && !!s.r, pa, !!(s.st || s.l), dt);
@@ -4446,7 +4491,7 @@ function step(dt, t) {
   if (me.jz > 0 || me.jv > 0) { me.jv -= 15 * dt; me.jz += me.jv * dt; if (me.jz <= 0) { me.jz = 0; me.jv = 0; me.jumps = 0; } }
   // 트램펄린 위에서는 저절로 통통
   if (me.jz <= 0 && me.jv <= 0) { const tr = floor.furn.find((o) => (o.kind === "trampoline" || o.bounce) && inRect(o, me.x, me.y) && Math.abs(me.up - topOf(o)) < .05); if (tr) { me.jv = tr.bounce || 6.4; me.jc++; sendPresence(true); } }   // bounce: 대결장 트램펄린(기둥 위)은 더 높이
-  $all(".skill[data-skill], .mBtn[data-skill]").forEach((b) => b.classList.toggle("on", me.act?.name === b.dataset.skill));
+  { const on = me.act?.name ?? ""; if (on !== skillOn) { skillOn = on; $all(".skill[data-skill], .mBtn[data-skill]").forEach((b) => b.classList.toggle("on", on === b.dataset.skill)); } }   // 동작이 바뀔 때만 버튼을 다시 칠한다
   npcSkillTimer -= dt; if (npcSkillTimer <= 0) { npcSkillTimer = 8 + Math.random() * 12; const idle = NPCS.filter((n) => n.f === me.f && !n.moving && !n.act && !n.talk && !n.lie); const n = idle[Math.floor(Math.random() * idle.length)]; if (n) startAct(n, ["draw", "draw", "wave", "heart"][Math.floor(Math.random() * 4)]); }
   if (t * 1000 - lastPortal > 1400) for (const p of floor.portals) if (inRect(p, me.x, me.y)) { lastPortal = t * 1000; goFloor(p.to, p.spawn); break; }
   // 강아지는 내 옆을 졸졸
@@ -4469,10 +4514,11 @@ function step(dt, t) {
   const near = nearNPC(), call = atCall(), bag = nearBag(), seat = nearSeat();
   const ez0 = !me.lie && !me.seat && nearFurn("painteasel", 2.1), cup = !(me.brush && ez0) && !me.lie && !me.seat && nearFurn("brushcup", 1.7), ez = !cup && ez0, site = !cup && !ez && nearFurn("linkkiosk", 1.7), insta = !cup && !ez && !site && nearFurn("instaboard", 1.7), gift = !cup && !ez && !site && !insta && !me.lie && !me.seat && nearFurn("giftsign", 1.6), shopShow = !cup && !ez && !site && !insta && !gift && !me.lie && !me.seat && nearShop(), welcomeNear = !cup && !ez && !site && !insta && !gift && !shopShow && !me.lie && !me.seat && nearFurn("hbwelcome", 1.4), wb = !me.lie && !me.seat && nearWb(2.4), fr = nearFridge(), scoop = nearScoop(), shown = !scoop && nearShow(), screenNear = !scoop && !shown && nearStartrackScreen();   // 하루들 부스
   const petNear = !(me.lie || me.seat || near || bag || call || seat) && !wheel.open && nearPet();   // 아무것도 없을 때 내 펫을 보고 있으면 "펫과 놀기"
-  actBtn.hidden = !(petNear || me.lie || me.seat || near || bag || call || seat || cup || ez || site || insta || gift || shopShow || welcomeNear || wb || fr || scoop || shown || screenNear); actBtn.textContent = screenNear ? "스타트랙 영상 설정" : scoop ? scoop.action ?? "오늘의 특종 보기" : shown ? showItem(shown).action : wb ? "화이트보드에 쓰기" : fr ? (fr.want ? "냉장고 닫기" : "냉장고 열기") : cup ? (me.brush ? "붓 꽂기" : "붓 들기") : ez ? "함께 그리기" : site ? "하루들 바로가기" : insta ? "인스타 바로가기" : gift ? "아이템 받는 법" : shopShow ? "컷 상점 들어가기" : welcomeNear ? (account.user ? "연동 선물 보기" : `연동하고 ${WELCOME_CUTS}컷 받기`) : petNear ? `${withJosa(petName(), "와", "과")} 놀기` : me.lie || me.seat ? "일어나기" : seat && !(near && Math.hypot(seat.x - me.x, seat.y - me.y) > .55) ? "앉기" : near ? `${withJosa(near.p.nick, "와", "과")} 대화하기` : bag ? "빈백에 눕기" : "엘리베이터 타기";
+  actBtn.hidden = !(petNear || me.lie || me.seat || near || bag || call || seat || cup || ez || site || insta || gift || shopShow || welcomeNear || wb || fr || scoop || shown || screenNear); { const label = screenNear ? "스타트랙 영상 설정" : scoop ? scoop.action ?? "오늘의 특종 보기" : shown ? showItem(shown).action : wb ? "화이트보드에 쓰기" : fr ? (fr.want ? "냉장고 닫기" : "냉장고 열기") : cup ? (me.brush ? "붓 꽂기" : "붓 들기") : ez ? "함께 그리기" : site ? "하루들 바로가기" : insta ? "인스타 바로가기" : gift ? "아이템 받는 법" : shopShow ? "컷 상점 들어가기" : welcomeNear ? (account.user ? "연동 선물 보기" : `연동하고 ${WELCOME_CUTS}컷 받기`) : petNear ? `${withJosa(petName(), "와", "과")} 놀기` : me.lie || me.seat ? "일어나기" : seat && !(near && Math.hypot(seat.x - me.x, seat.y - me.y) > .55) ? "앉기" : near ? `${withJosa(near.p.nick, "와", "과")} 대화하기` : bag ? "빈백에 눕기" : "엘리베이터 타기"; if (actBtn.textContent !== label) actBtn.textContent = label; }
   if (me.say && Date.now() - me.sayAt > 6000) { me.say = ""; sendPresence(true); }
 }
 const tgt = new THREE.Vector3();
+let skillOn: string | null = null;   // 지금 켜진 스킬 버튼(step이 바뀔 때만 다시 칠한다)
 function render(dt, t) {
   fpDt = dt;
   // 1인칭 고개는 마우스를 그대로 따른다(뒤따라 미끄러지는 느낌이 어지럽다). Q·E처럼 크게 돌릴 때만 부드럽게
@@ -4525,6 +4571,31 @@ function render(dt, t) {
     project(rt.el, rt.x, floorY(me.f) + (inside() && rt.y === WALL + .35 ? 1.6 : VIEW.mode === "first" ? Math.max(rt.y, 1.6) : rt.y), rt.z); }
 }
 
+/* 화면 밖 캐릭터 건너뛰기: 몸도, 바닥에 떨어지는 그림자도 화면에 걸치지 않는 캐릭터는 그 프레임에 그리지 않는다(화면도 그림자 지도도).
+   화면에 보이는 것은 똑같고, 그림자 지도가 화면보다 넓은 범위를 그리느라 쓰던 호출(캐릭터마다 열 번 남짓)이 빠진다.
+   몸은 둘레 공(DOLL_R), 그림자는 빛 방향으로 가장 낮은 보이는 층 바닥까지 늘인 띠를 공 여러 개로 덮어 넉넉하게 잰다 */
+const DOLL_R = 1.9, cullFrustum = new THREE.Frustum(), cullM = new THREE.Matrix4(), cullSphere = new THREE.Sphere(), cullP = new THREE.Vector3(), cullL = new THREE.Vector3();
+let dollCull = true;   // ?debug에서 끄고 화면을 견줄 때만 바꾼다
+function cullDolls() {
+  const dolls = dollStore.get();
+  if (!dollCull) { for (const d of dolls) d.turn.visible = true; return; }
+  camera.updateMatrixWorld(); cullFrustum.setFromProjectionMatrix(cullM.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+  cullL.subVectors(sun.target.position, sun.position).normalize();   // 빛이 가는 방향(아래쪽)
+  let low = Infinity; for (const f in floorGroups) if (floorGroups[f].visible) low = Math.min(low, floorY(+f));
+  const steep = cullL.y < -.2 && low < Infinity;   // 빛이 너무 누우면(그림자가 끝없이 길면) 건너뛰지 않는다
+  for (const d of dolls) {
+    const root = d.root; let on = true;
+    if (steep && root.parent) {
+      if (root.parent === scene) cullP.copy(root.position); else { root.updateWorldMatrix(true, false); cullP.setFromMatrixPosition(root.matrixWorld); }   // 진열대 캐릭터는 묶음 안에 있다
+      const r = DOLL_R * Math.max(.4, root.parent === scene ? 1 : root.matrixWorld.getMaxScaleOnAxis());
+      cullP.y += .9; const reach = Math.max(0, cullP.y + r - low) / -cullL.y, n = Math.ceil(reach / r);   // 그림자가 바닥에 닿을 때까지 빛을 따라간 길이
+      on = false; cullSphere.radius = r;
+      for (let i = 0; i <= n && !on; i++) { cullSphere.center.copy(cullP).addScaledVector(cullL, i * r); on = cullFrustum.intersectsSphere(cullSphere); }
+    }
+    d.turn.visible = on;
+  }
+}
+
 /* ════════════════ 시작 ════════════════ */
 const fontsReady = document.fonts ? Promise.race([document.fonts.load(`700 40px Gaegu`), new Promise((r) => setTimeout(r, 2500))]).catch(() => { }) : Promise.resolve();
 fontsReady.then(() => {
@@ -4537,8 +4608,8 @@ fontsReady.then(() => {
   ready = true;
   // 화면 점검용 손잡이: 주소 끝에 ?debug를 붙였을 때만
   if (new URLSearchParams(location.search).has("debug")) (window as any).__ez = ezState; (window as any).__t = { peers, gl: renderer, Q, me, dog, NPCS, cam, goFloor, setView, setMyAv, useSkill, jump, lieDown, sitDown, nearSeat, sendPresence, AVATAR_PRESETS, get floor() { return floor; } };
-  if (new URLSearchParams(location.search).has("debug")) Object.assign((window as any).__t, { city, camera, startrack, duel: duelUi });
+  if (new URLSearchParams(location.search).has("debug")) Object.assign((window as any).__t, { city, camera, startrack, duel: duelUi, cullDolls, setDollCull(on = true) { dollCull = on; cullDolls(); }, rebuildFloor(paint = true) { paintMerge = paint; const g = floorGroups[me.f]; if (g) { scene.remove(g); delete floorGroups[me.f]; } showFloors(); paintMerge = true; } });
 });
 
-return { frame(dt: number) { if (!ready || inWorld) return; const t = performance.now() / 1000; step(Math.min(.05, dt), t); render(Math.min(.05, dt), t); startrack.frame(); } };
+return { frame(dt: number) { if (!ready || inWorld) return; const t = performance.now() / 1000; step(Math.min(.05, dt), t); render(Math.min(.05, dt), t); startrack.frame(); cullDolls(); } };
 }
