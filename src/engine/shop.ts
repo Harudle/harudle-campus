@@ -17,7 +17,7 @@ type Deps = {
   requireLogin: (reason: string) => boolean;
   showCuts: (n: number) => void;
   setGear: (g: GearState) => void;
-  preview: (slot: string, sku: string) => void;   // 잠깐 입어 보기(내 화면에서만)
+  preview: (slot: string, sku: string, frame?: string) => void;   // 잠깐 입어 보기(내 화면에서만)
   openHarudle: () => void;                        // 하루들 서비스를 새 탭으로
   setEmotes: (ids: string[]) => void;   // 가짜 상점: 가진 감정표현(G 휠). 개발 서버는 서버가 다 열어 주니 이것으로 덮는다
   onOpen: () => void;    // 커서 풀기
@@ -41,6 +41,13 @@ const TIP: Record<string, string> = {
   emote_club: "발밑에 반짝이는 LED 원판이 깔리고 머리 위로 미러볼이 떠올라요. 그 위에서 미친 듯이 춤춰요. G를 꾹 눌러 골라요.",
   emote_lp: "내 앞에 턴테이블을 놓고 방석에 앉아, 헤드셋을 꽂고 LP를 들으며 고개를 까딱여요. G를 꾹 눌러 골라요.",
   emote_guitar: "통기타를 메고 줄을 튕기며 박자에 맞춰 몸을 흔들어요. G를 꾹 눌러 골라요.",
+  pet_duck: "헤드셋을 쓴 고무 오리예요. 막힐 땐 말을 걸어 보세요. 뒤뚱뒤뚱 따라와요.", pet_capybara: "머리에 귤을 얹고 느긋하게 따라와요. 멈추면 식빵처럼 엎드려요.", pet_penguin: "날개를 파닥이며 뒤뚱뒤뚱 따라와요.",
+  pet_dragon: "걷지 않고 날개를 저으며 떠서 따라오는 커다란 용이에요. 앉히면 곁에 내려앉아요.",
+  fx_bulb: "번뜩! 좋은 생각이 난 것처럼 전구가 켜져요.", fx_zzz: "Zzz가 머리 위로 솔솔 떠올라요.", fx_question: "물음표가 갸우뚱갸우뚱 흔들려요.", fx_note: "음표가 박자에 맞춰 통통 튀어요.",
+  head_beret: "만화가처럼 비스듬히 눌러쓰는 베레모예요.", head_crown: "보석이 반짝이는 금빛 왕관이에요.",
+  neck_scarf: "끝자락이 살랑이는 라벤더 목도리예요.", neck_camera: "오늘의 한 컷을 찍으려고 목에 건 카메라예요. 가끔 플래시가 터져요.",
+  held_pen: "펜촉에 잉크가 맺힌 만화 펜이에요.", held_laptop: "하루들 스티커를 붙인 노트북을 옆구리에 껴요.", held_bungeoppang: "김이 모락모락 나는 붕어빵 한 봉지예요.",
+  held_myframe: "하루들에 올린 내 네컷만화가 액자에 걸려요. 다른 크루가 나를 누르면 크게 볼 수 있어요.",
   neck_idcard: "출근한 느낌이 나는 하루들 사원증이에요.", held_manuscript: "막 그린 네컷 원고를 들고 다녀요.", held_coffee: "오늘도 아아 한 잔 들고 출근해요.",
 };
 const S = `fill="none" stroke="#111118" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"`;
@@ -52,6 +59,22 @@ const ICON: Record<string, string> = {
   pet_emu: `<svg viewBox="0 0 40 40" aria-hidden="true"><ellipse cx="17" cy="26" rx="10" ry="8" fill="#D9CEFC" stroke="#111118" stroke-width="2.2"/><path d="M23 22V10" stroke="#111118" stroke-width="5" stroke-linecap="round"/><path d="M23 22V10" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><circle cx="24" cy="8" r="4.2" fill="#fff" stroke="#111118" stroke-width="2.2"/><path d="M28 8l5 1.500-5 1.500Z" fill="#FFD97A" stroke="#111118" stroke-width="1.6" stroke-linejoin="round"/><circle cx="24.500" cy="7.500" r="1.100" fill="#111118"/><path d="M14 33v4M20 33v4" ${S}/></svg>`,
   pet_tiger: `<svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="9" cy="9" r="5" fill="#FF9F45" stroke="#111118" stroke-width="2.2"/><circle cx="31" cy="9" r="5" fill="#FF9F45" stroke="#111118" stroke-width="2.2"/><circle cx="20" cy="21" r="14" fill="#FF9F45" stroke="#111118" stroke-width="2.2"/><ellipse cx="20" cy="27" rx="7" ry="5" fill="#fff"/><path d="M16 9h8M17.500 12h5M20 8v6M7 19l4 1.500M7 24l4-.500M33 19l-4 1.500M33 24l-4-.500" ${S.replace("2.2", "1.9")}/><circle cx="14.500" cy="19.500" r="1.700" fill="#111118"/><circle cx="25.500" cy="19.500" r="1.700" fill="#111118"/><ellipse cx="20" cy="25" rx="2.200" ry="1.500" fill="#FFA9BD" stroke="#111118" stroke-width="1"/></svg>`,
   pet_bear: `<svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="9" cy="10" r="5.500" fill="#9A6A45" stroke="#111118" stroke-width="2.2"/><circle cx="31" cy="10" r="5.500" fill="#9A6A45" stroke="#111118" stroke-width="2.2"/><circle cx="20" cy="21" r="14" fill="#9A6A45" stroke="#111118" stroke-width="2.2"/><ellipse cx="20" cy="26" rx="7" ry="5.500" fill="#E8C9A0"/><circle cx="14.500" cy="19" r="1.700" fill="#111118"/><circle cx="25.500" cy="19" r="1.700" fill="#111118"/><ellipse cx="20" cy="24" rx="2.600" ry="1.800" fill="#111118"/><path d="M17.500 28c1.500 1.500 3.500 1.500 5 0" ${S.replace("2.2", "1.6")}/></svg>`,
+  pet_duck: `<svg viewBox="0 0 40 40" aria-hidden="true"><ellipse cx="18" cy="27" rx="13" ry="9" fill="#FFD43B" stroke="#111118" stroke-width="2.2"/><circle cx="25" cy="14" r="8" fill="#FFD43B" stroke="#111118" stroke-width="2.2"/><path d="M31 14l6 1.500-6 3Z" fill="#FF9F45" stroke="#111118" stroke-width="1.8" stroke-linejoin="round"/><circle cx="26" cy="12.500" r="1.500" fill="#111118"/><path d="M5 24l-3-4" ${S}/></svg>`,
+  pet_capybara: `<svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="7" r="4" fill="#FF9F45" stroke="#111118" stroke-width="1.8"/><rect x="6" y="11" width="28" height="24" rx="10" fill="#B98A5E" stroke="#111118" stroke-width="2.2"/><rect x="12" y="24" width="16" height="9" rx="4.500" fill="#7A5236"/><path d="M11 19h4M25 19h4" ${S}/><circle cx="17.500" cy="27" r="1" fill="#111118"/><circle cx="22.500" cy="27" r="1" fill="#111118"/></svg>`,
+  pet_penguin: `<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M20 4c8 0 12 7 12 17s-4 15-12 15S8 31 8 21 12 4 20 4Z" fill="#2B2140" stroke="#111118" stroke-width="2.2"/><path d="M20 13c5 0 8 4 8 10s-3 11-8 11-8-5-8-11 3-10 8-10Z" fill="#fff"/><circle cx="16" cy="17" r="1.600" fill="#111118"/><circle cx="24" cy="17" r="1.600" fill="#111118"/><path d="M17.500 20h5L20 24Z" fill="#FFD97A" stroke="#111118" stroke-width="1.400" stroke-linejoin="round"/></svg>`,
+  pet_dragon: `<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M12 9 9 2M28 9l3-7" stroke="#FFD97A" stroke-width="3.400" stroke-linecap="round"/><path d="M6 20 1 15l1 9ZM34 20l5-5-1 9Z" fill="#B9A6EC" stroke="#111118" stroke-width="1.800" stroke-linejoin="round"/><circle cx="20" cy="21" r="14" fill="#8B6FE8" stroke="#111118" stroke-width="2.2"/><ellipse cx="20" cy="27" rx="7.500" ry="5" fill="#A48DF0" stroke="#111118" stroke-width="1.400"/><circle cx="14.500" cy="19" r="1.700" fill="#111118"/><circle cx="25.500" cy="19" r="1.700" fill="#111118"/><circle cx="17.500" cy="26.500" r=".9" fill="#111118"/><circle cx="22.500" cy="26.500" r=".9" fill="#111118"/></svg>`,
+  fx_bulb: `<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M20 6a10 10 0 0 1 6 18v3H14v-3a10 10 0 0 1 6-18Z" fill="#FFD97A" stroke="#111118" stroke-width="2.2" stroke-linejoin="round"/><rect x="15" y="27" width="10" height="6" rx="2" fill="#C9CDD4" stroke="#111118" stroke-width="2"/><path d="M5 12l3 2M35 12l-3 2M20 1v2" ${S}/></svg>`,
+  fx_zzz: `<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M6 22h10L6 34h10" ${S.replace("2.2", "2.6")}/><path d="M19 12h8l-8 10h8" ${S}/><path d="M29 4h6l-6 7h6" ${S.replace("2.2", "1.8")}/></svg>`,
+  fx_question: `<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M12 14c0-5 3.500-8 8-8s8 3 8 7.500c0 6-7 5.500-7 11.500h-3c0-8 6-7.500 6-11.500 0-2.500-1.700-4-4-4s-4 1.500-4 4.500Z" fill="#B9A6EC" stroke="#111118" stroke-width="2.2" stroke-linejoin="round"/><circle cx="19.500" cy="32" r="3" fill="#B9A6EC" stroke="#111118" stroke-width="2.2"/></svg>`,
+  fx_note: `<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M15 29V8l17-3v20" ${S}/><path d="M15 14l17-3" ${S}/><ellipse cx="10.500" cy="29.500" rx="5" ry="4" fill="#B9A6EC" stroke="#111118" stroke-width="2.2"/><ellipse cx="27.500" cy="25.500" rx="5" ry="4" fill="#FFA9BD" stroke="#111118" stroke-width="2.2"/></svg>`,
+  head_beret: `<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M22 6v5" ${S}/><path d="M4 24c0-9 8-14 17-14s16 4 16 11c0 5-6 6-11 6Z" fill="#8B6FE8" stroke="#111118" stroke-width="2.2" stroke-linejoin="round"/><path d="M6 27c5 2 14 3 22 0" stroke="#111118" stroke-width="3.400" stroke-linecap="round" fill="none"/></svg>`,
+  head_crown: `<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M5 31 3 11l9 8 8-12 8 12 9-8-2 20Z" fill="#FFD43B" stroke="#111118" stroke-width="2.2" stroke-linejoin="round"/><circle cx="20" cy="25" r="2.600" fill="#E5484D" stroke="#111118" stroke-width="1.200"/><circle cx="11" cy="26" r="1.800" fill="#B9A6EC" stroke="#111118" stroke-width="1"/><circle cx="29" cy="26" r="1.800" fill="#B9A6EC" stroke="#111118" stroke-width="1"/></svg>`,
+  neck_scarf: `<svg viewBox="0 0 40 40" aria-hidden="true"><rect x="4" y="8" width="32" height="10" rx="5" fill="#B9A6EC" stroke="#111118" stroke-width="2.2"/><path d="M22 17h10v17H22Z" fill="#B9A6EC" stroke="#111118" stroke-width="2.2" stroke-linejoin="round"/><path d="M22 24h10M22 29h10" stroke="#fff" stroke-width="2.400"/><path d="M24.500 34v3M27 34v3M29.500 34v3" ${S.replace("2.2", "1.6")}/></svg>`,
+  neck_camera: `<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M13 12l2-5h10l2 5" fill="#FFD97A" stroke="#111118" stroke-width="2" stroke-linejoin="round"/><rect x="4" y="12" width="32" height="21" rx="4" fill="#2B2140" stroke="#111118" stroke-width="2.2"/><circle cx="20" cy="22.500" r="7" fill="#C9CDD4" stroke="#111118" stroke-width="2"/><circle cx="20" cy="22.500" r="3.600" fill="#8FD3FF"/><circle cx="31" cy="16.500" r="1.400" fill="#fff"/></svg>`,
+  held_pen: `<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M27 4l9 9-17 17-9-9Z" fill="#8B6FE8" stroke="#111118" stroke-width="2.2" stroke-linejoin="round"/><path d="M10 21l9 9-12 4Z" fill="#C9CDD4" stroke="#111118" stroke-width="2.2" stroke-linejoin="round"/><circle cx="5" cy="36" r="1.800" fill="#111118"/></svg>`,
+  held_laptop: `<svg viewBox="0 0 40 40" aria-hidden="true"><rect x="7" y="7" width="26" height="19" rx="2.500" fill="#D9CEFC" stroke="#111118" stroke-width="2.2"/><circle cx="20" cy="16.500" r="4.200" fill="#fff" stroke="#111118" stroke-width="1.600"/><path d="M3 31h34l-2 3H5Z" fill="#C9CDD4" stroke="#111118" stroke-width="2.2" stroke-linejoin="round"/></svg>`,
+  held_bungeoppang: `<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M4 20c5-9 15-11 23-5l9-6-2 11 2 11-9-6c-8 6-18 4-23-5Z" fill="#E0A458" stroke="#111118" stroke-width="2.2" stroke-linejoin="round"/><circle cx="10.500" cy="18.500" r="1.600" fill="#111118"/><path d="M17 15c2 3 2 7 0 10M22 15c2 3 2 7 0 10" stroke="#9A6A45" stroke-width="1.800" stroke-linecap="round" fill="none"/></svg>`,
+  held_myframe: `<svg viewBox="0 0 40 40" aria-hidden="true"><rect x="4" y="5" width="32" height="32" rx="4" fill="#8B6FE8" stroke="#111118" stroke-width="2.2"/><rect x="9" y="10" width="22" height="22" fill="#fff"/><rect x="10.500" y="11.500" width="9" height="9" fill="#D9CEFC"/><rect x="20.500" y="21.500" width="9" height="9" fill="#FFD97A"/><path d="M20 10v22M9 21h22" stroke="#111118" stroke-width="1.600"/><circle cx="20" cy="4" r="2.400" fill="#FFD97A" stroke="#111118" stroke-width="1.400"/></svg>`,
   fx_bubble: `<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M20 7c8 0 14 5 14 11s-6 11-14 11c-2 0-4 0-5-1l-7 4 2-7c-3-2-4-4-4-7 0-6 6-11 14-11Z" fill="#fff" stroke="#111118" stroke-width="2.2" stroke-linejoin="round"/><circle cx="14" cy="18" r="1.8" fill="#111118"/><circle cx="20" cy="18" r="1.8" fill="#111118"/><circle cx="26" cy="18" r="1.8" fill="#111118"/></svg>`,
   fx_bang: `<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M16 6h8l-2 18h-4Z" fill="#FFD97A" stroke="#111118" stroke-width="2.2" stroke-linejoin="round"/><circle cx="20" cy="31" r="3.4" fill="#FFD97A" stroke="#111118" stroke-width="2.2"/></svg>`,
   fx_sparkle: `<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M17 6l3 9 9 3-9 3-3 9-3-9-9-3 9-3Z" fill="#FFD97A" stroke="#111118" stroke-width="2.2" stroke-linejoin="round"/><path d="M30 22l1.6 4.4L36 28l-4.400 1.600L30 34l-1.600-4.400L24 28l4.400-1.600Z" fill="#B9A6EC" stroke="#111118" stroke-width="1.8" stroke-linejoin="round"/></svg>`,
@@ -73,7 +96,7 @@ export function createShopUi(d: Deps) {
   const $ = (id: string) => document.getElementById(id)!;
   const modal = $("shop"), list = $("shopList"), tabs = $("shopTabs"), cuts = $("shopCuts"), entry = $("giftsShop"), earnBox = $("shopEarn");
   let available = false, loggedIn = false, catalog: Item[] = [], owned: string[] = [], gear: GearState = {}, balance = 0, tab = "pet", busy = false;
-  let earn = { reward: 0, today: false, welcome: 0 }, short = 0, wentOut = false, mock = false;   // short: 방금 누른 상품에 모자란 컷(0이면 안내 카드를 그냥 "모으는 법"으로)
+  let earn = { reward: 0, today: false, welcome: 0 }, short = 0, wentOut = false, mock = false, frameId = "";   // frameId: 내 네컷 액자에 걸릴 내 네컷만화(입어 보기에 쓴다)   // short: 방금 누른 상품에 모자란 컷(0이면 안내 카드를 그냥 "모으는 법"으로)
 
   function renderEarn(show: boolean) {
     earnBox.hidden = !show; if (!show) return;
@@ -105,6 +128,7 @@ export function createShopUi(d: Deps) {
     if (Array.isArray(data.owned)) { owned = data.owned; if (mock) d.setEmotes(Object.keys(EMOTES).filter((id) => owned.includes(EMOTES[id]))); }
     if (data.gear && typeof data.gear === "object") { gear = data.gear; d.setGear(gear); }
     if (typeof data.balance === "number") { balance = data.balance; d.showCuts(balance); }
+    if ("frame" in data) frameId = typeof data.frame === "string" ? data.frame : "";
     if (data.earn && typeof data.earn === "object") earn = { reward: Number(data.earn.reward) || 0, today: !!data.earn.today, welcome: Number(data.earn.welcome) || 0 };
   }
 
@@ -184,7 +208,7 @@ export function createShopUi(d: Deps) {
   // 사기 전에 잠깐: 창을 닫고 내 캐릭터에 입혀 보여 준다(내 화면에서만, 몇 초 뒤 원래대로)
   function tryOn(slot: string, sku: string) {
     const it = catalog.find((c) => c.sku === sku); if (!it) return;
-    close(); d.preview(slot, sku);
+    close(); d.preview(slot, sku, frameId || undefined);
     d.showToast(it.slot === "pet" ? `${it.name}를 잠깐 만나 봐요` : `${it.name}를 잠깐 입어 봤어요`, `마음에 들면 컷 상점에서 ${it.price}컷에 ${it.slot === "pet" ? "데려올" : "살"} 수 있어요.`, 5200);
   }
 

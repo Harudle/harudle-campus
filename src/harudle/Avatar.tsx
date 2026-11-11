@@ -642,7 +642,7 @@ export function Avatar({ config: look, motion, pose, gear }: AvatarProps) {
             <Line length={0.38} />
           </group>
         )}
-        <group ref={heldItem}>{gear?.held ? <GearHeld sku={gear.held} /> : holdingSide && <HeldItem kind={config.held} color={config.heldColor} />}</group>
+        <group ref={heldItem}>{gear?.held ? <GearHeld sku={gear.held} frame={gear.frame} /> : holdingSide && <HeldItem kind={config.held} color={config.heldColor} />}</group>
       </group>
 
       <group ref={head} position-y={HEAD_Y}>

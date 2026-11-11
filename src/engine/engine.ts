@@ -1407,7 +1407,7 @@ function buildFurn(G, o, fl) {
       box(g2, 2.1, .7, .08, 0xFFFFFF, 0, base + wallH + .02, back + .1, { line: .01 });
       shop(board(g2, 2.02, .62, shopSignTex, 0, base + wallH + .37, back + .145));
       // 선반 두 단(차양 아래)과 그 위에 앉은 펫들
-      const shelves = [[base + .95, ["cat", "panda", "fox", "zebra"], .36], [base + 1.6, ["emu", "tiger", "bear"], .3]] as [number, PetKind[], number][];
+      const shelves = [[base + .95, ["cat", "panda", "fox", "zebra"], .36], [base + 1.6, ["emu", "duck", "penguin", "capybara"], .34]] as [number, PetKind[], number][];
       for (const [sy, kinds, sc] of shelves) {
         box(g2, SW - .5, .05, .36, 0xFFFFFF, 0, sy, back + .32, { line: .008 }); box(g2, SW - .5, .05, .02, PINK_D, 0, sy, back + .5, { line: 0 });
         kinds.forEach((kind, i) => { const p = makePet(kind); p.root.scale.setScalar(sc); p.root.position.set(-(SW - .9) / 2 + (i + .5) * (SW - .9) / kinds.length, sy + .05, back + .3); live.add(p.root); });
@@ -2918,7 +2918,7 @@ function closeWheel(go) {
 /* ───── 내 펫과 놀기: 펫을 보고 F를 꾹(위에서 볼 땐 펫을 눌러도) → 마우스로 고르고 떼면 앉기 · 쓰다듬기 ─────
    앉기: 그 자리에 앉아 주인을 본다(멀리 가면 일어나 다시 따라온다, 한 번 더 고르면 일어나기). 쓰다듬기: 주인이 손을 뻗어 쓰다듬고, 펫마다 다르게 좋아한다(Pets.tsx) + 하트.
    펫 상태는 presence의 pt(1 앉음 · 2 쓰다듬는 중)로 남들에게도 보인다 */
-const PET_NAME = { doodle: "두들", cat: "고양이", panda: "판다", fox: "여우", zebra: "얼룩말", emu: "에뮤", tiger: "호랑이", bear: "불곰" };
+const PET_NAME = { doodle: "두들", cat: "고양이", panda: "판다", fox: "여우", zebra: "얼룩말", emu: "에뮤", tiger: "호랑이", bear: "불곰", duck: "러버덕", capybara: "카피바라", penguin: "펭귄", dragon: "용" };
 const PAT_MS = 2800;
 const petName = () => PET_NAME[dog.doll.pet] || "펫";
 // 펫을 보고 있나(2.6칸 안): 들어가서 볼 땐 카메라가 보는 쪽 50° 안, 위에서 볼 땐 캐릭터가 바라보는 쪽 90° 안이거나 펫 위에 마우스를 올렸을 때
@@ -3356,6 +3356,8 @@ function clickAt(cx, cy) {
   if (me.f === 12 && linkBoards.length) { const lh = ray.intersectObjects(linkBoards, false)[0]; if (lh) { if (lh.object.userData.gift) openGifts(); else if (lh.object.userData.shop) shopUi.open(); else if (lh.object.userData.welcome) welcomeSign(); else openLink(lh.object.userData.link); return; } }   // 바로가기 장치 · 선물 입간판 · 컷 상점 진열대를 눌렀다
   if (me.f === 14 && showSlots.length) { const sh = ray.intersectObjects(showSlots.flatMap((sl) => sl.mesh.userData.twin ? [sl.mesh, sl.mesh.userData.twin] : [sl.mesh]), false)[0]; if (sh) { openItem(showItem((sh.object.userData.of ?? sh.object).userData.show)); return; } }   // 14층 액자를 눌렀다
   if (me.f === 12 && ezBoards.length) { const eh = ray.intersectObjects(ezBoards, false)[0]; if (eh && eh.object.userData.wb) { if (nearWb(4)) { openEasel("wb"); return; } } else if (eh && nearFurn("painteasel", 3.2)) { tryEasel(); return; } }   // 이젤·화이트보드를 눌렀다   // 이젤을 눌렀다
+  for (const p of peerList) { const fid = readGear(p.g)?.frame, v = fid ? peers.get(p.peer) : null; if (v && v.doll.root.visible && Math.hypot(v.x - me.x, v.y - me.y) < 9 && ray.intersectObject(v.doll.root, true).some((h) => h.object !== v.doll.blob)) { openFrame(fid, p.name || "크루"); return; } }   // 내 네컷 액자를 든 크루를 눌렀다
+  if (shownGear?.frame && meDoll.root.visible && ray.intersectObject(meDoll.root, true).some((h) => h.object !== meDoll.blob)) { openFrame(shownGear.frame, myNameNow() || "나"); return; }
   if (dog.doll.root.visible && Math.hypot(dog.x - me.x, dog.y - me.y) < 4 && ray.intersectObject(dog.doll.root, true).some((h) => h.object !== dog.doll.blob)) { openPetWheel(); return; }   // 내 펫을 눌렀다(가까이 있을 때)
   const hit = ray.intersectObjects(NPCS.filter((n) => n.f === me.f && n.doll.root.visible).map((n) => n.doll.root), true).find((h) => h.object !== (h.object.parent as any)?.userData?.blob && !(h.object as any).isPoints);
   let npcIdx = -1; for (let q: THREE.Object3D | null = hit ? hit.object : null; q; q = q.parent) if (q.userData.npc !== undefined) { npcIdx = q.userData.npc; break; }
@@ -3748,9 +3750,16 @@ function showGear(next: GearState | null) {
   const vis = meDoll.root.visible; dropDoll(meDoll); meDoll = makeChar(myAv, shownGear); meDoll.root.visible = vis; scene.add(meDoll.root);
   if (petChanged) { dropDoll(dog.doll); dog.doll = makePet(petOfSku(shownGear?.pet) ?? "doodle"); scene.add(dog.doll.root); }
 }
+// 내 네컷 액자: 그 크루가 하루들에 올린 네컷만화를 크게 보여 주고, 하루들의 그 글로 가는 길을 낸다
+function openFrame(id: string, name: string) {
+  lbImg.src = `/api/frame/${id}`; lbImg.alt = `${name}의 네컷만화`; lbCap.replaceChildren();
+  const s = document.createElement("span"); s.textContent = `${name}의 네컷만화`;
+  const a = document.createElement("a"); a.href = `https://www.harudle.com/feeds/${id}`; a.target = "_blank"; a.rel = "noopener"; a.textContent = "하루들에서 보기 ↗";
+  lbCap.append(s, a); lb.hidden = false; syncCursor();
+}
 let gearTryTimer = 0;
 function setMyGear(g: unknown) { myGear = readGear(g); clearTimeout(gearTryTimer); showGear(myGear); }
-function tryGear(slot: string, sku: string) { clearTimeout(gearTryTimer); showGear(readGear({ ...(myGear || {}), [slot]: sku })); gearTryTimer = window.setTimeout(() => showGear(myGear), 8000); }
+function tryGear(slot: string, sku: string, frame?: string) { clearTimeout(gearTryTimer); showGear(readGear({ ...(myGear || {}), [slot]: sku, ...(frame ? { frame } : {}) })); gearTryTimer = window.setTimeout(() => showGear(myGear), 8000); }
 // 컷이 모자랄 때: 하루들의 네컷만화 만들기 화면을 새 탭으로 열고(연동한 크루는 대개 로그인돼 있다. 아니면 하루들이 알아서 로그인 · 체험으로 보낸다), 돌아오면(창에 다시 초점) 바로 정산해서 방금 올린 네컷만화의 컷을 받는다
 function openHarudle() { leaveForTab(); window.open("/harudle-write.html", "_blank", "noopener"); showToast("네컷만화 만들기를 새 탭으로 열었어요", "연동한 하루들 계정으로 만들어 피드에 올리고 돌아오면 컷이 들어와요.", 6200); }   // 징검다리 쪽(static/harudle-write.html)을 거쳐야 하루들의 뒤로가기 · 만든 뒤 이동이 먹는다
 let lastSettleAt = 0;
