@@ -22,7 +22,7 @@ export type DollAnim = {
   guitar?: boolean // 기타 연주 중: 기타를 내려다보며 오른손은 줄을 튕기고 왼손은 넥을 짚는다
   cross?: boolean  // 앉아서 다리 꼬기
   party?: boolean  // 클럽 파티: 두 팔을 번갈아 마구 흔들고 고개를 신나게 흔든다
-  petAct: 'sit' | 'pet' | null // 펫(dog)만: 주인이 앉혔다 · 쓰다듬는 중
+  petAct: 'sit' | 'pet' | 'ride' | 'toot' | null // 펫(dog)만: 주인이 앉혔다 · 쓰다듬는 중 · (코끼리) 주인을 태웠다 · 태운 채 뿌우
   fly?: number   // 나는 펫(독수리)만: 떠 있으면 1, 앉아 있으면 0
   flap?: number  // 나는 펫만: 날갯짓 세기(0 활공 ~ 1 힘차게)
   arms: number[] | null // 대결 종목이 정한 팔 자세 [오른팔 x, z, 왼팔 x, z](라디안). 있으면 다른 팔 동작보다 먼저(복싱 주먹 · 가드)

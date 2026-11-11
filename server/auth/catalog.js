@@ -18,6 +18,7 @@ export const CATALOG = [
   { sku: "pet_dragon", slot: "pet", name: "용", price: 30, rare: true },   // 레어: 걷지 않고 떠서 따라온다
   { sku: "pet_eagle", slot: "pet", name: "독수리", price: 80, rare: true, ultra: true },   // 초레어: 하늘을 날며 따라오고 주인 어깨에 앉는다
   { sku: "pet_ptero", slot: "pet", name: "익룡", price: 200, rare: true, legend: true },   // 전설: 더 높이 · 넓게 날며 금빛 별 가루를 흘리고, 앉히면 주인 머리 위에 앉는다
+  { sku: "pet_elephant", slot: "pet", name: "코끼리", price: 300, rare: true, legend: true },   // 전설: 사람보다 훨씬 큰 덩치, 등에 올라타고 다닌다(탄 모습은 presence의 pt 3 · 4로 남들에게도 보인다)
   { sku: "fx_bubble", slot: "fx", name: "말풍선", price: 3 },
   { sku: "fx_bang", slot: "fx", name: "느낌표", price: 3 },
   { sku: "fx_sparkle", slot: "fx", name: "반짝 효과선", price: 3 },

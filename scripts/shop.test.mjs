@@ -31,14 +31,14 @@ async function setup({ env = ENV, cuts = 0, fetch = async () => { throw new Erro
 }
 
 test("카탈로그: 펫 13(레어 3 · 초레어 1 · 전설 1) · 효과 9 · 착용 13(레어 1) · 감정표현 4, sku는 겹치지 않고 슬롯은 아는 것만(감정표현은 쓰는 자리가 아니다)", () => {
-  assert.equal(CATALOG.length, 39);
-  assert.equal(new Set(CATALOG.map((it) => it.sku)).size, 39);
+  assert.equal(CATALOG.length, 40);
+  assert.equal(new Set(CATALOG.map((it) => it.sku)).size, 40);
   assert.deepEqual(CATALOG.filter((it) => it.slot === "emote").map((it) => it.sku), Object.values(EMOTES)); assert.ok(!SLOTS.includes("emote"));
   for (const it of CATALOG) { assert.ok(SLOTS.includes(it.slot) || it.slot === "emote"); assert.ok(Number.isInteger(it.price) && it.price > 0); assert.match(it.sku, /^[a-z_]{1,40}$/); }
-  assert.deepEqual(CATALOG.filter((it) => it.slot === "pet").map((it) => it.name), ["고양이", "판다", "여우", "얼룩말", "에뮤", "호랑이", "불곰", "러버덕", "카피바라", "펭귄", "용", "독수리", "익룡"]);
-  assert.deepEqual(CATALOG.filter((it) => it.rare).map((it) => [it.sku, it.price]), [["pet_tiger", 30], ["pet_bear", 30], ["pet_dragon", 30], ["pet_eagle", 80], ["pet_ptero", 200], ["head_crown", 12]]);
+  assert.deepEqual(CATALOG.filter((it) => it.slot === "pet").map((it) => it.name), ["고양이", "판다", "여우", "얼룩말", "에뮤", "호랑이", "불곰", "러버덕", "카피바라", "펭귄", "용", "독수리", "익룡", "코끼리"]);
+  assert.deepEqual(CATALOG.filter((it) => it.rare).map((it) => [it.sku, it.price]), [["pet_tiger", 30], ["pet_bear", 30], ["pet_dragon", 30], ["pet_eagle", 80], ["pet_ptero", 200], ["pet_elephant", 300], ["head_crown", 12]]);
   assert.deepEqual(CATALOG.filter((it) => it.ultra).map((it) => it.sku), ["pet_eagle"], "초레어는 레어이기도 하다"); assert.ok(CATALOG.filter((it) => it.ultra).every((it) => it.rare));
-  assert.deepEqual(CATALOG.filter((it) => it.legend).map((it) => it.sku), ["pet_ptero"], "전설도 레어이기도 하고, 초레어와는 따로다"); assert.ok(CATALOG.filter((it) => it.legend).every((it) => it.rare && !it.ultra));
+  assert.deepEqual(CATALOG.filter((it) => it.legend).map((it) => it.sku), ["pet_ptero", "pet_elephant"], "전설도 레어이기도 하고, 초레어와는 따로다"); assert.ok(CATALOG.filter((it) => it.legend).every((it) => it.rare && !it.ultra));
   assert.equal(CATALOG.filter((it) => it.slot === "fx").length, 9);
   assert.equal(CATALOG.filter((it) => ["head", "neck", "held"].includes(it.slot)).length, 13);
   for (const sku of ["pet_cat", "pet_panda", "pet_fox", "fx_bubble", "fx_bang", "fx_sparkle", "head_gradcap", "neck_idcard", "held_manuscript", "pet_tiger", "pet_bear", "held_coffee", "head_headband", "fx_heart", "fx_sweat"]) assert.ok(itemOf(sku), `이미 팔린 ${sku}는 없애지 않는다`);
@@ -62,7 +62,7 @@ test("게스트는 상품 목록만 보고, 사거나 쓰지 못한다", async (
   const s = await setup({ cuts: 50 });
   const guest = { cookie: "" };
   const list = await s.request("GET", "/api/shop", undefined, guest);
-  assert.equal(list.status, 200); assert.equal(list.body.loggedIn, false); assert.equal(list.body.catalog.length, 39); assert.deepEqual(list.body.earn, { reward: 10, welcome: 15 }); assert.equal("balance" in list.body, false);
+  assert.equal(list.status, 200); assert.equal(list.body.loggedIn, false); assert.equal(list.body.catalog.length, 40); assert.deepEqual(list.body.earn, { reward: 10, welcome: 15 }); assert.equal("balance" in list.body, false);
   assert.equal((await s.request("POST", "/api/shop/buy", { sku: "pet_cat" }, guest)).status, 401);
   assert.equal((await s.request("PUT", "/api/me/gear", { slot: "pet", sku: "pet_cat" }, guest)).status, 401);
   assert.equal((await s.request("POST", "/api/shop/buy", { sku: "pet_cat" }, { origin: "https://evil.example" })).status, 403);
