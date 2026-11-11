@@ -3171,6 +3171,11 @@ addEventListener("keydown", (e) => {
   if (shopUi.isOpen()) { if (c === "Escape") { e.preventDefault(); shopUi.close(); } return; }   // 컷 상점: Esc로 닫기
   if (!gifts.hidden) { if (c === "Escape" || c === "KeyF") { e.preventDefault(); closeGifts(); } return; }   // 받는 법 창: Esc·F로 닫기
   if ($("loginAsk")?.hidden === false) { if (c === "Escape") { e.preventDefault(); closeLoginAsk(); } return; }   // 연동 안내 창: Esc로 닫기, 다른 키는 게임으로 가지 않게
+  if (!snapPick.hidden) {   // 캡쳐 선택창: ← →(A·D, 1·2)로 고르고 F·Space로 찍는다(Enter는 버튼이 직접 받는다). Esc·P로 닫기
+    e.preventDefault(); const left = ["ArrowLeft", "KeyA", "Digit1", "Numpad1"].includes(c), right = ["ArrowRight", "KeyD", "Digit2", "Numpad2"].includes(c);
+    if (left || right) $(left ? "snapScene" : "snapAvatar").focus(); else if (c === "KeyF" || c === "Space") (document.activeElement as HTMLElement)?.click?.(); else if (c === "Escape" || c === "KeyP") { if (!e.repeat) closeSnapPick(); }
+    return;
+  }
   if (c === "Escape") {
     // 설정창이 떠 있으면 닫는다(막 열린 직후 같은 Esc는 무시). 여기서 바로 마우스를 고정하면 브라우저가 그 Esc로 다시 풀어 버려서
     // pointerlockchange가 설정창을 또 열었다 → 고정은 다음 키나 클릭으로 미루고, 그사이 풀림 신호는 무시한다
@@ -3196,7 +3201,7 @@ addEventListener("keydown", (e) => {
   if (duelUi?.key(e)) { e.preventDefault(); return; }   // 대결: 초대장 Y · N, 경기 중 종목 키
   if (c === "KeyG") { e.preventDefault(); if (!e.repeat) openWheel(); return; }   // G를 꾹: 감정표현 휠(떼면 고른 것)
   if (c === "KeyC") { e.preventDefault(); if (!e.repeat) fireFirework(); return; }   // C: 앞으로 폭죽
-  if (c === "KeyP") { e.preventDefault(); if (!e.repeat) captureView(); return; }   // P: 지금 모습 캡쳐
+  if (c === "KeyP") { e.preventDefault(); if (!e.repeat) openSnapPick(); return; }   // P: 캡쳐 선택창
   if (c === "Backslash") { e.preventDefault(); if (!e.repeat) tuckSide(!sideTucked); return; }   // \: 사이드바 접기/펼치기
   if (c === "Tab") { e.preventDefault(); if (!e.repeat) toggleInv(); return; }
   if (!inv.hidden) { const k = { Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3, Numpad1: 0, Numpad2: 1, Numpad3: 2, Numpad4: 3 }[c]; if (k !== undefined) { e.preventDefault(); useItem(ITEMS[k].id); return; } }   // 인벤토리를 연 채로도 걷기·점프는 그대로
@@ -3256,7 +3261,7 @@ const joy = { on: false, x: 0, y: 0, id: -1, cx: 0, cy: 0 };
   mRun.onclick = () => { me.runToggle = !me.runToggle; mRun.setAttribute("aria-pressed", String(me.runToggle)); };
   document.getElementById("mJump").addEventListener("pointerdown", (e) => { e.preventDefault(); jump(); });
   document.getElementById("mInv").onclick = () => toggleInv();
-  document.getElementById("mSnap").onclick = () => captureView();
+  document.getElementById("mSnap").onclick = () => openSnapPick();
   document.getElementById("mFire").onclick = () => fireFirework(me.act?.name === "gun");   // 모바일: 종이 총을 들었으면 총알, 아니면 폭죽
   $all("#mPad [data-skill]").forEach((b) => (b.onclick = () => useSkill(b.dataset.skill)));
   const chatBtn = document.getElementById("mChat"), sayIn = $<HTMLInputElement>("sayInput");
@@ -3267,28 +3272,62 @@ addEventListener("blur", () => { keys.clear(); me.runHold = false; if (me.moving
 document.getElementById("viewBtn").onclick = () => { if (duelMove.view) showToast("지금은 시점을 바꿀 수 없어요", "사격 대결 중에는 1인칭으로만 봐요.", 1800); else setView({ top: "third", third: "first", first: "top" }[VIEW.mode]); };
 document.getElementById("rotL").onclick = () => (cam.yawT += Math.PI / 4);
 document.getElementById("rotR").onclick = () => (cam.yawT -= Math.PI / 4);
-// 지금 모습 캡쳐(P · 독의 📷 · /캡처): 장면을 한 번 더 그린 직후 캔버스를 PNG로 꺼낸다(R3F는 버퍼를 보존하지 않아 그린 직후에 읽어야 한다).
-// HUD는 DOM이라 사진에 안 들어가고 캠퍼스 장면만 담긴다. 공유창이 있는 기기(모바일)는 공유로, 아니면 파일로 내려받는다
-let snapBusy = false;
-function captureView() {
-  if (snapBusy) return; snapBusy = true;
-  const d = new Date(), two = (n) => String(n).padStart(2, "0"), stamp = `${d.getFullYear()}${two(d.getMonth() + 1)}${two(d.getDate())}-${two(d.getHours())}${two(d.getMinutes())}${two(d.getSeconds())}`;
-  const name = `하루들캠퍼스-${isArena(me.f) ? "대결장" : `${me.f}F`}-${stamp}.png`;
-  const flash = document.getElementById("snapFlash"); if (flash) { flash.classList.remove("on"); void flash.offsetWidth; flash.classList.add("on"); }   // 찰칵: 흰 번쩍임
-  try { renderer.render(scene, camera); } catch { snapBusy = false; showToast("캡쳐하지 못했어요", "잠시 뒤에 다시 해 보세요.", 2400); return; }
-  canvas.toBlob(async (blob) => {
-    snapBusy = false;
-    if (!blob) { showToast("캡쳐하지 못했어요", "잠시 뒤에 다시 해 보세요.", 2400); return; }
-    const file = new File([blob], name, { type: "image/png" });
-    if (TOUCH && typeof navigator.canShare === "function" && navigator.canShare({ files: [file] })) {
-      try { await navigator.share({ files: [file], title: "하루들 캠퍼스" }); showToast("📷 지금 모습을 담았어요", "사진 앱이나 메신저로 보냈어요.", 2600); return; }
-      catch (e) { if ((e as any)?.name === "AbortError") return; }   // 공유창을 닫으면 조용히, 공유가 안 되면 내려받기로
-    }
-    const url = URL.createObjectURL(blob), a = document.createElement("a"); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 10000);
-    showToast("📷 지금 모습을 저장했어요", name, 3000);
-  }, "image/png");
+// 캡쳐(P · 독의 📷 · 모바일 📷 · /캡처): 선택창에서 왼쪽 "지금 화면"(보이는 캠퍼스 그대로)과 오른쪽 "내 캐릭터"(정면 · 투명 배경) 중 골라 찍는다.
+// 둘 다 캔버스를 그린 직후 PNG로 꺼낸다(R3F는 버퍼를 보존하지 않아 그린 직후에 읽어야 한다). HUD는 DOM이라 사진에 안 들어간다.
+// 공유창이 있는 기기(모바일)는 공유로, 아니면 파일로 내려받는다
+let snapBusy = false;   // 찍어서 저장하는 중(화면·캐릭터 공용)
+const snapPick = $("snapPick"), snapStamp = () => { const d = new Date(), two = (n) => String(n).padStart(2, "0"); return `${d.getFullYear()}${two(d.getMonth() + 1)}${two(d.getDate())}-${two(d.getHours())}${two(d.getMinutes())}${two(d.getSeconds())}`; };
+function openSnapPick(kind?: "scene" | "avatar") {
+  if (snapBusy) { showToast("아직 앞 사진을 저장하는 중이에요", "큰 화면은 몇 초 걸려요. 잠시만요.", 1600); return; }   // PNG로 바꾸는 동안 또 누르면 조용히 무시되지 않게 알려 준다
+  if (kind === "scene") return captureScene(); if (kind === "avatar") return captureAvatar();   // /캡처 화면 · /캡처 캐릭터: 바로 찍는다
+  if (!snapPick.hidden) return; if (locked()) document.exitPointerLock(); snapPick.hidden = false; $("snapScene").focus();
 }
-document.getElementById("snapBtn").onclick = () => captureView();
+function closeSnapPick() { if (snapPick.hidden) return; snapPick.hidden = true; (document.activeElement as HTMLElement)?.blur?.(); menuQuietUntil = performance.now() + 800; syncCursor(); }
+$("snapScene").onclick = () => { closeSnapPick(); captureScene(); };
+$("snapAvatar").onclick = () => { closeSnapPick(); captureAvatar(); };
+$("snapCancel").onclick = () => closeSnapPick();
+snapPick.addEventListener("pointerdown", (e) => { if (e.target === snapPick) closeSnapPick(); });   // 바깥을 누르면 닫는다
+function snapFlash() { const f = document.getElementById("snapFlash"); if (f) { f.classList.remove("on"); void f.offsetWidth; f.classList.add("on"); } }   // 찰칵: 흰 번쩍임
+const snapFail = () => showToast("캡쳐하지 못했어요", "잠시 뒤에 다시 해 보세요.", 2400);
+async function saveShot(blob: Blob | null, name: string, what: string) {
+  if (!blob) return snapFail();
+  const file = new File([blob], name, { type: "image/png" });
+  if (TOUCH && typeof navigator.canShare === "function" && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: "하루들 캠퍼스" }); showToast(`📷 ${withJosa(what, "를", "을")} 담았어요`, "사진 앱이나 메신저로 보냈어요.", 2600); return; }
+    catch (e) { if ((e as any)?.name === "AbortError") return; }   // 공유창을 닫으면 조용히, 공유가 안 되면 내려받기로
+  }
+  const url = URL.createObjectURL(blob), a = document.createElement("a"); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 10000);
+  showToast(`📷 ${withJosa(what, "를", "을")} 저장했어요`, name, 3000);
+}
+function captureScene() {
+  if (snapBusy) return; snapBusy = true;
+  const name = `하루들캠퍼스-${isArena(me.f) ? "대결장" : `${me.f}F`}-${snapStamp()}.png`;
+  snapFlash();
+  try { renderer.render(scene, camera); } catch { snapBusy = false; return snapFail(); }
+  canvas.toBlob((blob) => { snapBusy = false; saveShot(blob, name, "지금 화면"); }, "image/png");
+}
+// 내 캐릭터: 꾸미기 창 옆 미리보기 캔버스(src/scene/AvatarPreview.tsx)를 찍는다. 창이 열려 있으면 돌려 둔 각도 그대로,
+// 닫혀 있으면 보이지 않게 잠깐 띄워 정면을 찍고 바로 내린다. 긴 변이 1024px 이상이 되게 키워서 그린다
+const nextFrame = () => new Promise<void>((r) => { const t = setTimeout(r, 60); requestAnimationFrame(() => { clearTimeout(t); r(); }); });   // 탭이 뒤에 있어 프레임이 안 오면 타이머로 넘어간다
+async function captureAvatar() {
+  if (snapBusy) return; snapBusy = true;
+  const wasOpen = !avPanel.hidden;
+  if (!wasOpen) avatarPreview.set({ open: true, silent: true, config: { ...DEFAULT_AV, ...myAv } });
+  try {
+    let ctx = avatarPreview.context();
+    for (let i = 0; i < 60 && !(ctx && ctx.scene.children.some((o) => o.type === "Group" && o.children.length > 0)); i++) { await nextFrame(); ctx = avatarPreview.context(); }   // 캔버스와 캐릭터가 들어올 때까지(최대 1초)
+    if (!ctx) return snapFail();
+    await nextFrame();
+    const { gl, scene: sc, camera: cm } = ctx, size = gl.getSize(new THREE.Vector2()), k = Math.max(1, Math.ceil(1024 / (Math.max(size.x, size.y) * gl.getPixelRatio())));
+    snapFlash();
+    gl.setSize(size.x * k, size.y * k, false); gl.render(sc, cm);
+    const blob = await new Promise<Blob | null>((r) => gl.domElement.toBlob(r, "image/png"));   // toBlob은 부를 때 그림을 복사한다
+    gl.setSize(size.x, size.y, false);
+    await saveShot(blob, `하루들캐릭터-${(myNameNow() || "크루").replace(/[\\/:*?"<>|]/g, "")}-${snapStamp()}.png`, "내 캐릭터");
+  } catch { snapFail(); }
+  finally { snapBusy = false; if (!wasOpen && avPanel.hidden) avatarPreview.set({ open: false, silent: false, config: null }); }
+}
+document.getElementById("snapBtn").onclick = () => openSnapPick();
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 let drag = null; const pointers = new Map();
 const pinchDist = () => { const [a, b] = [...pointers.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
@@ -3318,7 +3357,7 @@ const locked = () => document.pointerLockElement === canvas;
 // 경계: 창(층 고르기·크루 피드·사진·캐릭터 꾸미기·설정)이 떠 있는 동안은 커서를 꺼내 두고, 다 닫히면 게임으로 돌아와 다시 고정한다.
 // 채팅창에 쓰는 동안도 커서를 꺼내 둔다
 const uiOpen = () => inWorld || !!duelUi?.modal() ||   // inWorld: 14층 하루들 월드 창(이게 빠지면 창을 열려고 커서를 꺼낼 때 설정창이 같이 떴다)
-   !$("shop").hidden || !easelEd.hidden || $("loginAsk")?.hidden === false || !gifts.hidden || !$("startrackPanel").hidden || !menu.hidden || !profile.hidden || !tour.hidden || !inv.hidden || !picker.hidden || panel.classList.contains("open") || !avPanel.hidden || !lb.hidden;
+   !$("shop").hidden || !easelEd.hidden || $("loginAsk")?.hidden === false || !gifts.hidden || !$("startrackPanel").hidden || !menu.hidden || !profile.hidden || !tour.hidden || !inv.hidden || !picker.hidden || !snapPick.hidden || panel.classList.contains("open") || !avPanel.hidden || !lb.hidden;
 const typing = () => document.activeElement === sayInput;   // 채팅창에 쓰는 중: 커서를 꺼내 둔다
 function syncCursor() { if (uiOpen()) { if (locked()) document.exitPointerLock(); } else lockMouse(); }
 function lockMouse() {
@@ -3846,7 +3885,7 @@ const cmdHost: CommandHost = {
   dance: (style) => useSkill("dance", style),
   dances: DANCES,
   firework: () => fireFirework(),
-  snapshot: () => captureView(),
+  snapshot: (kind) => openSnapPick(kind),
   floor: (f) => (isArena(me.f) ? chatNet({ k: "sys", text: "대결장에서는 층을 옮길 수 없어요 · /기권이나 /관전으로 나가요" }) : f === me.f ? chatNet({ k: "sys", text: `이미 ${f}F예요` }) : goFloor(f, ELEV_SPAWN)),
   follow: (id) => startFollow(id),
   stopFollow: () => (me.follow ? stopFollow() : chatNet({ k: "sys", text: "따라가는 중이 아니에요" })),
