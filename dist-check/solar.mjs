@@ -24,7 +24,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 */
 
-// ../../../../../../../Users/green/Desktop/Green/WoowaCourse/harudle/harudle-campus/node_modules/suncalc/index.js
+// node_modules/suncalc/index.js
 var { PI, sin, cos, tan, asin, atan2: atan, acos, sqrt, abs, round, floor } = Math;
 var rad = PI / 180;
 var dayMs = 1e3 * 60 * 60 * 24;

@@ -1,4 +1,4 @@
-// 컷 상점의 펫(초레어 독수리는 날아다니고 주인 어깨에 앉는다): 고양이 · 판다 · 여우 · 얼룩말 · 에뮤 (하루들 닉네임에 나오는 동물들) · 러버덕 · 카피바라 · 펭귄 + 레어 대형 펫 호랑이 · 불곰 · 용(떠서 따라온다)
+// 컷 상점의 펫(전설 익룡 · 초레어 독수리는 날아다닌다. 독수리는 주인 어깨에, 익룡은 옆 바닥이나 머리 위에 앉는다): 고양이 · 판다 · 여우 · 얼룩말 · 에뮤 (하루들 닉네임에 나오는 동물들) · 러버덕 · 카피바라 · 펭귄 + 레어 대형 펫 호랑이 · 불곰 · 용(떠서 따라온다)
 // 두들(강아지)과 같은 낙서 문법으로 그린다: 흰 몸 + 먹선 다리 + 라벤더 포인트. 발이 원점이고 +z를 바라본다.
 // 주인이 멈춰 서 있으면 잠시 뒤 엎드려 쉬면서 주인을 올려다보고, 걸으면 꼬리를 더 빨리 흔든다.
 // 이 파일은 캠퍼스 것이다(src/harudle는 하루들 월드 복사본이라 다시 복사하면 덮어써진다).
@@ -9,8 +9,8 @@ import { COLORS } from '../harudle/brand'
 import { Face, Ink, INK, LILAC, Line, LINE_RADIUS, Skin, useLegSwing, type WalkMotion } from '../harudle/Characters'
 import { Toon } from '../harudle/toon'
 
-export type PetKind = 'doodle' | 'cat' | 'panda' | 'fox' | 'zebra' | 'emu' | 'tiger' | 'bear' | 'duck' | 'capybara' | 'penguin' | 'dragon' | 'eagle'
-const SKU_PET: Record<string, PetKind> = { pet_cat: 'cat', pet_panda: 'panda', pet_fox: 'fox', pet_zebra: 'zebra', pet_emu: 'emu', pet_tiger: 'tiger', pet_bear: 'bear', pet_duck: 'duck', pet_capybara: 'capybara', pet_penguin: 'penguin', pet_dragon: 'dragon', pet_eagle: 'eagle' }
+export type PetKind = 'doodle' | 'cat' | 'panda' | 'fox' | 'zebra' | 'emu' | 'tiger' | 'bear' | 'duck' | 'capybara' | 'penguin' | 'dragon' | 'eagle' | 'ptero'
+const SKU_PET: Record<string, PetKind> = { pet_cat: 'cat', pet_panda: 'panda', pet_fox: 'fox', pet_zebra: 'zebra', pet_emu: 'emu', pet_tiger: 'tiger', pet_bear: 'bear', pet_duck: 'duck', pet_capybara: 'capybara', pet_penguin: 'penguin', pet_dragon: 'dragon', pet_eagle: 'eagle', pet_ptero: 'ptero' }
 /** 상점 sku → 그릴 펫. 모르는 값이면 null */
 export const petOfSku = (sku: unknown): PetKind | null => (typeof sku === 'string' && SKU_PET[sku]) || null
 
@@ -27,7 +27,7 @@ const GEO: Record<PetKind, { legY: number; front: number; back: number }> = {
   fox: { legY: 0.32, front: 0.22, back: -0.24 }, zebra: { legY: 0.4, front: 0.24, back: -0.26 }, emu: { legY: 0.5, front: 0, back: 0 },
   tiger: { legY: 0.36, front: 0.22, back: -0.26 }, bear: { legY: 0.34, front: 0.22, back: -0.24 },
   duck: { legY: 0.12, front: 0, back: 0 }, capybara: { legY: 0.24, front: 0.2, back: -0.22 }, penguin: { legY: 0.1, front: 0, back: 0 }, dragon: { legY: 0.24, front: 0.18, back: -0.22 },
-  eagle: { legY: 0.14, front: 0, back: 0 },
+  eagle: { legY: 0.14, front: 0, back: 0 }, ptero: { legY: 0.14, front: 0, back: 0 },
 }
 /** 걸음걸이(펫마다): walkF · runF 걸음 빠르기(위상/초) · walkAmp · runAmp 다리 흔드는 폭 · walkBob · runBob 몸이 들썩이는 높이
  *  lean 달릴 때 앞으로 숙이는 각 · roll 걸을 때 좌우로 흔들리는 각 · style 달리는 모양
@@ -48,6 +48,7 @@ export const GAIT: Record<PetKind, Gait> = {
   capybara: { walkF: 8, runF: 13, walkAmp: 0.42, runAmp: 0.75, walkBob: 0.015, runBob: 0.05, lean: 0.06, roll: 0.04, style: 'lumber' },   // 카피바라: 뛰어도 표정은 그대로, 통통
   penguin: { walkF: 13, runF: 21, walkAmp: 0, runAmp: 0, walkBob: 0.02, runBob: 0.05, lean: 0.3, roll: 0, style: 'waddle' },         // 펭귄: 몸을 앞으로 기울이고 날개를 펴서 종종종
   eagle: { walkF: 5, runF: 8, walkAmp: 0, runAmp: 0, walkBob: 0, runBob: 0, lean: 0, roll: 0, style: 'fly' },   // 독수리: 날개 · 몸짓은 Eagle이, 어디를 날지는 엔진(flyPet)이 정한다
+  ptero: { walkF: 5, runF: 8, walkAmp: 0, runAmp: 0, walkBob: 0, runBob: 0, lean: 0, roll: 0, style: 'fly' },    // 익룡(전설): 독수리처럼 엔진(flyPet)이 날린다
   dragon: { walkF: 5, runF: 8, walkAmp: 0.18, runAmp: 0.1, walkBob: 0, runBob: 0, lean: 0.38, roll: 0, style: 'fly' },               // 용: 뛰면 다리를 접고 더 높이, 더 빨리 날갯짓
 }
 const LEG_TUCK = 0.9   // 날 때 다리를 뒤로 접는 각
@@ -72,6 +73,7 @@ const SIT: Record<PetKind, SitPose> = {
   penguin: { tilt: 0, hip: 0.1, front: { stand: true }, back: { ang: 0, sc: 1, splay: 0 }, head: 0 },   // 펭귄: 배를 깔고 쪼그린다
   dragon: { tilt: 0.6, hip: 0.1, front: { stand: true }, back: { ang: -1.3, sc: 0.55, splay: 0.15 }, head: 0.2 },   // 용: 내려앉아 앞발을 모으고 고개를 든다
   eagle: { tilt: 0, hip: 0.14, front: { stand: true }, back: { ang: 0, sc: 1, splay: 0 }, head: 0 },   // 독수리: 앉으라면 주인 어깨에 앉는다(엔진)
+  ptero: { tilt: 0, hip: 0.14, front: { stand: true }, back: { ang: 0, sc: 1, splay: 0 }, head: 0 },   // 익룡: 앉으라면 주인 머리 위에 앉는다(엔진)
 }
 // 앉은 정도 s(0~1)에서 몸 기울기 θ와 내려갈 높이(엉덩이가 hip에 닿게)
 function sitBody(kind: PetKind, s: number) {
@@ -128,6 +130,7 @@ const PET_HEAD: Partial<Record<PetKind, { lean: number; nod: number; nodF: numbe
   penguin: { lean: -0.15, nod: 0, nodF: 0, rub: 0.3, rubF: 6 },
   dragon: { lean: -0.3, nod: 0, nodF: 0, rub: 0.22, rubF: 3 },
   eagle: { lean: 0, nod: 0, nodF: 0, rub: 0, rubF: 0 },
+  ptero: { lean: 0, nod: 0, nodF: 0, rub: 0, rubF: 0 },
 }
 
 /** 다리 하나: 먹선 + 동그란 발 */
@@ -1196,6 +1199,225 @@ export function Eagle({ motion, act }: PetProps) {
   )
 }
 
+const PTERO = '#8EC5F0', PTERO_M = '#D3E9FB', PTERO_RIB = '#A9CDEB', PTERO_CREST = '#FF8FB1', PTERO_CREST_D = '#E0668C', GOLD = '#FFC93B'
+
+// 익룡 날개막: 얇은 판(위에서 본 모양 → 두께를 살짝 준 입체). x가 바깥쪽, y가 클수록 뒤쪽(앞 가장자리는 y≈0)
+function membrane(pts: [number, number][], curve: [number, number, number, number][]) {
+  const sh = new THREE.Shape(); sh.moveTo(pts[0][0], pts[0][1]); for (const [x, y] of pts.slice(1)) sh.lineTo(x, y)
+  for (const [cx, cy, x, y] of curve) sh.quadraticCurveTo(cx, cy, x, y)   // 뒷가장자리: 물결처럼 오목하게
+  sh.closePath()
+  const g = new THREE.ExtrudeGeometry(sh, { depth: 0.014, bevelEnabled: true, bevelThickness: 0.006, bevelSize: 0.006, bevelSegments: 1, curveSegments: 8 })
+  g.rotateX(-Math.PI / 2); return g   // 바닥과 나란하게 눕힌다: shape의 y가 뒤쪽(-z)이 되고 두께는 위로
+}
+// 오른쪽 날개 기준(x+). 왼쪽은 scale-x -1로 뒤집는다. 안쪽 막(어깨 ~ 손목) · 바깥 막(손목 ~ 날개 끝, 긴 넷째 손가락)
+const PTERO_ARM = 0.62, PTERO_FINGER = 0.95
+const WING_IN = membrane([[0, -0.05], [0.3, -0.1], [PTERO_ARM, -0.06]], [[PTERO_ARM - 0.05, 0.16, PTERO_ARM - 0.2, 0.3], [0.35, 0.32, 0.22, 0.4], [0.08, 0.36, 0, 0.3]])
+const WING_OUT = membrane([[0, -0.06], [PTERO_FINGER * 0.55, -0.03], [PTERO_FINGER, 0.06]], [[PTERO_FINGER * 0.62, 0.1, PTERO_FINGER * 0.45, 0.2], [PTERO_FINGER * 0.22, 0.2, 0, 0.32], [-0.08, 0.3, -0.05, 0.3]])
+
+/** 익룡 날개(오른쪽 기준, 어깨가 원점): 팔뼈 + 안쪽 막, 손목에서 꺾이는 긴 손가락뼈 + 바깥 막, 손목의 작은 손가락 발톱 셋, 막에 비치는 날개살.
+ *  outer ref로 손목 관절을 접고 편다 */
+function PteroWing({ outer }: { outer: (g: THREE.Group | null) => void }) {
+  return (
+    <group>
+      <mesh geometry={WING_IN} castShadow>
+        <Skin color={PTERO_M} thickness={1.2} />
+      </mesh>
+      {/* 날개살(막에 비치는 결) */}
+      {[0.18, 0.36].map((x, i) => (
+        <mesh key={x} position={[x, 0.024, -0.17 - i * 0.03]} rotation={[Math.PI / 2, 0, -0.15 + i * 0.2]}>
+          <capsuleGeometry args={[0.006, 0.2, 2, 4]} />
+          <meshBasicMaterial color={PTERO_RIB} />
+        </mesh>
+      ))}
+      {/* 팔뼈(앞 가장자리) */}
+      <mesh position={[PTERO_ARM / 2, 0.012, 0.07]} rotation-z={Math.PI / 2} rotation-y={-0.03}>
+        <capsuleGeometry args={[0.032, PTERO_ARM, 4, 8]} />
+        <Skin color={PTERO} thickness={1.1} />
+      </mesh>
+      <group ref={outer} position={[PTERO_ARM, 0, 0.06]}>
+        {/* 손목 마디 · 작은 손가락 발톱 셋 */}
+        <mesh>
+          <sphereGeometry args={[0.042, 12, 10]} />
+          <Skin color={PTERO} thickness={1.1} />
+        </mesh>
+        {[-0.5, 0, 0.5].map((a) => (
+          <mesh key={a} position={[0.01 + a * 0.02, 0.01, 0.055]} rotation={[Math.PI / 2 - 0.3, 0, a]}>
+            <coneGeometry args={[0.012, 0.055, 6]} />
+            <meshBasicMaterial color={INK} />
+          </mesh>
+        ))}
+        <mesh geometry={WING_OUT} castShadow>
+          <Skin color={PTERO_M} thickness={1.2} />
+        </mesh>
+        {[0.25, 0.5].map((x, i) => (
+          <mesh key={x} position={[x, 0.024, -0.12 + i * 0.03]} rotation={[Math.PI / 2, 0, -0.35 - i * 0.15]}>
+            <capsuleGeometry args={[0.006, 0.16 - i * 0.04, 2, 4]} />
+            <meshBasicMaterial color={PTERO_RIB} />
+          </mesh>
+        ))}
+        {/* 긴 넷째 손가락뼈(날개 끝까지) */}
+        <mesh position={[PTERO_FINGER / 2, 0.012, 0]} rotation-z={Math.PI / 2} rotation-y={0.125}>
+          <capsuleGeometry args={[0.024, PTERO_FINGER, 4, 8]} />
+          <Skin color={PTERO} thickness={1.1} />
+        </mesh>
+      </group>
+    </group>
+  )
+}
+
+/** 익룡(전설): 뒤로 길게 뻗은 분홍 볏(끝은 금빛) · 길쭉한 노란 부리 · 동그란 눈, 하늘색 몸과 아주 넓은 날개막.
+ *  날면(fly) 몸을 수평으로 눕히고 크고 느리게 날갯짓하고, 내려앉으면 날개를 접어 네 발(날개 관절)로 짚고 선다.
+ *  쓰다듬으면 날개를 활짝 펴고 부리를 딱딱. 머리 위에 금빛 왕관 고리가 돌고, 둘레를 별이 돈다. 어디를 날지는 엔진(flyPet)이 정한다 */
+export function Pterosaur({ motion, act }: PetProps) {
+  const torso = useRef<THREE.Group>(null), head = useRef<THREE.Group>(null), jaw = useRef<THREE.Group>(null), legs = useRef<THREE.Group>(null), halo = useRef<THREE.Group>(null), glints = useRef<THREE.Group>(null)
+  const wings = useRef<(THREE.Group | null)[]>([]), fingers = useRef<(THREE.Group | null)[]>([]), st = useRef({ fly: 0, flap: 0, spread: 0, ph: 0 })
+  useFrame(({ clock }, delta) => {
+    const dt = Math.min(delta, 0.05), m = motion?.current, s = st.current, t = clock.elapsedTime, a = act?.current, petting = a?.kind === 'pet'
+    s.fly = THREE.MathUtils.damp(s.fly, m?.fly ?? 0, 4, dt); s.flap = THREE.MathUtils.damp(s.flap, m?.flap ?? 0, 3, dt)
+    s.spread = THREE.MathUtils.damp(s.spread, petting ? 1 : s.fly, 5, dt)
+    s.ph += dt * (3 + 6 * s.flap)   // 독수리보다 크고 느린 날갯짓
+    const amp = (0.08 + 0.6 * s.flap) * s.fly + (petting ? 0.22 : 0), f = petting ? t * 3.5 : s.ph
+    const beat = Math.sin(f) * amp, lag = Math.sin(f - 0.7) * amp * 0.7   // 날개 끝(손가락)은 조금 늦게 따라와 채찍처럼 휜다
+    wings.current.forEach((g, i) => {
+      if (!g) return; const side = i ? 1 : -1, k = s.spread
+      g.rotation.y = side * THREE.MathUtils.lerp(1.3, -0.05, k)         // 접으면 팔을 몸 옆으로 붙여 뒤로 두고
+      g.rotation.z = side * THREE.MathUtils.lerp(-0.45, 0.06 + beat, k) // 살짝 내려 몸에 감싼다
+      const fg = fingers.current[i]
+      if (fg) { fg.rotation.y = THREE.MathUtils.lerp(2.95, 0, k); fg.rotation.z = THREE.MathUtils.lerp(0.35, lag, k) }   // 긴 손가락은 팔을 따라 앞으로 접어 둔다(날개 끝이 어깨 위로 솟는다)
+    })
+    const tilt = THREE.MathUtils.lerp(-0.35, 0.05, s.fly)
+    if (torso.current) torso.current.rotation.x = tilt
+    if (head.current) { head.current.rotation.x = -tilt * 0.8 + (1 - s.fly) * Math.sin(t * 1.3) * 0.05; head.current.rotation.y = (1 - s.fly) * Math.sin(t * 0.45) * 0.6 }   // 앉아 있으면 천천히 고개를 돌려 둘러본다
+    if (jaw.current) jaw.current.rotation.x = petting ? Math.max(0, Math.sin(a!.t * 12)) * 0.35 : 0   // 쓰다듬으면 부리를 딱딱
+    if (legs.current) { legs.current.rotation.x = 1.4 * s.fly; legs.current.scale.y = 1 - 0.4 * s.fly }
+    if (halo.current) { halo.current.rotation.y = t * 0.8; halo.current.position.y = 0.2 + Math.sin(t * 2) * 0.015 }
+    if (glints.current) { glints.current.rotation.y = -t * 1.1; glints.current.children.forEach((c, i) => { c.scale.setScalar(0.6 + 0.5 * Math.max(0, Math.sin(t * 2.6 + i * 1.6))) }) }
+  })
+  return (
+    <group scale={1.45}>
+      {/* 뒷다리: 가늘고 짧다 */}
+      <group ref={legs} position={[0, 0.14, -0.08]}>
+        {[-1, 1].map((side) => (
+          <group key={side} position-x={side * 0.07}>
+            <Leg length={0.12} radius={0.02} paw={0.03} />
+          </group>
+        ))}
+      </group>
+      <group ref={torso} position-y={0.2}>
+        <mesh position={[0, 0.06, 0]} scale={[0.75, 0.7, 1.25]} castShadow>
+          <sphereGeometry args={[0.17, 22, 16]} />
+          <Skin color={PTERO} />
+        </mesh>
+        {/* 배: 밝은 하늘색 */}
+        <mesh position={[0, 0.02, 0.04]} scale={[0.6, 0.5, 1]}>
+          <sphereGeometry args={[0.15, 16, 12]} />
+          <Skin color={PTERO_M} thickness={1} />
+        </mesh>
+        {/* 가슴 솜털 */}
+        {[-1, 0, 1].map((k) => (
+          <mesh key={k} position={[k * 0.045, 0.1 - Math.abs(k) * 0.02, 0.19]}>
+            <sphereGeometry args={[0.035, 10, 8]} />
+            <Skin color="#FFFFFF" thickness={0.9} />
+          </mesh>
+        ))}
+        {/* 짧은 꼬리 */}
+        <mesh position={[0, 0.06, -0.24]} rotation-x={-1.35}>
+          <coneGeometry args={[0.04, 0.16, 8]} />
+          <Skin color={PTERO} thickness={1.1} />
+        </mesh>
+        {[-1, 1].map((side, i) => (
+          <group key={side} ref={(g) => { wings.current[i] = g }} position={[side * 0.1, 0.12, 0.08]}>
+            <group scale-x={side}>
+              <PteroWing outer={(g) => { fingers.current[i] = g }} />
+            </group>
+          </group>
+        ))}
+        {/* 긴 목 */}
+        <mesh position={[0, 0.17, 0.17]} rotation-x={0.7}>
+          <capsuleGeometry args={[0.045, 0.12, 4, 10]} />
+          <Skin color={PTERO} thickness={1.2} />
+        </mesh>
+        <group ref={head} position={[0, 0.27, 0.25]}>
+          <mesh castShadow>
+            <sphereGeometry args={[0.12, 20, 16]} />
+            <Skin color={PTERO} />
+          </mesh>
+          {/* 뒤로 길게 뻗은 볏(끝은 금빛) */}
+          <mesh position={[0, 0.09, -0.22]} rotation-x={-1.95} scale={[0.4, 1, 1]}>
+            <coneGeometry args={[0.085, 0.44, 12]} />
+            <Skin color={PTERO_CREST} thickness={1.2} />
+          </mesh>
+          {/* 볏 줄무늬(진분홍) */}
+          <mesh position={[0, 0.095, -0.2]} rotation-x={-1.95} scale={[0.42, 1, 0.35]}>
+            <coneGeometry args={[0.07, 0.3, 10]} />
+            <Skin color={PTERO_CREST_D} thickness={0.6} />
+          </mesh>
+          <mesh position={[0, 0.15, -0.42]} scale={[0.5, 0.6, 1]}>
+            <sphereGeometry args={[0.03, 10, 8]} />
+            <Skin color={GOLD} thickness={1} />
+          </mesh>
+          {/* 길쭉한 부리: 위 · 아래(아래는 딱딱 벌어진다) */}
+          <mesh position={[0, 0.0, 0.25]} rotation-x={Math.PI / 2} scale={[0.75, 1, 0.55]}>
+            <coneGeometry args={[0.055, 0.36, 12]} />
+            <Skin color={COLORS.butter} thickness={1.2} />
+          </mesh>
+          <group ref={jaw} position={[0, -0.03, 0.08]}>
+            <mesh position={[0, 0, 0.14]} rotation-x={Math.PI / 2} scale={[0.6, 1, 0.4]}>
+              <coneGeometry args={[0.045, 0.28, 10]} />
+              <Skin color={COLORS.butter} thickness={1.1} />
+            </mesh>
+          </group>
+          {[-1, 1].map((side) => (
+            <group key={side}>
+              <mesh position={[side * 0.075, 0.03, 0.07]}>
+                <sphereGeometry args={[0.032, 12, 10]} />
+                <meshBasicMaterial color="#FFFFFF" />
+              </mesh>
+              <Ink radius={0.02} position={[side * 0.083, 0.032, 0.093]} />
+              {/* 눈 반짝 · 콧구멍 */}
+              <mesh position={[side * 0.088, 0.04, 0.108]}>
+                <sphereGeometry args={[0.007, 6, 6]} />
+                <meshBasicMaterial color="#FFFFFF" />
+              </mesh>
+              <mesh position={[side * 0.022, 0.03, 0.2]} rotation={[Math.PI / 2, 0, 0]}>
+                <capsuleGeometry args={[0.005, 0.03, 2, 4]} />
+                <meshBasicMaterial color={INK} />
+              </mesh>
+              {/* 볼터치 */}
+              <mesh position={[side * 0.08, -0.03, 0.06]} scale={[1, 0.6, 0.4]}>
+                <sphereGeometry args={[0.022, 8, 6]} />
+                <meshBasicMaterial color="#FFB3C9" />
+              </mesh>
+            </group>
+          ))}
+          {/* 전설 왕관 고리: 머리 위에서 천천히 돈다 */}
+          <group ref={halo} position-y={0.2}>
+            <mesh rotation-x={Math.PI / 2}>
+              <torusGeometry args={[0.085, 0.014, 8, 24]} />
+              <meshBasicMaterial color={GOLD} />
+            </mesh>
+            {[0, 1, 2, 3, 4].map((i) => { const a = (i / 5) * Math.PI * 2; return (
+              <mesh key={i} position={[Math.sin(a) * 0.085, 0.03, Math.cos(a) * 0.085]}>
+                <coneGeometry args={[0.016, 0.05, 4]} />
+                <meshBasicMaterial color={GOLD} />
+              </mesh>
+            ) })}
+          </group>
+        </group>
+      </group>
+      {/* 전설 반짝이: 둘레를 크게 돈다 */}
+      <group ref={glints} position-y={0.35}>
+        {[0, 1, 2, 3].map((i) => { const a = (i / 4) * Math.PI * 2; return (
+          <mesh key={i} position={[Math.sin(a) * 0.75, Math.sin(a * 2) * 0.1, Math.cos(a) * 0.75]} scale={[0.55, 1.4, 0.55]}>
+            <octahedronGeometry args={[0.04, 0]} />
+            <meshBasicMaterial color={i % 2 ? PTERO_CREST : GOLD} />
+          </mesh>
+        ) })}
+      </group>
+    </group>
+  )
+}
+
 // 쓰다듬을 때 몸 전체 반응(펫마다): hop 통통 · roll 좌우로 뒹굴 · yaw 몸 흔들기 · rear 뒷발로 일어서기(엉덩이를 축으로). 앉기는 위 SIT 표
 type BodyReact = { hop: number; hopF: number; roll: number; rollF: number; yaw: number; yawF: number; rear: number }
 const BODY: Record<PetKind, BodyReact> = {
@@ -1212,6 +1434,7 @@ const BODY: Record<PetKind, BodyReact> = {
   penguin: { hop: 0, hopF: 0, roll: 0.16, rollF: 7, yaw: 0.2, yawF: 7, rear: 0 },   // 펭귄: 뒤뚱뒤뚱 신나게
   dragon: { hop: 0.14, hopF: 4, roll: 0, rollF: 0, yaw: 0.15, yawF: 4, rear: 0 },   // 용: 둥실둥실
   eagle: { hop: 0, hopF: 0, roll: 0, rollF: 0, yaw: 0, yawF: 0, rear: 0 },   // 독수리: 쓰다듬으면 날개를 활짝(Eagle)
+  ptero: { hop: 0, hopF: 0, roll: 0, rollF: 0, yaw: 0, yawF: 0, rear: 0 },    // 익룡: 날개를 활짝 펴고 부리를 딱딱(Pterosaur)
 }
 
 export function Pet({ kind, motion, act }: { kind: PetKind; motion?: RefObject<WalkMotion>; act?: RefObject<PetAct> }) {
@@ -1247,6 +1470,7 @@ export function Pet({ kind, motion, act }: { kind: PetKind; motion?: RefObject<W
     : kind === 'penguin' ? <Penguin motion={motion} act={act} />
     : kind === 'dragon' ? <Dragon motion={motion} act={act} />
     : kind === 'eagle' ? <Eagle motion={motion} act={act} />
+    : kind === 'ptero' ? <Pterosaur motion={motion} act={act} />
     : <DoodleDog motion={motion} act={act} />
   return <group ref={gait}><group ref={outer}><group ref={inner}>{body}</group></group></group>
 }
