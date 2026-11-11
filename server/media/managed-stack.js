@@ -37,8 +37,8 @@ export function createManagedMediaStack(env, peers, { notifySwitch, fetchImpl = 
       livekit_bytes: 5000000,
       cloudflare: (Number(env.CLOUDFLARE_LEASE_SECONDS || 300) + Number(env.CLOUDFLARE_WATCHDOG_BUFFER_SECONDS || 120)) * Number(env.CLOUDFLARE_RESERVE_BYTES_PER_SECOND || 2000000) + 10000000,
     };
-    // Daily와 Cloudflare에는 확인된 강제 청구 상한이 없다. 운영은 무료 한도가 강제되는 LiveKit만 사용한다.
-    const allowedProviders = env.NODE_ENV === "production" || env.MEDIA_TEST_FREE_ONLY === "1" ? ["livekit"] : ["livekit", "daily", "cloudflare"];
+    // 운영도 예약 한도와 연결 정리를 거쳐 세 제공자를 순서대로 사용한다. 단일 제공자 시험만 별도로 제한한다.
+    const allowedProviders = env.MEDIA_TEST_FREE_ONLY === "1" ? ["livekit"] : ["livekit", "daily", "cloudflare"];
     router = createDurableMediaRouter({ store, providers: { livekit, daily, cloudflare }, cleaners, notifySwitch, resumeMinimums, allowedProviders });
     const dailyPermissions = createDailyPermissionManager({ peers, store, namespace, apiKey: env.DAILY_API_KEY, fetchImpl, onFailure: async () => router.markUnavailable("daily") });
     let stopping = false, started = false;

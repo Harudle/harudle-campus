@@ -276,7 +276,10 @@ export function openDurableMediaState(path, { now = Date.now } = {}) {
           enough &&= validInt(minimums.livekit_bytes) && minimums.livekit_bytes > 0 && bytes.limit - bytes.reserved >= minimums.livekit_bytes;
         }
         const retryUnavailable = provider === blocked.provider && ["provider_unavailable", "cleanup_unavailable"].includes(reason);
-        if ((freed || retryUnavailable) && enough) return provider;
+        // 단독 제공자 정책으로 멈춘 뒤 허용 목록을 늘렸다면, 아직 시도하지 않은 다음 제공자를 사용한다.
+        // 마지막 제공자까지 소진한 경우에는 예약량 감소 또는 해당 제공자의 장애 복구를 계속 기다린다.
+        const nextAllowed = allowedProviders.includes(blocked.provider) && allowedProviders.indexOf(provider) > allowedProviders.indexOf(blocked.provider);
+        if ((freed || retryUnavailable || nextAllowed) && enough) return provider;
       }
       return null;
     },
