@@ -1,4 +1,4 @@
-// 컷 상점의 펫(전설 익룡 · 초레어 독수리는 날아다닌다. 독수리는 주인 어깨에, 익룡은 옆 바닥이나 머리 위에 앉는다): 고양이 · 판다 · 여우 · 얼룩말 · 에뮤 (하루들 닉네임에 나오는 동물들) · 러버덕 · 카피바라 · 펭귄 + 레어 대형 펫 호랑이 · 불곰 · 용(떠서 따라온다)
+// 컷 상점의 펫(전설 코끼리는 주인을 등에 태운다. 전설 익룡 · 초레어 독수리는 날아다닌다. 독수리는 주인 어깨에, 익룡은 옆 바닥이나 머리 위에 앉는다): 고양이 · 판다 · 여우 · 얼룩말 · 에뮤 (하루들 닉네임에 나오는 동물들) · 러버덕 · 카피바라 · 펭귄 + 레어 대형 펫 호랑이 · 불곰 · 용(떠서 따라온다)
 // 두들(강아지)과 같은 낙서 문법으로 그린다: 흰 몸 + 먹선 다리 + 라벤더 포인트. 발이 원점이고 +z를 바라본다.
 // 주인이 멈춰 서 있으면 잠시 뒤 엎드려 쉬면서 주인을 올려다보고, 걸으면 꼬리를 더 빨리 흔든다.
 // 이 파일은 캠퍼스 것이다(src/harudle는 하루들 월드 복사본이라 다시 복사하면 덮어써진다).
@@ -9,13 +9,13 @@ import { COLORS } from '../harudle/brand'
 import { Face, Ink, INK, LILAC, Line, LINE_RADIUS, Skin, useLegSwing, type WalkMotion } from '../harudle/Characters'
 import { Toon } from '../harudle/toon'
 
-export type PetKind = 'doodle' | 'cat' | 'panda' | 'fox' | 'zebra' | 'emu' | 'tiger' | 'bear' | 'duck' | 'capybara' | 'penguin' | 'dragon' | 'eagle' | 'ptero'
-const SKU_PET: Record<string, PetKind> = { pet_cat: 'cat', pet_panda: 'panda', pet_fox: 'fox', pet_zebra: 'zebra', pet_emu: 'emu', pet_tiger: 'tiger', pet_bear: 'bear', pet_duck: 'duck', pet_capybara: 'capybara', pet_penguin: 'penguin', pet_dragon: 'dragon', pet_eagle: 'eagle', pet_ptero: 'ptero' }
+export type PetKind = 'doodle' | 'cat' | 'panda' | 'fox' | 'zebra' | 'emu' | 'tiger' | 'bear' | 'duck' | 'capybara' | 'penguin' | 'dragon' | 'eagle' | 'ptero' | 'elephant'
+const SKU_PET: Record<string, PetKind> = { pet_cat: 'cat', pet_panda: 'panda', pet_fox: 'fox', pet_zebra: 'zebra', pet_emu: 'emu', pet_tiger: 'tiger', pet_bear: 'bear', pet_duck: 'duck', pet_capybara: 'capybara', pet_penguin: 'penguin', pet_dragon: 'dragon', pet_eagle: 'eagle', pet_ptero: 'ptero', pet_elephant: 'elephant' }
 /** 상점 sku → 그릴 펫. 모르는 값이면 null */
 export const petOfSku = (sku: unknown): PetKind | null => (typeof sku === 'string' && SKU_PET[sku]) || null
 
 /** 주인이 시킨 것(엔진 dog.act → doll.anim.petAct): sit 앉기 · pet 쓰다듬기를 받는 중. t는 시작한 뒤 흐른 시간(초) */
-export type PetAct = { kind: 'sit' | 'pet' | null; t: number }
+export type PetAct = { kind: 'sit' | 'pet' | 'ride' | 'toot' | null; t: number }   // ride · toot: 코끼리가 주인을 태운 중 · 태운 채 코를 들어 뿌우
 type PetProps = { motion?: RefObject<WalkMotion>; act?: RefObject<PetAct> }
 const FOX = '#FFB37A'
 const REST_AFTER = 2.6   // 이만큼(초) 멈춰 있으면 엎드린다
@@ -27,7 +27,7 @@ const GEO: Record<PetKind, { legY: number; front: number; back: number }> = {
   fox: { legY: 0.32, front: 0.22, back: -0.24 }, zebra: { legY: 0.4, front: 0.24, back: -0.26 }, emu: { legY: 0.5, front: 0, back: 0 },
   tiger: { legY: 0.36, front: 0.22, back: -0.26 }, bear: { legY: 0.34, front: 0.22, back: -0.24 },
   duck: { legY: 0.12, front: 0, back: 0 }, capybara: { legY: 0.24, front: 0.2, back: -0.22 }, penguin: { legY: 0.1, front: 0, back: 0 }, dragon: { legY: 0.24, front: 0.18, back: -0.22 },
-  eagle: { legY: 0.14, front: 0, back: 0 }, ptero: { legY: 0.14, front: 0, back: 0 },
+  eagle: { legY: 0.14, front: 0, back: 0 }, ptero: { legY: 0.14, front: 0, back: 0 }, elephant: { legY: 0.55, front: 0.34, back: -0.36 },
 }
 /** 걸음걸이(펫마다): walkF · runF 걸음 빠르기(위상/초) · walkAmp · runAmp 다리 흔드는 폭 · walkBob · runBob 몸이 들썩이는 높이
  *  lean 달릴 때 앞으로 숙이는 각 · roll 걸을 때 좌우로 흔들리는 각 · style 달리는 모양
@@ -49,6 +49,7 @@ export const GAIT: Record<PetKind, Gait> = {
   penguin: { walkF: 13, runF: 21, walkAmp: 0, runAmp: 0, walkBob: 0.02, runBob: 0.05, lean: 0.3, roll: 0, style: 'waddle' },         // 펭귄: 몸을 앞으로 기울이고 날개를 펴서 종종종
   eagle: { walkF: 5, runF: 8, walkAmp: 0, runAmp: 0, walkBob: 0, runBob: 0, lean: 0, roll: 0, style: 'fly' },   // 독수리: 날개 · 몸짓은 Eagle이, 어디를 날지는 엔진(flyPet)이 정한다
   ptero: { walkF: 5, runF: 8, walkAmp: 0, runAmp: 0, walkBob: 0, runBob: 0, lean: 0, roll: 0, style: 'fly' },    // 익룡(전설): 독수리처럼 엔진(flyPet)이 날린다
+  elephant: { walkF: 5.5, runF: 9, walkAmp: 0.36, runAmp: 0.6, walkBob: 0.022, runBob: 0.04, lean: 0.04, roll: 0.03, style: 'lumber' },   // 코끼리(전설): 쿵 · 쿵 느리고 묵직하게
   dragon: { walkF: 5, runF: 8, walkAmp: 0.18, runAmp: 0.1, walkBob: 0, runBob: 0, lean: 0.38, roll: 0, style: 'fly' },               // 용: 뛰면 다리를 접고 더 높이, 더 빨리 날갯짓
 }
 const LEG_TUCK = 0.9   // 날 때 다리를 뒤로 접는 각
@@ -74,6 +75,7 @@ const SIT: Record<PetKind, SitPose> = {
   dragon: { tilt: 0.6, hip: 0.1, front: { stand: true }, back: { ang: -1.3, sc: 0.55, splay: 0.15 }, head: 0.2 },   // 용: 내려앉아 앞발을 모으고 고개를 든다
   eagle: { tilt: 0, hip: 0.14, front: { stand: true }, back: { ang: 0, sc: 1, splay: 0 }, head: 0 },   // 독수리: 앉으라면 주인 어깨에 앉는다(엔진)
   ptero: { tilt: 0, hip: 0.14, front: { stand: true }, back: { ang: 0, sc: 1, splay: 0 }, head: 0 },   // 익룡: 앉으라면 주인 머리 위에 앉는다(엔진)
+  elephant: { tilt: 0.05, hip: 0.2, front: { ang: 1.35, sc: 0.5 }, back: { ang: -1.35, sc: 0.5, splay: 0.06 }, head: 0.12 },   // 코끼리: 네 다리를 접고 무릎을 꿇는다
 }
 // 앉은 정도 s(0~1)에서 몸 기울기 θ와 내려갈 높이(엉덩이가 hip에 닿게)
 function sitBody(kind: PetKind, s: number) {
@@ -91,7 +93,8 @@ function useRest(motion: RefObject<WalkMotion> | undefined, legY: number, act?: 
     const sitting = a?.kind === 'sit', petting = a?.kind === 'pet', pt = a?.t ?? 0
     s.still = moving ? 0 : s.still + dt
     s.sit = THREE.MathUtils.damp(s.sit, sitting ? 1 : 0, 8, dt); s.pet = THREE.MathUtils.damp(s.pet, petting ? 1 : 0, 8, dt)
-    const lie = petting ? kind === 'tiger' : sitting ? TWO_LEGS.has(kind) : s.still > REST_AFTER   // 호랑이는 쓰다듬으면 벌러덩 눕고, 두 발 에뮤는 앉으라면 다리를 접어 쪼그린다
+    const riding = a?.kind === 'ride' || a?.kind === 'toot'   // 주인을 태운 코끼리는 서 있는다(엎드리면 탄 사람이 공중에 뜬다)
+    const lie = petting ? kind === 'tiger' : sitting ? TWO_LEGS.has(kind) : !riding && s.still > REST_AFTER   // 호랑이는 쓰다듬으면 벌러덩 눕고, 두 발 에뮤는 앉으라면 다리를 접어 쪼그린다
     s.rest = THREE.MathUtils.damp(s.rest, lie ? 1 : 0, moving ? 14 : 5, dt)
     if (legs.current) legs.current.scale.y = 1 - CROUCH * s.rest
     // 앉기: 몸은 Pet이 엉덩이를 축으로 θ만큼 세우고 내린다. 다리는 그 안에서 세계 기준 각도가 되게 θ를 되돌려 준다
@@ -131,6 +134,7 @@ const PET_HEAD: Partial<Record<PetKind, { lean: number; nod: number; nodF: numbe
   dragon: { lean: -0.3, nod: 0, nodF: 0, rub: 0.22, rubF: 3 },
   eagle: { lean: 0, nod: 0, nodF: 0, rub: 0, rubF: 0 },
   ptero: { lean: 0, nod: 0, nodF: 0, rub: 0, rubF: 0 },
+  elephant: { lean: 0, nod: 0.06, nodF: 4, rub: 0, rubF: 0 },   // 코를 번쩍 들고 귀를 펄럭인다(Elephant)
 }
 
 /** 다리 하나: 먹선 + 동그란 발 */
@@ -1418,6 +1422,244 @@ export function Pterosaur({ motion, act }: PetProps) {
   )
 }
 
+/* ───── 코끼리(전설 · 탑승): 사람보다 훨씬 큰 덩치. 등에 금빛 안장을 얹고 주인을 태운다 ─────
+   타는 자리 · 걷는 길은 엔진(ridePet)이 정하고, 여기서는 몸짓만 그린다: 코는 마디마다 흔들리고, 쓰다듬거나 "뿌우"(toot)를 시키면 번쩍 들어 올린다.
+   큰 귀는 늘 천천히 부채질하고, 걸으면 더 크게 펄럭인다 */
+const ELE = '#B7C5E0', ELE_L = '#DDE5F4', ELE_D = '#8E9EC2', ELE_EAR = '#FFB8CC', IVORY = '#FFF6DC', RUBY = '#E8456B', ROYAL = '#7A5CE0'
+/** 코끼리 배율(펫 공통 배율 0.5 전). 등 높이가 사람 키의 1.5배쯤 된다 */
+export const ELE_SCALE = 2.6
+const ELE_LEG = 0.55, ELE_BODY_Y = 0.93, ELE_R = 0.4, ELE_W = 1.12
+const TRUNK_N = 7, TRUNK_LEN = 0.118
+const TRUNK_REST = [1.1, 0.2, 0.14, 0.02, -0.3, -0.6, -0.8], TRUNK_UP = [-0.9, -0.4, -0.2, 0.1, 0.4, 0.5, 0.5]   // 마디마다 꺾는 각: 늘어뜨린 코 · 번쩍 든 코
+
+/** 기둥 같은 다리: 굵은 몸 색 기둥 + 납작한 발 + 상아색 발톱 셋 + 금 발찌 */
+function ElephantLeg() {
+  const L = ELE_LEG, r = 0.125
+  return (
+    <>
+      <mesh position-y={-L / 2 + 0.02} castShadow>
+        <capsuleGeometry args={[r, L - r * 1.4, 6, 14]} />
+        <Skin color={ELE} thickness={1.5} />
+      </mesh>
+      <mesh position={[0, -L + 0.07, 0.015]} scale={[1.12, 0.55, 1.16]} castShadow>
+        <sphereGeometry args={[0.145, 16, 12]} />
+        <Skin color={ELE} thickness={1.4} />
+      </mesh>
+      {[-1, 0, 1].map((k) => (
+        <mesh key={k} position={[k * 0.075, -L + 0.045, 0.155 - Math.abs(k) * 0.03]} scale={[1, 0.8, 0.6]}>
+          <sphereGeometry args={[0.036, 10, 8]} />
+          <meshBasicMaterial color={IVORY} />
+        </mesh>
+      ))}
+      <mesh position-y={-L + 0.17} rotation-x={Math.PI / 2}>
+        <torusGeometry args={[0.132, 0.017, 6, 20]} />
+        <meshBasicMaterial color={GOLD} />
+      </mesh>
+    </>
+  )
+}
+
+export function Elephant({ motion, act }: PetProps) {
+  const rest = useRest(motion, ELE_LEG, act, 'elephant')
+  const trunk = useRef<(THREE.Group | null)[]>([]), ears = useRef<(THREE.Group | null)[]>([]), nod = useRef<THREE.Group>(null), glints = useRef<THREE.Group>(null), st = useRef({ up: 0 })
+  useFrame(({ clock }, delta) => {
+    const dt = Math.min(delta, 0.05), t = clock.elapsedTime, m = motion?.current, a = act?.current, s = st.current
+    const amt = Math.min(1, m?.amount ?? 0), ph = m?.phase ?? 0
+    s.up = THREE.MathUtils.damp(s.up, a?.kind === 'pet' || a?.kind === 'toot' ? 1 : 0, 6, dt)
+    trunk.current.forEach((g, i) => {
+      if (!g) return
+      const hang = TRUNK_REST[i] + Math.sin(t * 1.4 - i * 0.55) * 0.05 + (i === 0 ? Math.sin(ph) * 0.14 * amt : 0)   // 걸으면 코가 앞뒤로 흔들린다
+      g.rotation.x = THREE.MathUtils.lerp(hang, TRUNK_UP[i] + Math.sin(t * 10 - i) * 0.05, s.up)
+      g.rotation.y = Math.sin(t * 1.1 - i * 0.5) * (0.06 + 0.05 * amt) * (1 - s.up)
+    })
+    ears.current.forEach((g, i) => { if (g) g.rotation.y = (i ? 1 : -1) * (0.32 + Math.sin(t * (1.6 + 3 * amt + 9 * s.up) + i * 0.4) * (0.13 + 0.1 * amt + 0.16 * s.up)) })
+    if (nod.current) nod.current.rotation.x = Math.sin(ph * 2) * 0.03 * amt - 0.32 * s.up   // 뿌우: 고개를 치켜든다
+    if (glints.current) { glints.current.rotation.y = t * 0.7; glints.current.children.forEach((c, i) => { c.scale.setScalar(0.6 + 0.6 * Math.max(0, Math.sin(t * 2.4 + i * 1.3))) }) }
+  })
+  const seg = (i: number): ReactNode => {
+    const r = THREE.MathUtils.lerp(0.108, 0.052, i / (TRUNK_N - 1))
+    return (
+      <group ref={(g) => { trunk.current[i] = g }} position-z={i ? TRUNK_LEN : 0}>
+        <mesh position-z={TRUNK_LEN / 2} rotation-x={Math.PI / 2} castShadow>
+          <capsuleGeometry args={[r, TRUNK_LEN, 5, 12]} />
+          <Skin color={ELE} thickness={1.3} />
+        </mesh>
+        {i > 0 && (
+          <mesh>
+            <torusGeometry args={[r + 0.006, 0.006, 5, 18]} />
+            <meshBasicMaterial color={ELE_D} />
+          </mesh>
+        )}
+        {i < TRUNK_N - 1 ? seg(i + 1) : (
+          <mesh position-z={TRUNK_LEN + 0.03} scale={[1, 1, 0.5]}>
+            <sphereGeometry args={[0.045, 10, 8]} />
+            <meshBasicMaterial color={ELE_EAR} />
+          </mesh>
+        )}
+      </group>
+    )
+  }
+  const edge = Math.sin(1.75) * (ELE_R + 0.03) * ELE_W, edgeY = ELE_BODY_Y + Math.cos(1.75) * (ELE_R + 0.03)
+  return (
+    <group scale={ELE_SCALE}>
+      <FourLegs kind="elephant" motion={motion} y={ELE_LEG} front={0.34} back={-0.36} x={0.25} length={ELE_LEG} legs={rest.legs} hips={rest.hips} leg={<ElephantLeg />} />
+      <group ref={rest.body}>
+        {/* 몸통 · 밝은 배 · 어깨 혹 · 엉덩이 */}
+        <mesh position-y={ELE_BODY_Y} rotation-x={Math.PI / 2} scale={[ELE_W, 1, 1]} castShadow>
+          <capsuleGeometry args={[ELE_R, 0.56, 10, 22]} />
+          <Skin color={ELE} />
+        </mesh>
+        <mesh position={[0, ELE_BODY_Y - 0.1, 0]} rotation-x={Math.PI / 2} scale={[0.92, 1, 0.8]}>
+          <capsuleGeometry args={[ELE_R - 0.04, 0.5, 6, 14]} />
+          <meshBasicMaterial color={ELE_L} />
+        </mesh>
+        <mesh position={[0, ELE_BODY_Y + 0.2, 0.36]} scale={[1.15, 0.8, 1]} castShadow>
+          <sphereGeometry args={[0.3, 18, 14]} />
+          <Skin color={ELE} thickness={1.4} />
+        </mesh>
+        <mesh position={[0, ELE_BODY_Y + 0.06, -0.42]} scale={[1.1, 1, 0.9]} castShadow>
+          <sphereGeometry args={[0.36, 18, 14]} />
+          <Skin color={ELE} thickness={1.4} />
+        </mesh>
+        {/* 안장 담요: 등을 덮는 붉은 천 + 금 테두리 · 술 · 무늬 */}
+        <mesh position-y={ELE_BODY_Y} rotation-x={Math.PI / 2} scale={[ELE_W, 1, 1]}>
+          <cylinderGeometry args={[ELE_R + 0.022, ELE_R + 0.022, 0.6, 28, 1, true, Math.PI - 1.75, 3.5]} />
+          <meshBasicMaterial color={RUBY} side={THREE.DoubleSide} />
+        </mesh>
+        {[-0.3, 0.3].map((z) => (
+          <group key={z} position={[0, ELE_BODY_Y, z]} scale={[ELE_W, 1, 1]}>
+            <mesh rotation-z={Math.PI / 2 - 1.75}>
+              <torusGeometry args={[ELE_R + 0.026, 0.02, 6, 28, 3.5]} />
+              <meshBasicMaterial color={GOLD} />
+            </mesh>
+          </group>
+        ))}
+        {[-1, 1].map((side) => (
+          <group key={side}>
+            <mesh position={[side * edge, edgeY, 0]} rotation-x={Math.PI / 2}>
+              <capsuleGeometry args={[0.02, 0.6, 4, 8]} />
+              <meshBasicMaterial color={GOLD} />
+            </mesh>
+            {[-0.24, -0.08, 0.08, 0.24].map((z) => (
+              <group key={z} position={[side * edge, edgeY - 0.02, z]}>
+                <mesh position-y={-0.03}><capsuleGeometry args={[0.008, 0.05, 3, 5]} /><meshBasicMaterial color={GOLD} /></mesh>
+                <mesh position-y={-0.075}><sphereGeometry args={[0.024, 8, 6]} /><meshBasicMaterial color={GOLD} /></mesh>
+              </group>
+            ))}
+            {[-0.17, 0, 0.17].map((z, i) => { const a = 1.12, rr = ELE_R + 0.03; return (
+              <mesh key={z} position={[side * Math.sin(a) * rr * ELE_W, ELE_BODY_Y + Math.cos(a) * rr, z]} rotation-z={-side * a} scale={[0.25, 1, 1]}>
+                <octahedronGeometry args={[i === 1 ? 0.075 : 0.05, 0]} />
+                <meshBasicMaterial color={i === 1 ? GOLD : '#FFE9A8'} />
+              </mesh>
+            ) })}
+          </group>
+        ))}
+        {/* 안장 방석 + 앞뒤 금 손잡이 */}
+        <mesh position-y={ELE_BODY_Y + ELE_R + 0.035} scale={[1.3, 0.36, 1.45]} castShadow>
+          <sphereGeometry args={[0.2, 18, 12]} />
+          <Skin color={ROYAL} thickness={1.3} />
+        </mesh>
+        {[-0.27, 0.27].map((z) => (
+          <mesh key={z} position={[0, ELE_BODY_Y + ELE_R + 0.01, z]} scale={[1.25, z > 0 ? 0.7 : 1, 1]}>
+            <torusGeometry args={[0.17, 0.024, 8, 20, Math.PI]} />
+            <meshBasicMaterial color={GOLD} />
+          </mesh>
+        ))}
+        <Tail motion={motion} position={[0, ELE_BODY_Y + 0.18, -0.74]} speed={2.2} amount={0.4}>
+          <group rotation-x={0.3}>
+            <mesh position-y={-0.17}>
+              <capsuleGeometry args={[0.022, 0.32, 4, 8]} />
+              <Skin color={ELE} thickness={1.1} />
+            </mesh>
+            <mesh position-y={-0.37} scale={[1, 1.5, 1]}>
+              <sphereGeometry args={[0.04, 10, 8]} />
+              <meshBasicMaterial color={INK} />
+            </mesh>
+          </group>
+        </Tail>
+        <group ref={rest.head} position={[0, ELE_BODY_Y + 0.14, 0.76]}>
+          <group ref={nod}>
+            <mesh castShadow>
+              <sphereGeometry args={[0.34, 28, 22]} />
+              <Skin color={ELE} />
+            </mesh>
+            {/* 이마의 두 혹 */}
+            {[-1, 1].map((side) => (
+              <mesh key={side} position={[side * 0.12, 0.24, 0.02]} castShadow>
+                <sphereGeometry args={[0.17, 16, 12]} />
+                <Skin color={ELE} thickness={1.3} />
+              </mesh>
+            ))}
+            {/* 큰 귀: 안쪽은 분홍 */}
+            {[-1, 1].map((side, i) => (
+              <group key={side} ref={(g) => { ears.current[i] = g }} position={[side * 0.26, 0.06, -0.08]}>
+                <mesh position={[side * 0.3, 0, 0]} scale={[1, 1.22, 0.14]} castShadow>
+                  <sphereGeometry args={[0.33, 22, 16]} />
+                  <Skin color={ELE} thickness={1.5} />
+                </mesh>
+                <mesh position={[side * 0.31, -0.01, 0.035]} scale={[1, 1.2, 0.08]}>
+                  <sphereGeometry args={[0.25, 18, 14]} />
+                  <meshBasicMaterial color={ELE_EAR} />
+                </mesh>
+              </group>
+            ))}
+            <group scale={[1.35, 1.35, 1]}><Face radius={0.34} smile={false} /></group>
+            <Cheeks radius={0.34} z={0.27} y={-0.08} />
+            {/* 상아: 앞으로 휘어 오르고 끝은 금 */}
+            {[-1, 1].map((side) => (
+              <group key={side} position={[side * 0.17, -0.1, 0.24]} rotation-y={-(Math.PI / 2 - side * 0.28)}>
+                <group rotation-z={-1.9}>
+                  <mesh castShadow>
+                    <torusGeometry args={[0.22, 0.042, 8, 18, 1.5]} />
+                    <Skin color={IVORY} thickness={1.2} />
+                  </mesh>
+                  <mesh position={[0.22, 0, 0]}><sphereGeometry args={[0.055, 10, 8]} /><meshBasicMaterial color={GOLD} /></mesh>
+                  <mesh position={[Math.cos(1.5) * 0.22, Math.sin(1.5) * 0.22, 0]}><sphereGeometry args={[0.044, 10, 8]} /><meshBasicMaterial color={GOLD} /></mesh>
+                </group>
+              </group>
+            ))}
+            {/* 코: 마디 일곱 */}
+            <group position={[0, -0.12, 0.27]}>{seg(0)}</group>
+            {/* 전설 머리 장식: 이마의 금 마름모 + 루비, 정수리의 작은 왕관 */}
+            <group position={[0, 0.17, 0.3]} rotation-x={-0.5}>
+              <mesh rotation-x={Math.PI / 2} scale={[0.8, 1, 1.15]}>
+                <cylinderGeometry args={[0.085, 0.085, 0.016, 4]} />
+                <meshBasicMaterial color={GOLD} />
+              </mesh>
+              <mesh position-z={0.012} scale={[1, 1, 0.5]}><sphereGeometry args={[0.034, 12, 10]} /><meshBasicMaterial color={RUBY} /></mesh>
+              {[-1, 1].map((side) => (
+                <mesh key={side} position={[side * 0.1, 0.02, -0.01]}><sphereGeometry args={[0.018, 8, 6]} /><meshBasicMaterial color={GOLD} /></mesh>
+              ))}
+            </group>
+            <group position-y={0.4}>
+              <mesh rotation-x={Math.PI / 2}>
+                <torusGeometry args={[0.1, 0.018, 8, 24]} />
+                <meshBasicMaterial color={GOLD} />
+              </mesh>
+              {[0, 1, 2, 3, 4].map((i) => { const a = (i / 5) * Math.PI * 2; return (
+                <group key={i} position={[Math.sin(a) * 0.1, 0.045, Math.cos(a) * 0.1]}>
+                  <mesh><coneGeometry args={[0.022, 0.075, 4]} /><meshBasicMaterial color={GOLD} /></mesh>
+                  <mesh position-y={0.045}><sphereGeometry args={[0.012, 6, 5]} /><meshBasicMaterial color={i % 2 ? RUBY : '#FFFFFF'} /></mesh>
+                </group>
+              ) })}
+            </group>
+          </group>
+        </group>
+      </group>
+      {/* 전설 반짝이: 큰 몸 둘레를 돈다 */}
+      <group ref={glints} position-y={0.95}>
+        {[0, 1, 2, 3, 4].map((i) => { const a = (i / 5) * Math.PI * 2; return (
+          <mesh key={i} position={[Math.sin(a) * 0.95, Math.sin(a * 2) * 0.22, Math.cos(a) * 1.15]} scale={[0.55, 1.4, 0.55]}>
+            <octahedronGeometry args={[0.035, 0]} />
+            <meshBasicMaterial color={i % 2 ? ELE_EAR : GOLD} />
+          </mesh>
+        ) })}
+      </group>
+    </group>
+  )
+}
+
+const scaleOf = (kind: PetKind) => (kind === 'elephant' ? ELE_SCALE : BIG_PETS.has(kind) ? BIG : 1)
 // 쓰다듬을 때 몸 전체 반응(펫마다): hop 통통 · roll 좌우로 뒹굴 · yaw 몸 흔들기 · rear 뒷발로 일어서기(엉덩이를 축으로). 앉기는 위 SIT 표
 type BodyReact = { hop: number; hopF: number; roll: number; rollF: number; yaw: number; yawF: number; rear: number }
 const BODY: Record<PetKind, BodyReact> = {
@@ -1435,13 +1677,14 @@ const BODY: Record<PetKind, BodyReact> = {
   dragon: { hop: 0.14, hopF: 4, roll: 0, rollF: 0, yaw: 0.15, yawF: 4, rear: 0 },   // 용: 둥실둥실
   eagle: { hop: 0, hopF: 0, roll: 0, rollF: 0, yaw: 0, yawF: 0, rear: 0 },   // 독수리: 쓰다듬으면 날개를 활짝(Eagle)
   ptero: { hop: 0, hopF: 0, roll: 0, rollF: 0, yaw: 0, yawF: 0, rear: 0 },    // 익룡: 날개를 활짝 펴고 부리를 딱딱(Pterosaur)
+  elephant: { hop: 0, hopF: 0, roll: 0.025, rollF: 3, yaw: 0, yawF: 0, rear: 0.1 },   // 코끼리: 앞발을 살짝 들고 뿌우
 }
 
 export function Pet({ kind, motion, act }: { kind: PetKind; motion?: RefObject<WalkMotion>; act?: RefObject<PetAct> }) {
   const outer = useRef<THREE.Group>(null), inner = useRef<THREE.Group>(null), gait = useRef<THREE.Group>(null), st = useRef({ sit: 0, pet: 0 })
   useFrame(() => {   // 걸음걸이: 들썩임 · 달릴 때 숙이기 · 좌우 흔들림 · 질주할 때 허리 접기
     const m = motion?.current, gr = gait.current; if (!m || !gr) return
-    const g = GAIT[kind] ?? GAIT.doodle, r = m.run ?? 0, a = Math.min(1, m.amount), ph = m.phase, scale = BIG_PETS.has(kind) ? BIG : 1
+    const g = GAIT[kind] ?? GAIT.doodle, r = m.run ?? 0, a = Math.min(1, m.amount), ph = m.phase, scale = scaleOf(kind)
     const bound = g.style === 'bound' ? r : 0, bob = THREE.MathUtils.lerp(g.walkBob, g.runBob, r) * a
     gr.position.y = THREE.MathUtils.lerp(Math.abs(Math.sin(ph)), (1 + Math.sin(ph - 0.6)) / 2, bound) * bob * scale
     gr.rotation.x = g.lean * r * a + Math.sin(ph + 0.9) * 0.1 * bound * a
@@ -1451,7 +1694,7 @@ export function Pet({ kind, motion, act }: { kind: PetKind; motion?: RefObject<W
     const dt = Math.min(delta, 0.05), a = act?.current, s = st.current, b = BODY[kind] ?? BODY.doodle, t = a?.t ?? 0
     s.sit = THREE.MathUtils.damp(s.sit, a?.kind === 'sit' ? 1 : 0, 8, dt); s.pet = THREE.MathUtils.damp(s.pet, a?.kind === 'pet' ? 1 : 0, 8, dt)
     if (!outer.current || !inner.current) return
-    const scale = BIG_PETS.has(kind) ? BIG : 1, pivot = GEO[kind].back * scale   // 엉덩이(뒷다리 자리)를 축으로. 레어 펫은 몸이 큰 만큼
+    const scale = scaleOf(kind), pivot = GEO[kind].back * scale   // 엉덩이(뒷다리 자리)를 축으로. 레어 펫은 몸이 큰 만큼
     const { th, drop } = sitBody(kind, s.sit)
     outer.current.position.set(0, -drop * scale + Math.abs(Math.sin(t * b.hopF)) * b.hop * s.pet, pivot); inner.current.position.z = -pivot
     outer.current.rotation.x = -(th + b.rear * s.pet)
@@ -1471,6 +1714,7 @@ export function Pet({ kind, motion, act }: { kind: PetKind; motion?: RefObject<W
     : kind === 'dragon' ? <Dragon motion={motion} act={act} />
     : kind === 'eagle' ? <Eagle motion={motion} act={act} />
     : kind === 'ptero' ? <Pterosaur motion={motion} act={act} />
+    : kind === 'elephant' ? <Elephant motion={motion} act={act} />
     : <DoodleDog motion={motion} act={act} />
   return <group ref={gait}><group ref={outer}><group ref={inner}>{body}</group></group></group>
 }

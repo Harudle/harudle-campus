@@ -1853,7 +1853,7 @@ const avKey = (c: AvatarConfig) => avEncode(c);
 const avToLook = (c: AvatarConfig) => ({ hair: { beret: "beret", curly: "curl", cap: "cap" }[c.head] || "none", acc: c.headColor, prop: c.bag !== "none" ? "bag" : c.eyewear !== "none" ? "glasses" : c.neck === "scarf" ? "scarf" : "none" });
 function makeChar(cfg: AvatarConfig, gear: GearState | null = null) { const blob = new THREE.Mesh(blobGeo, blobMat); blob.position.y = .012; blob.renderOrder = 1; return makeDoll("avatar", { ...DEFAULT_AV, ...cfg }, blob, { gear }); }
 // 따라다니는 펫: 기본은 강아지 두들, 컷 상점에서 산 펫(고양이 · 판다 · 여우)을 쓰면 그것으로 바뀐다
-function makePet(kind: PetKind = "doodle") { const blob = new THREE.Mesh(blobGeo, blobMat); blob.scale.setScalar(.9); blob.position.y = .012; blob.renderOrder = 1; return makeDoll("dog", null, blob, { pet: kind }); }
+function makePet(kind: PetKind = "doodle") { const blob = new THREE.Mesh(blobGeo, blobMat); blob.scale.setScalar(kind === "elephant" ? 3.4 : .9); blob.position.y = .012; blob.renderOrder = 1; return makeDoll("dog", null, blob, { pet: kind }); }
 // 피드 창 얼굴 사진은 2D 하루들 낙서로
 const avatarCache = new Map();
 const avatarURL = (look) => { const k = lookKey(look); if (avatarCache.has(k)) return avatarCache.get(k); const cv = document.createElement("canvas"); cv.width = cv.height = 128; const g = cv.getContext("2d"); g.fillStyle = WEAK; g.fillRect(0, 0, 128, 128); g.translate(64, 122); g.scale(3.4, 3.4); drawChar(g, look); const u = cv.toDataURL(); avatarCache.set(k, u); return u; };
@@ -2379,8 +2379,9 @@ const environment = createEnvironment({ scene, camera, ambient, sun, skyStars, m
 const cam = { eye: undefined as number | undefined, close: false, ip: .3, ipT: .3, id: 3.2, idT: 3.2, look: 0, lookT: 0, yaw: -.35, pitch: .95, dist: narrow() ? 24 : 29, yawT: -.35, pitchT: .95, distT: narrow() ? 24 : 29, target: new THREE.Vector3() };
 const eyeV = new THREE.Vector3(), lookV = new THREE.Vector3(); let fpDt = 0;
 // 들어가서 볼 때: 내 뒤(또는 눈높이)에서, 벽 앞에서 멈추고 천장 아래에 머문다
+const rideLift = () => (dog.rideK > .01 ? dog.rideK * (RIDE[dog.doll.pet]?.h ?? 0) : 0);   // 코끼리를 탄 만큼 내 몸 · 눈높이가 올라간다
 function placeInside() {
-  const base = me.out ? me.out.z : floorY(me.f) + heightAt(floor, me.x, me.y) + me.up + me.jz + seatLift(me.seat), ceil = Math.max(floorY(me.f) + CEIL[me.f] - .12, base + 1.4);   // 계단 위에서는 머리 위로 비켜 준다
+  const base = me.out ? me.out.z : floorY(me.f) + heightAt(floor, me.x, me.y) + me.up + me.jz + seatLift(me.seat) + rideLift(), ceil = Math.max(floorY(me.f) + CEIL[me.f] - .12, base + 1.4);   // 계단 위에서는 머리 위로 비켜 준다
   if (VIEW.mode === "first") {
     // 1인칭은 어지럽지 않게: 기울임·흔들림 없이, 눈높이는 계단·단을 오를 때 툭툭 끊기지 않게 부드럽게 따라가고, 고개는 제자리에서 돈다
     // 누우면 눈은 빈백 가운데가 아니라 applyLie로 눕힌 머리 자리(등받이 쪽으로 .39, 위로 .86): 낮으면 빈백 몸통 속에 묻혀 화면이 까맣게 가린다
@@ -2861,6 +2862,7 @@ let meDoll = makeChar(myAv); scene.add(meDoll.root);
 Object.defineProperty(me, "doll", { get: () => meDoll });
 const running = () => me.runHold || me.runToggle;
 function jump() { // 땅에서 한 번, 공중에서 한 번 더(더블 점프)
+  if (riding()) { petToot(); return; }   // 코끼리를 탔으면 뛰는 대신 뿌우
   if (me.lie || me.seat) { standUp(); return; }
   if (duelMove.lock) return;
   if (me.out && (me.out.z > floorY(13) + .01 || me.out.vz !== 0)) return;   // 13층 창밖 허공에선 못 뛴다(창턱에 서 있을 때만)
@@ -2909,7 +2911,7 @@ function steerWheel(dx, dy, absolute = false) {   // 고정 중엔 움직인 만
 function closeWheel(go) {
   if (!wheel.open) return;
   wheel.open = false; const e = wheel.list[wheel.pick]; renderWheel();
-  if (wheel.kind === "pet") { if (go && e?.id === "sit") petSit(); else if (go && e?.id === "pat") petPat(); return; }
+  if (wheel.kind === "pet") { if (go && e?.id === "sit") petSit(); else if (go && e?.id === "pat") petPat(); else if (go && e?.id === "ride") petRide(); else if (go && e?.id === "toot") petToot(); return; }
   if (go && e?.id === "bag") bagEmote();
   else if (go && e?.id === "guitar") ownEmote("guitar");
   else if (go && e?.id === "lp") ownEmote("lp");
@@ -2918,12 +2920,13 @@ function closeWheel(go) {
 /* ───── 내 펫과 놀기: 펫을 보고 F를 꾹(위에서 볼 땐 펫을 눌러도) → 마우스로 고르고 떼면 앉기 · 쓰다듬기 ─────
    앉기: 그 자리에 앉아 주인을 본다(멀리 가면 일어나 다시 따라온다, 한 번 더 고르면 일어나기). 쓰다듬기: 주인이 손을 뻗어 쓰다듬고, 펫마다 다르게 좋아한다(Pets.tsx) + 하트.
    펫 상태는 presence의 pt(1 앉음 · 2 쓰다듬는 중)로 남들에게도 보인다 */
-const PET_NAME = { doodle: "두들", cat: "고양이", panda: "판다", fox: "여우", zebra: "얼룩말", emu: "에뮤", tiger: "호랑이", bear: "불곰", duck: "러버덕", capybara: "카피바라", penguin: "펭귄", dragon: "용", eagle: "독수리", ptero: "익룡" };
+const PET_NAME = { doodle: "두들", cat: "고양이", panda: "판다", fox: "여우", zebra: "얼룩말", emu: "에뮤", tiger: "호랑이", bear: "불곰", duck: "러버덕", capybara: "카피바라", penguin: "펭귄", dragon: "용", eagle: "독수리", ptero: "익룡", elephant: "코끼리" };
 const PAT_MS = 2800;
 const petName = () => PET_NAME[dog.doll.pet] || "펫";
 // 펫을 보고 있나(2.6칸 안): 들어가서 볼 땐 카메라가 보는 쪽 50° 안, 위에서 볼 땐 캐릭터가 바라보는 쪽 90° 안이거나 펫 위에 마우스를 올렸을 때
 const mouseAt = { x: 0, y: 0, on: false, at: 0, hit: false };
 function nearPet() {
+  if (riding()) return !me.out;   // 타고 있으면 늘 "펫과 놀기"(내리기 · 뿌우)
   if (me.lie || me.seat || me.out || !dog.doll.root.visible || Math.hypot(dog.x - me.x, dog.y - me.y) > 2.6) return false;
   if (inside()) { camera.getWorldDirection(tgt); const p = dog.doll.root.position, a = Math.atan2(p.x - camera.position.x, p.z - camera.position.z), c = Math.atan2(tgt.x, tgt.z); return Math.abs(Math.atan2(Math.sin(a - c), Math.cos(a - c))) < .9; }
   const a = Math.atan2(dog.x - me.x, dog.y - me.y); if (Math.abs(Math.atan2(Math.sin(a - me.h), Math.cos(a - me.h))) < 1.6) return true;
@@ -2933,7 +2936,7 @@ function nearPet() {
 }
 function openPetWheel() {
   if (wheel.open || inWorld || typing() || uiOpen() || duelUi?.active()) return;
-  wheel.kind = "pet"; wheel.list = [{ id: "sit", icon: "🐾", name: isFlyer(dog.doll.pet) ? (dog.act === "sit" ? "날려 보내기" : dog.doll.pet === "ptero" ? "머리에 태우기" : "어깨에 앉히기") : dog.act === "sit" ? "일어나기" : "앉기" }, { id: "pat", icon: "🤚", name: "쓰다듬기" }];
+  wheel.kind = "pet"; wheel.list = riding() ? [{ id: "ride", icon: "⬇️", name: "내리기" }, { id: "toot", icon: "📯", name: "뿌우!" }] : [...(canRide(dog.doll.pet) ? [{ id: "ride", icon: "🐘", name: "타기" }] : []), { id: "sit", icon: "🐾", name: isFlyer(dog.doll.pet) ? (dog.act === "sit" ? "날려 보내기" : dog.doll.pet === "ptero" ? "머리에 태우기" : "어깨에 앉히기") : dog.act === "sit" ? "일어나기" : "앉기" }, { id: "pat", icon: "🤚", name: "쓰다듬기" }];
   wheel.open = true; wheel.vx = wheel.vy = 0; wheel.pick = -1; keys.clear(); me.runHold = false; renderWheel();
   const r = wheel.el.getBoundingClientRect(); wheel.cx = r.left + r.width / 2; wheel.cy = r.top + r.height / 2;
 }
@@ -2942,6 +2945,22 @@ function petSit() {
   if (dog.act === "sit" || (dog.act === "pet" && dog.after === "sit")) { dog.act = null; dog.after = null; showToast(bird ? `${withJosa(petName(), "를", "을")} 날려 보냈어요` : `${withJosa(petName(), "가", "이")} 일어났어요`, bird ? "하늘을 날며 따라와요." : "다시 졸졸 따라와요.", 1800); }
   else { dog.act = "sit"; dog.after = null; showToast(ptero ? "익룡이 머리 위에 앉았어요" : bird ? "독수리가 어깨에 앉았어요" : `${withJosa(petName(), "가", "이")} 앉았어요`, bird ? `걸어도 ${ptero ? "머리 위에" : "어깨에"} 앉은 채로 있어요. 한 번 더 고르면 날려 보내요.` : "멀리 가면 일어나서 따라와요.", 2200); }
   sendPresence(true);
+}
+/* 코끼리 타기(전설): 등의 안장에 올라타 같이 다닌다. 벽 · 가구 판정은 사람 기준 그대로라 사람이 지나가는 곳은 어디든 지나간다.
+   앉거나 눕거나 대결장에 가면 저절로 내린다. 탄 채로 Space(점프 자리)나 펫 메뉴의 "뿌우!"를 고르면 코를 들어 별을 뿜는다. 남들에게는 presence의 pt 3(탑승) · 4(뿌우)로 보인다 */
+function petRide() {
+  if (riding()) { dismount(); showToast(`${petName()}에서 내렸어요`, "다시 쿵쿵 따라와요.", 1800); return; }
+  if (!canRide(dog.doll.pet) || me.lie || me.seat || me.out || isArena(me.f) || duelUi?.active()) return;
+  if (me.act) endAct(me);
+  me.patUntil = 0; me.jz = 0; me.jv = 0; dog.act = "ride"; dog.after = null; dog.h = me.h;
+  if (inside() && VIEW.mode === "third") cam.idT = Math.max(cam.idT, 4.6);   // 큰 몸이 화면을 가리지 않게 조금 물러난다
+  spawnFx(starTex, dog.doll.root.position, 6, 1.2, 1.2);
+  showToast(`${petName()}에 올라탔어요`, "평소처럼 걸으면 돼요. Space는 뿌우! 펫 메뉴(F 꾹)에서 내려요.", 3200); sendPresence(true);
+}
+function dismount() { if (dog.act !== "ride") return; dog.act = null; dog.tootUntil = 0; sendPresence(true); }
+function petToot() {
+  const now = performance.now(); if (!riding() || now < dog.tootUntil - 500) return;
+  dog.tootUntil = now + 1500; sendPresence(true); setTimeout(() => sendPresence(true), 1550);
 }
 function petPat() {
   if (Math.hypot(dog.x - me.x, dog.y - me.y) > 2.4) { showToast("조금 더 가까이 가 볼까요?", `${petName()} 옆에서 쓰다듬어요.`, 1800); return; }
@@ -3108,7 +3127,7 @@ function useSkill(name, style?: number) { if (!SKILLS[name]) return;   // style:
     me.path = null; startAct(me, "read"); me.ac++; me.an = "read"; me.as = me.act.seed; sendPresence(true); showToast("책을 펼쳤어요", "인벤토리에서 책을 다시 고르거나 일어나면 덮어요.", 2000); return;
   } if (name === "dance" && me.act?.name === "dance" && style === undefined) { endAct(me); sendPresence(true); return; } if (me.lie) standUp(); me.path = null; startAct(me, name, name === "dance" ? (style === undefined ? nextDance() : (lastDance = style)) : undefined); if (name === "dance") showToast(DANCES[me.act.style], "Z를 다시 누르거나 움직이면 멈춰요.", 1600); me.ac++; me.an = name; me.as = me.act.seed; sendPresence(true); }
 // act: 주인이 시킨 것(sit 앉아 있다 · pet 쓰다듬는 중, actUntil까지) · after: 쓰다듬기가 끝나면 돌아갈 것(앉아 있다 쓰다듬었으면 다시 앉는다)
-const dog = { x: ELEV_SPAWN[0] - 1, y: ELEV_SPAWN[1] + 1, moving: false, run: false, sp: 4.2, dustAt: 0, z: 0, still: 0, ang: undefined as number | undefined, h: 0, doll: makePet(), act: null as "sit" | "pet" | null, after: null as "sit" | null, actUntil: 0 }; scene.add(dog.doll.root);
+const dog = { x: ELEV_SPAWN[0] - 1, y: ELEV_SPAWN[1] + 1, moving: false, run: false, sp: 4.2, dustAt: 0, z: 0, still: 0, ang: undefined as number | undefined, h: 0, doll: makePet(), act: null as "sit" | "pet" | "ride" | null, after: null as "sit" | null, actUntil: 0, rideK: 0, tootUntil: 0 }; scene.add(dog.doll.root);
 const peers = new Map();
 const setPos = (d, f, x, y) => d.root.position.set(wx(x), floorY(f) + heightAt(FLOORS[f], x, y), wz(y));
 
@@ -3147,9 +3166,9 @@ addEventListener("keydown", (e) => {
   if (inWorld) return;
   if (wheel.open && e.code === "Escape") { e.preventDefault(); closeWheel(false); return; }   // 감정표현 휠: Esc는 그냥 닫기
   if (wheel.open && wheel.kind === "pet") { // 펫 휠(F를 꾹 누르는 동안): 떼면 고른 것(keyup), 1 · 2는 바로 그것
-    const n = { Digit1: 0, Digit2: 1, Numpad1: 0, Numpad2: 1 }[e.code];
+    const n = { Digit1: 0, Digit2: 1, Digit3: 2, Numpad1: 0, Numpad2: 1, Numpad3: 2 }[e.code];
     if (e.code === "KeyF") { e.preventDefault(); return; }
-    if (n !== undefined) { e.preventDefault(); if (!e.repeat) { wheel.pick = n; closeWheel(true); } return; }
+    if (n !== undefined && n < wheel.list.length) { e.preventDefault(); if (!e.repeat) { wheel.pick = n; closeWheel(true); } return; }
   }   // 14층 하루들 월드가 떠 있으면 캠퍼스 키는 쉰다
   if (movie.el && !movie.el.hidden && (e.code === "Escape" || e.code === "KeyF")) { e.preventDefault(); standUp(); return; }   // 영화 보는 중: Esc·F로 일어난다(걷는 키도 일어난다)
   if (relockOnKey && e.code !== "Escape" && (e.target as HTMLElement).tagName !== "INPUT") { relockOnKey = false; if (inside() && !locked() && !uiOpen()) lockMouse(); }   // Esc로 설정창을 닫은 뒤 첫 키에서 다시 둘러보기
@@ -3812,7 +3831,7 @@ function showGear(next: GearState | null) {
   if (gearKey(next) === gearKey(shownGear)) return;
   const petChanged = (next?.pet || "") !== (shownGear?.pet || ""); shownGear = next;
   const vis = meDoll.root.visible; dropDoll(meDoll); meDoll = makeChar(myAv, shownGear); meDoll.root.visible = vis; scene.add(meDoll.root);
-  if (petChanged) { dropDoll(dog.doll); dog.doll = makePet(petOfSku(shownGear?.pet) ?? "doodle"); scene.add(dog.doll.root); }
+  if (petChanged) { dismount(); dropDoll(dog.doll); dog.doll = makePet(petOfSku(shownGear?.pet) ?? "doodle"); scene.add(dog.doll.root); }
 }
 // 내 네컷 액자: 그 크루가 하루들에 올린 네컷만화를 크게 보여 주고, 하루들의 그 글로 가는 길을 낸다
 function openFrame(id: string, name: string) {
@@ -3976,7 +3995,7 @@ let wasMoving = false, myVoice = 0;   // 음성 상태(vc): 0 미연결 · 1 마
 document.addEventListener("visibilitychange", () => { if (document.hidden && me.moving) { me.moving = false; wasMoving = false; sendPresence(true); } });
 function sendPresence(force) {
   if (!room) return; const now = performance.now(); if (!force && now - lastSent < 90) return; lastSent = now;
-  room.presence({ f: me.f, x: Math.round(me.x * 100) / 100, y: Math.round(me.y * 100) / 100, u: Math.round(me.up * 100) / 100, h: Math.round(me.h * 100) / 100, lp: me.act?.name === "laptop" ? 1 : 0, rd: me.act?.name === "read" ? 1 : 0, gn: me.act?.name === "gun" ? 1 : 0, br: me.brush ? 1 : 0, bc: ezPen.c, fk: me.fk, hc: me.hc, hd: Math.round(me.hd * 100) / 100, fc: me.fc, em: me.em || "", fl: me.out && !me.out.dead ? 1 : 0, ox: me.out ? Math.round(me.x * 100) / 100 : 0, oz: me.out ? Math.round(me.out.z * 100) / 100 : 0, fh: Math.round(me.fh * 1000) / 1000, ...(me.fp === null || me.fp === undefined ? {} : { fp: Math.round(me.fp * 1000) / 1000 }), dn: me.act?.name === "dance" ? me.act.style + 1 : 0, m: me.moving ? 1 : 0, r: running() ? 1 : 0, l: me.lie ? 1 : 0, st: me.seat ? 1 : 0, ly: me.lie ? Math.round(me.lie.yaw * 100) / 100 : 0, jc: me.jc, ac: me.ac, an: me.an, as: me.as, look: 0, av: avEncode(myAv), rm: roomKey(), vc: myVoice, pt: dog.act === "sit" ? 1 : dog.act === "pet" ? 2 : 0, ar: duelUi?.ar() || undefined }).catch(() => { });
+  room.presence({ f: me.f, x: Math.round(me.x * 100) / 100, y: Math.round(me.y * 100) / 100, u: Math.round(me.up * 100) / 100, h: Math.round(me.h * 100) / 100, lp: me.act?.name === "laptop" ? 1 : 0, rd: me.act?.name === "read" ? 1 : 0, gn: me.act?.name === "gun" ? 1 : 0, br: me.brush ? 1 : 0, bc: ezPen.c, fk: me.fk, hc: me.hc, hd: Math.round(me.hd * 100) / 100, fc: me.fc, em: me.em || "", fl: me.out && !me.out.dead ? 1 : 0, ox: me.out ? Math.round(me.x * 100) / 100 : 0, oz: me.out ? Math.round(me.out.z * 100) / 100 : 0, fh: Math.round(me.fh * 1000) / 1000, ...(me.fp === null || me.fp === undefined ? {} : { fp: Math.round(me.fp * 1000) / 1000 }), dn: me.act?.name === "dance" ? me.act.style + 1 : 0, m: me.moving ? 1 : 0, r: running() ? 1 : 0, l: me.lie ? 1 : 0, st: me.seat ? 1 : 0, ly: me.lie ? Math.round(me.lie.yaw * 100) / 100 : 0, jc: me.jc, ac: me.ac, an: me.an, as: me.as, look: 0, av: avEncode(myAv), rm: roomKey(), vc: myVoice, pt: dog.act === "ride" ? (performance.now() < dog.tootUntil ? 4 : 3) : dog.act === "sit" ? 1 : dog.act === "pet" ? 2 : 0, ar: duelUi?.ar() || undefined }).catch(() => { });
   updateMediaWorld();
 }
 // EC2에서는 직접 만든 WebSocket 서버가 room 역할을 한다
@@ -4103,8 +4122,8 @@ function syncOccupancy() {
 // 펫이 주인 뒤 오른쪽을 졸졸 따라간다(내 펫 · 다른 크루의 펫이 같이 쓴다)
 // 주인이 달리거나 꽤 떨어지면 펫도 달린다(주인 달리기 7.3보다 조금 빠르게). 주인이 멈추고 가까워지면 다시 걷는다
 const PET_WALK = 4.2, PET_RUN = 8.4;
-function followPet(pet: { x: number; y: number; h: number; moving: boolean; run?: boolean; sp?: number }, tx: number, ty: number, th: number, dt: number, ownerRun = false) {
-  const ddx = tx - Math.sin(th) * .9 + Math.cos(th) * .35 - pet.x, ddy = ty - Math.cos(th) * .9 - Math.sin(th) * .35 - pet.y, dd = Math.hypot(ddx, ddy); pet.moving = dd > .35;
+function followPet(pet: { x: number; y: number; h: number; moving: boolean; run?: boolean; sp?: number }, tx: number, ty: number, th: number, dt: number, ownerRun = false, back = .9, side = .35) {
+  const ddx = tx - Math.sin(th) * back + Math.cos(th) * side - pet.x, ddy = ty - Math.cos(th) * back - Math.sin(th) * side - pet.y, dd = Math.hypot(ddx, ddy); pet.moving = dd > .35;
   pet.run = pet.run ? (ownerRun || dd > 1.2) && pet.moving : ownerRun || dd > 2.6;
   pet.sp = lerp(pet.sp ?? PET_WALK, pet.run ? PET_RUN : PET_WALK, Math.min(1, dt * 6));   // 속도는 부드럽게 붙였다 뗀다
   if (dd > 9) { pet.x = tx; pet.y = ty; } else if (pet.moving) { const s = Math.min(dd, pet.sp * dt); pet.x += ddx / dd * s; pet.y += ddy / dd * s; pet.h = Math.atan2(ddx, ddy); }
@@ -4114,6 +4133,26 @@ function followPet(pet: { x: number; y: number; h: number; moving: boolean; run?
 // 앉히면(sit) 독수리는 어깨에, 익룡은 주인 머리 위에 앉아 있는다. 주인이 앉거나 누웠으면(low) 옆 바닥에 내려앉는다.
 // 높이(z)는 주인이 선 자리 기준이고, 층 천장보다 낮게 난다. 날개 모양은 doll.anim.fly · flap으로 Eagle · Pterosaur(Pets.tsx)에 넘긴다
 // perch 그냥 멈췄을 때 앉는 자리(side 오른쪽 + · 왼쪽 -, z 높이) · hold 앉혔을 때 자리 · circleR/Z 선회 반지름 · 높이 · glideZ 걸을 때 높이 · run 달릴 때 자리(side, fwd, z)
+// 탈 수 있는 펫(전설 코끼리): h 탄 사람이 올라앉는 높이 · speed 탔을 때 걸음 배율 · back/side 안 탔을 때 따라오는 자리(덩치가 커서 멀찍이)
+const RIDE: Partial<Record<PetKind, { h: number; speed: number; back: number; side: number }>> = { elephant: { h: 1.56, speed: 1.15, back: 2.1, side: 1 } };
+const canRide = (k: unknown) => !!RIDE[k as PetKind];
+const riding = () => dog.act === "ride";
+// 탄 펫은 주인 발밑에 붙어 같은 쪽을 본다(올라탈 때만 빠르게 걸어 들어온다)
+function ridePet(pet: any, ox: number, oy: number, oh: number, moving: boolean, run: boolean, dt: number) {
+  const dx = ox - pet.x, dy = oy - pet.y, d = Math.hypot(dx, dy);
+  if (pet.mounted || d < .08 || d > 9) { pet.x = ox; pet.y = oy; pet.h = oh; pet.mounted = true; pet.moving = moving; pet.run = run; }
+  else { const st = Math.min(d, 9 * dt); pet.x += dx / d * st; pet.y += dy / d * st; pet.h = Math.atan2(dx, dy); pet.moving = true; pet.run = true; }
+}
+// 쿵쿵 걷는 큰 펫: 걷기만 해도 발밑에 먼지가 인다. 태우고 달리면 금빛 별도 흘린다
+function stompFx(pet: any, t: number, ridden: boolean) {
+  if (!canRide(pet.doll.pet) || !pet.moving || !pet.doll.root.visible || t < (pet.stompAt ?? 0)) return;
+  pet.stompAt = t + (pet.run ? .2 : .42); spawnFx(dustTex, pet.doll.root.position, pet.run ? 2 : 1, .7, .03); if (ridden && pet.run) spawnFx(starTex, pet.doll.root.position, 1, .8, 1.1);
+}
+// 뿌우: 코끝쯤에서 별이 터진다
+function tootFx(pet: any, on: boolean) {
+  if (on && !pet.tooting && pet.doll.root.visible) { const p = pet.doll.root.position; tgt.set(p.x + Math.sin(pet.h) * 1.5, p.y + 2.2, p.z + Math.cos(pet.h) * 1.5); spawnFx(starTex, tgt, 7, .7, .5); spawnFx(noteTex, tgt, 2, .5, .4); }
+  pet.tooting = on;
+}
 type FlyCfg = { perch: { side: number; z: number }; hold: { side: number; z: number }; circleR: number; circleZ: number; circleW: number; glideZ: number; run: { side: number; fwd: number; z: number } };
 const FLY: Partial<Record<PetKind, FlyCfg>> = {
   eagle: { perch: { side: .3, z: .62 }, hold: { side: .3, z: .62 }, circleR: 1.8, circleZ: 2.1, circleW: .65, glideZ: 1.75, run: { side: .8, fwd: .3, z: .95 } },
@@ -4187,7 +4226,8 @@ function syncPeers(dt, t) {
     else if (!s.dn && v.act?.name === "dance") endAct(v);
     v.jz = v.jz || 0; v.jv = v.jv || 0; if (v.jz > 0 || v.jv > 0) { v.jv -= 15 * dt; v.jz += v.jv * dt; if (v.jz <= 0) { v.jz = 0; v.jv = 0; } }
     // 같은 층이거나, 뚫린 자리(라이브러리·계단 구멍) 너머 위·아래층이면 보인다(그 사람의 폭죽·노트북·춤도 같이)
-    const vis = (s.f === me.f || (Math.abs(s.f - me.f) === 1 && nearRects(voidsOf(FLOORS[Math.max(s.f, me.f)]), s.x, s.y, s.x, s.y))) && !duelUi?.hides(s); v.doll.root.visible = vis; setPos(v.doll, s.f, v.x, v.y); v.doll.root.position.y += (+s.u || 0) + v.jz; v.doll.blob.position.y = .012 - v.jz; const curl = !!s.l && s.em === "bag", lp = !!s.l && s.em === "lp", gt = !!s.l && s.em === "guitar"; applyLie(v.doll, s.l ? { yaw: +s.ly || 0, curl, lp, guitar: gt } : null); v.doll.setSeated(s.st ? v.seat || true : gt ? { h: GUITAR_SEAT } : curl || lp ? true : null); curlPose(v.doll, curl); listenPose(v.doll, lp); guitarPose(v.doll, gt); const club = !!s.l && s.em === "club"; v.doll.anim.party = club; if (club) clubDance(v.doll.root, t, +s.ly || 0);
+    const vis = (s.f === me.f || (Math.abs(s.f - me.f) === 1 && nearRects(voidsOf(FLOORS[Math.max(s.f, me.f)]), s.x, s.y, s.x, s.y))) && !duelUi?.hides(s); v.doll.root.visible = vis; setPos(v.doll, s.f, v.x, v.y); const rd = (s.pt === 3 || s.pt === 4) && canRide(petOfSku(g?.pet)) && !s.st && !s.l && !s.fl ? RIDE[petOfSku(g?.pet)!]! : null; v.rideK = lerp(v.rideK ?? 0, rd ? 1 : 0, Math.min(1, dt * 7)); const rideUp = v.rideK > .01 ? v.rideK * (v.rideH = rd?.h ?? v.rideH ?? 0) : 0;   // 코끼리를 탄 크루: 안장 높이만큼 올려 앉힌다
+    v.doll.root.position.y += (+s.u || 0) + v.jz + rideUp; v.doll.blob.position.y = .012 - v.jz; v.doll.blob.visible = !rd; const curl = !!s.l && s.em === "bag", lp = !!s.l && s.em === "lp", gt = !!s.l && s.em === "guitar"; applyLie(v.doll, s.l ? { yaw: +s.ly || 0, curl, lp, guitar: gt } : null); v.doll.setSeated(s.st ? v.seat || true : gt ? { h: GUITAR_SEAT } : curl || lp || rd ? true : null); curlPose(v.doll, curl); listenPose(v.doll, lp); guitarPose(v.doll, gt); const club = !!s.l && s.em === "club"; v.doll.anim.party = club; if (club) clubDance(v.doll.root, t, +s.ly || 0);
     // 개인 소품 감정표현 중인 크루(em bag · lp, 누운/앉은 채): 그 사람 자리에 빈백 · LP 세트를 펼쳐 그린다
     { const pk = s.l && (s.em === "bag" || s.em === "lp" || s.em === "guitar" || s.em === "club") ? s.em : "";
       if (v.pkind !== pk) { dropOwnProp(v.pbag); v.pbag = pk ? makeOwnProp(pk) : null; v.pkind = pk; if (v.pbag) scene.add(v.pbag); }
@@ -4201,10 +4241,11 @@ function syncPeers(dt, t) {
     const pk = petOfSku(g?.pet);
     if (pk !== (v.pet?.kind ?? null)) { dropDoll(v.pet?.doll); v.pet = pk ? { kind: pk, x: v.x - .6, y: v.y + .4, moving: false, h: 0, z: 0, doll: makePet(pk) } : null; if (v.pet) scene.add(v.pet.doll.root); }
     if (v.pet) { // 그 크루가 펫을 앉혔거나 쓰다듬는 중(pt)이면 펫은 그 자리에서 주인을 본다
-      const pa = s.pt === 1 ? "sit" : s.pt === 2 ? "pet" : null;
-      if (isFlyer(pk)) flyPet(v.pet, s.f, v.x, v.y, typeof s.h === "number" ? s.h : 0, !!s.m, !!s.m && !!s.r, pa, !!(s.st || s.l), dt);
-      else if (pa) { v.pet.moving = false; v.pet.h = Math.atan2(v.x - v.pet.x, v.y - v.pet.y); } else followPet(v.pet, v.x, v.y, typeof s.h === "number" ? s.h : 0, dt, !!s.m && !!s.r);
-      v.pet.doll.root.visible = vis; setPos(v.pet.doll, s.f, v.pet.x, v.pet.y); if (isFlyer(pk)) { placeFlyer(v.pet, s.f, v.x, v.y, +s.u || 0); legendTrail(v.pet, t, vis); } v.pet.doll.update(dt, t, v.pet.moving, v.pet.h, 0, false, null, false, !!v.pet.run && v.pet.moving); petDust(v.pet, t); v.pet.doll.anim.petAct = pa;
+      const ride = !!rd, pa = ride ? (s.pt === 4 ? "toot" : "ride") : s.pt === 1 ? "sit" : s.pt === 2 ? "pet" : null; if (!ride) v.pet.mounted = false;
+      if (ride) ridePet(v.pet, v.x, v.y, typeof s.h === "number" ? s.h : 0, !!v.walking, !!v.walking && !!s.r, dt);
+      else if (isFlyer(pk)) flyPet(v.pet, s.f, v.x, v.y, typeof s.h === "number" ? s.h : 0, !!s.m, !!s.m && !!s.r, pa, !!(s.st || s.l), dt);
+      else if (pa) { v.pet.moving = false; v.pet.h = Math.atan2(v.x - v.pet.x, v.y - v.pet.y); } else followPet(v.pet, v.x, v.y, typeof s.h === "number" ? s.h : 0, dt, !!s.m && !!s.r, RIDE[pk]?.back, RIDE[pk]?.side);
+      v.pet.doll.root.visible = vis; setPos(v.pet.doll, s.f, v.pet.x, v.pet.y); if (ride) v.pet.doll.root.position.y += (+s.u || 0) + v.jz; stompFx(v.pet, t, ride); tootFx(v.pet, pa === "toot"); if (isFlyer(pk)) { placeFlyer(v.pet, s.f, v.x, v.y, +s.u || 0); legendTrail(v.pet, t, vis); } v.pet.doll.update(dt, t, v.pet.moving, v.pet.h, 0, false, null, false, !!v.pet.run && v.pet.moving); petDust(v.pet, t); v.pet.doll.anim.petAct = pa as any;
       if (pa === "pet" && v.lastPt !== 2 && vis) spawnFx(heartTex, v.pet.doll.root.position, 3, .3, .7);
     }
     if (!isArena(s.f)) { if (s.pt === 2) { v.doll.anim.arms = patArms(t); v.patArms = true; } else if (v.patArms) { v.doll.anim.arms = null; v.patArms = false; } }   // 쓰다듬는 팔
@@ -4212,12 +4253,12 @@ function syncPeers(dt, t) {
     // 받는 쪽 안전장치: "걷는 중"이라고 와도 위치가 0.5초 넘게 그대로면 멈춘 것으로 본다(멈춤 신호가 빠졌거나 그 사람이 다른 탭으로 갔을 때)
     if (s.x !== v.sx || s.y !== v.sy) { v.sx = s.x; v.sy = s.y; v.movedAt = t; }
     const walking = (v.walking = !!s.m && t - (v.movedAt ?? -9) < .5);
-    holdBrush(v, !!s.br && vis, typeof s.bc === "string" && /^#[0-9a-f]{6}$/i.test(s.bc) ? s.bc : undefined); applyWobble(v); v.doll.update(dt, t, walking, s.l ? 0 : typeof s.h === "number" ? s.h : null, 0, false, tickAct(v, dt), v.jz > .01, walking && !!s.r);
+    holdBrush(v, !!s.br && vis, typeof s.bc === "string" && /^#[0-9a-f]{6}$/i.test(s.bc) ? s.bc : undefined); applyWobble(v); v.doll.update(dt, t, walking && !rd, s.l ? 0 : typeof s.h === "number" ? s.h : null, 0, false, tickAct(v, dt), v.jz > .01, walking && !!s.r);
     v.tag.textContent = p.name || (p.by && names[p.by]) || "크루";
     const vc = s.vc === 0 || s.vc === 1 || s.vc === 2 ? String(s.vc) : null;   // 이름표 앞 음성 아이콘(예전 버전이라 안 보내면 없음)
     if ((v.tag.dataset.vc ?? null) !== vc) { if (vc) v.tag.dataset.vc = vc; else delete v.tag.dataset.vc; v.tag.title = vc ? ["음성 연결 안 함", "마이크 꺼짐", "마이크 켜짐"][+vc] : ""; }
     const rp = v.doll.root.position;
-    if (vis && !duelMove.noTags) project(v.tag, rp.x, rp.y - .05, rp.z, true); else v.tag.style.display = "none";   // 대결 사격장: 이름표를 숨긴다
+    if (vis && !duelMove.noTags) project(v.tag, rp.x, rp.y - .05 - rideUp, rp.z, true); else v.tag.style.display = "none";   // 대결 사격장: 이름표를 숨긴다
     const say = v.chatSay && Date.now() - v.chatAt < 6000 ? v.chatSay : "";   // 받은 근처·전체 채팅만 말풍선으로
     v.bub.hidden = !(vis && say); if (!v.bub.hidden) { v.bub.textContent = say; project(v.bub, rp.x, rp.y + DOLL, rp.z); }
     showZzz(v.zzz, v.doll, vis && !!s.l && s.em !== "lp" && s.em !== "guitar" && s.em !== "club" && !say);   // LP 감상은 앉아서 듣는 중이라 zzz 없이   // 말풍선이 떠 있는 동안은 잠깐 깬다
@@ -4427,7 +4468,8 @@ function step(dt, t) {
     else if (gl.seat && !gl.seat.taken && Math.hypot(gl.x - me.x, gl.y - me.y) < 1.4) sitDown(gl.seat);
     else if (gl.use && !actBtn.hidden) interact();   // 누른 물건 앞에 닿았다: F를 누른 것처럼
   }
-  const sp = (running() ? 7.3 : 3.2) * amag * duelMove.speed, len = Math.hypot(vx, vy) || 1; vx = vx / len * sp * dt; vy = vy / len * sp * dt;
+  if (riding() && (me.lie || me.seat || me.out || isArena(me.f) || duelUi?.active())) dismount();   // 앉거나 눕거나 대결장에 가면 내린다
+  const sp = (running() ? 7.3 : 3.2) * amag * duelMove.speed * (riding() ? RIDE[dog.doll.pet]?.speed ?? 1 : 1), len = Math.hypot(vx, vy) || 1; vx = vx / len * sp * dt; vy = vy / len * sp * dt;
   // 13층 스타트랙 뒤 깨진 창: 창 쪽(서쪽)으로 걷거나 뛰어 나가면 건물 밖 허공이다
   if (vx < 0 && me.f === 13 && !me.lie && !me.seat && me.x + vx < 1.4 && openPane(me.y)) { jumpOut(vx / dt, vy / dt); return; }
   // 걷기: 발 높이(올라선 가구 + 점프)에서 갈 수 있는지 본다. 책상·화분 같은 건 점프해서 올라서고, 가장자리를 넘으면 떨어진다
@@ -4454,8 +4496,10 @@ function step(dt, t) {
     if (me.moving && me.patUntil > now) { me.patUntil = 0; dog.actUntil = 0; }
     if (dog.act === "pet" && now > dog.actUntil) { dog.act = dog.after; dog.after = null; sendPresence(true); }
     if (dog.act === "sit" && Math.hypot(me.x - dog.x, me.y - dog.y) > 5) { dog.act = null; sendPresence(true); }
-    if (isFlyer(dog.doll.pet)) flyPet(dog, me.f, me.x, me.y, me.h, me.moving, running() && me.moving, dog.act, !!(me.seat || me.lie), dt);   // 독수리 · 익룡은 날아서 따라오고 내려앉는다
-    else if (dog.act) { dog.moving = false; dog.h = Math.atan2(me.x - dog.x, me.y - dog.y); } else followPet(dog, me.x, me.y, me.h, dt, running() && me.moving); }
+    if (!riding()) (dog as any).mounted = false;
+    if (riding()) ridePet(dog, me.x, me.y, me.h, me.moving, running() && me.moving, dt);
+    else if (isFlyer(dog.doll.pet)) flyPet(dog, me.f, me.x, me.y, me.h, me.moving, running() && me.moving, dog.act, !!(me.seat || me.lie), dt);   // 독수리 · 익룡은 날아서 따라오고 내려앉는다
+    else if (dog.act) { dog.moving = false; dog.h = Math.atan2(me.x - dog.x, me.y - dog.y); } else followPet(dog, me.x, me.y, me.h, dt, running() && me.moving, RIDE[dog.doll.pet]?.back, RIDE[dog.doll.pet]?.side); }
   // 크루들은 제자리 근처를 서성인다
   for (const n of NPCS) {
     if (n.f !== me.f) continue; const fl = FLOORS[n.f];
@@ -4490,14 +4534,16 @@ function render(dt, t) {
   const sx = inside() ? 18 : 40, sz = inside() ? 18 : 28, sc = sun.shadow.camera;
   if (sc.right !== sx || sc.top !== sz) { Object.assign(sc, { left: -sx, right: sx, top: sz, bottom: -sz }); sc.updateProjectionMatrix(); }
   adaptQuality(dt);
-  setPos(meDoll, me.f, me.x, me.y); meDoll.root.position.y += me.up + me.jz; meDoll.blob.position.y = .012 - me.jz; meDoll.blob.scale.setScalar(1 - Math.min(.5, me.jz)); applyLie(meDoll, me.lie); meDoll.setSeated(me.seat || (me.lie?.guitar ? { h: GUITAR_SEAT } : me.lie?.curl || me.lie?.lp ? true : null)); curlPose(meDoll, !!me.lie?.curl); listenPose(meDoll, !!me.lie?.lp); guitarPose(meDoll, !!me.lie?.guitar); meDoll.anim.party = !!me.lie?.club; if (me.lie?.club) clubDance(meDoll.root, t, me.lie.yaw); meDoll.root.visible = VIEW.mode === "top" || (VIEW.mode === "third" && !cam.close); meDoll.anim.noHead = false;   // 1인칭: 몸·팔은 숨기고 든 물건(노트북·커피·종이 총·네 컷)만 보인다(tickAct가 화면 앞에 붙인다)
+  setPos(meDoll, me.f, me.x, me.y); meDoll.root.position.y += me.up + me.jz; meDoll.blob.position.y = .012 - me.jz; meDoll.blob.scale.setScalar(1 - Math.min(.5, me.jz)); applyLie(meDoll, me.lie); dog.rideK = lerp(dog.rideK, riding() ? 1 : 0, Math.min(1, dt * 7)); meDoll.root.position.y += rideLift(); meDoll.blob.visible = !riding();   // 코끼리를 탔으면 안장 높이만큼 올라앉는다
+  meDoll.setSeated(me.seat || (me.lie?.guitar ? { h: GUITAR_SEAT } : me.lie?.curl || me.lie?.lp || riding() ? true : null)); curlPose(meDoll, !!me.lie?.curl); listenPose(meDoll, !!me.lie?.lp); guitarPose(meDoll, !!me.lie?.guitar); meDoll.anim.party = !!me.lie?.club; if (me.lie?.club) clubDance(meDoll.root, t, me.lie.yaw); meDoll.root.visible = VIEW.mode === "top" || (VIEW.mode === "third" && !cam.close); meDoll.anim.noHead = false;   // 1인칭: 몸·팔은 숨기고 든 물건(노트북·커피·종이 총·네 컷)만 보인다(tickAct가 화면 앞에 붙인다)
   if (me.out) { meDoll.root.position.y = me.out.z; if (me.out.dead) meDoll.root.visible = false;   // 13층 창밖: 공중 높이 그대로. 트램펄린에서 튀면 앞으로 한 바퀴
     const fl = me.out.flip; meDoll.root.rotation.order = "YXZ"; meDoll.root.rotation.x = fl >= 0 && fl < .7 ? -fl / .7 * Math.PI * 2 : 0; }
-  meDoll.update(dt, t, me.moving, me.lie ? 0 : me.seat ? me.seat.yaw : me.h, 0, !!(me.say && Date.now() - me.sayAt < 2500), tickAct(me, dt), me.jz > .01 || !!me.out, running() && me.moving);
+  meDoll.update(dt, t, me.moving && !riding(), me.lie ? 0 : me.seat ? me.seat.yaw : me.h, 0, !!(me.say && Date.now() - me.sayAt < 2500), tickAct(me, dt), me.jz > .01 || !!me.out, running() && me.moving);
   applyWobble(me);
   if (me.brush && !inBooth()) { me.brush = false; if (!easelEd.hidden) closeEasel(); showToast("붓은 부스 안에서만 써요", "붓 꽂이에 돌려놨어요.", 2200); sendPresence(true); }
   holdBrush(me, me.brush, ezPen.c);
-  setPos(dog.doll, me.f, dog.x, dog.y); if (isFlyer(dog.doll.pet)) { placeFlyer(dog, me.f, me.x, me.y, me.up); legendTrail(dog, t, dog.doll.root.visible); } dog.doll.update(dt, t, dog.moving, dog.h, 0, false, null, false, dog.run && dog.moving); dog.doll.anim.petAct = dog.act; petDust(dog, t);
+  const toot = riding() && performance.now() < dog.tootUntil;
+  setPos(dog.doll, me.f, dog.x, dog.y); if (riding()) dog.doll.root.position.y += me.up + me.jz; stompFx(dog, t, riding()); tootFx(dog, toot); if (isFlyer(dog.doll.pet)) { placeFlyer(dog, me.f, me.x, me.y, me.up); legendTrail(dog, t, dog.doll.root.visible); } dog.doll.update(dt, t, dog.moving, dog.h, 0, false, null, false, dog.run && dog.moving); dog.doll.anim.petAct = toot ? "toot" : dog.act; petDust(dog, t);
   if (me.patUntil > performance.now()) { meDoll.anim.arms = patArms(t); me.patArms = true; } else if (me.patArms) { meDoll.anim.arms = null; me.patArms = false; }   // 쓰다듬는 팔(대결 팔 자세는 건드리지 않게 내가 둔 것만 푼다)
   for (const n of NPCS) if (n.doll.root.visible) { setPos(n.doll, n.f, n.x, n.y); applyLie(n.doll, n.lie); n.doll.setSeated(n.seat); n.doll.update(dt, t, n.moving, n.lie ? 0 : n.seat ? n.seat.yaw : n.talk ? Math.atan2(me.x - n.x, me.y - n.y) : n.h, n.seed, performance.now() - n.sayAt < 2500, tickAct(n, dt));  applyWobble(n); }
   environment.frame(dt); updateTraffic(dt); tickFx(dt); tickMeteors(dt, environment.nightVisibility()); tickFireworks(dt);
@@ -4509,7 +4555,7 @@ function render(dt, t) {
   syncPeers(dt, t);
   duelUi?.frame(dt, t);
   const mp = meDoll.root.position;
-  if (duelMove.noTags || VIEW.mode === "first" || (VIEW.mode === "third" && cam.close)) myTag.style.display = "none"; else project(myTag, mp.x, mp.y - .05, mp.z, true);
+  if (duelMove.noTags || VIEW.mode === "first" || (VIEW.mode === "third" && cam.close)) myTag.style.display = "none"; else project(myTag, mp.x, mp.y - .05 - rideLift(), mp.z, true);   // 코끼리를 탔으면 이름표는 코끼리 발밑에
   myBub.hidden = !(me.say && Date.now() - me.sayAt < 6000); if (!myBub.hidden) { myBub.textContent = me.say; project(myBub, mp.x, mp.y + DOLL, mp.z); }
   showZzz(myZzz, meDoll, !!me.lie && !me.lie.lp && !me.lie.guitar && !me.lie.club && myBub.hidden && meDoll.root.visible && VIEW.mode !== "first");
   for (const { n, tag, bub, zzz } of npcTags) {
