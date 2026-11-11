@@ -111,7 +111,10 @@ export function createShopUi(d: Deps) {
     cuts.innerHTML = (mock ? `<b class="mockTag">🧪 개발용 가짜 상점</b> <button type="button" class="linkbtn" data-mock="reset">처음으로</button><br>` : "") + (loggedIn ? `내 컷 <b>${balance.toLocaleString("ko-KR")}</b>컷 <button type="button" class="linkbtn" data-earn="how">모으는 법</button>` : `지금은 구경만 할 수 있어요. 하루들과 ${earn.welcome ? `처음 연동하면 ${earn.welcome}컷 선물!` : "연동하면 컷을 모아 살 수 있어요."}`);
     tabs.innerHTML = TABS.map(([k, label]) => `<button type="button" role="tab" class="dbtn${k === tab ? " on" : ""}" aria-selected="${k === tab}" data-tab="${k}">${label}</button>`).join("");
     const pick = TABS.find(([k]) => k === tab)![2];
-    list.innerHTML = catalog.filter(pick).map((it) => {
+    // 레어는 아래로 모으고, 일반과 레어 사이에 구분 띠를 둔다(카탈로그 순서는 그대로 두고 화면에서만)
+    const shown = catalog.filter(pick), plain = shown.filter((it) => !it.rare), rares = shown.filter((it) => it.rare);
+    const head = (cls: string, label: string, note: string) => `<li class="ghead ${cls}" role="presentation"><b>${label}</b><span>${note}</span></li>`;
+    const card = (it: Item) => {
       const got = owned.includes(it.sku), emote = it.slot === "emote", on = !emote && gear[it.slot as keyof GearState] === it.sku, pet = it.slot === "pet", lack = loggedIn && !got && balance < it.price, off = busy ? " disabled" : "";
       // 컷이 모자라고 오늘 보상을 아직 안 받았으면: 버튼이 곧 "네컷만화 만들러 가기"다(누르면 하루들 만들기 화면이 열린다)
       const buyLabel = !loggedIn ? `🔒 연동하고 ${pet ? "데려오기" : "사기"}` : lack && !earn.today ? `네컷만화 만들고 ${pet ? "데려오기" : "사기"} ↗` : `${it.price}컷으로 ${pet ? "데려오기" : "사기"}`;
@@ -120,7 +123,8 @@ export function createShopUi(d: Deps) {
         : on ? `<button type="button" class="btn ghost" data-wear="${esc(it.slot)}" data-sku=""${off}>${pet ? "쉬게 하기" : "벗기"}</button>`
         : `<button type="button" class="btn" data-wear="${esc(it.slot)}" data-sku="${esc(it.sku)}"${off}>${pet ? "데리고 다니기" : "쓰기"}</button>`;
       return `<li class="${got ? "got" : ""}${it.rare ? " rare" : ""}"><span class="gicon">${ICON[it.sku] || ""}</span><div><b>${esc(it.name)}${it.rare ? `<i class="rare">레어</i>` : ""}<em>${on ? (pet ? "함께 있어요" : "쓰는 중") : got ? "가졌어요 ✓" : lack ? `${it.price - balance}컷 모자라요` : `${it.price}컷`}</em></b><p>${esc(TIP[it.sku] || "")}</p><div class="gacts">${act}</div></div></li>`;
-    }).join("");
+    };
+    list.innerHTML = rares.length ? (plain.length ? head("plain", "일반", `${plain.length}종`) : "") + plain.map(card).join("") + head("rare", "★ 레어", `${rares.length}종 · 더 특별하고 더 비싸요`) + rares.map(card).join("") : shown.map(card).join("");
   }
 
   function apply(data: any) {
