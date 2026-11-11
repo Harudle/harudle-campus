@@ -289,6 +289,18 @@ body.touch.chatting #topRight,body.touch.peopleOpen #topRight{display:none}
 #snapFlash{position:fixed;inset:0;z-index:40;background:#fff;opacity:0;pointer-events:none}
 #snapFlash.on{animation:snapFlash .45s ease-out}
 @keyframes snapFlash{0%{opacity:.85}100%{opacity:0}}
+/* 캡쳐 선택창: 두 카드를 좌우로 */
+#snapPick .box{width:min(400px,calc(100% - 32px))}
+.snapChoices{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.snapCard{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;padding:16px 8px 12px;border:2px solid var(--ink);border-radius:14px;background:var(--paper);color:var(--ink);font-family:var(--hand);cursor:pointer;box-shadow:2px 3px 0 var(--ink)}
+.snapCard:hover,.snapCard:focus-visible{background:var(--brand-weak);outline:none}
+.snapCard:active{transform:translate(1px,1px);box-shadow:1px 2px 0 var(--ink)}
+.snapCard .snapIco{font-size:40px;line-height:1}
+.snapCard b{font-size:20px}
+.snapCard small{font-family:var(--body);font-size:12px;color:var(--muted);text-align:center}
+.snapCard kbd{position:absolute;top:6px;right:8px;font:700 10px/1 var(--body);color:var(--muted)}
+#snapCancel{margin-top:10px;width:100%}
+#avPreview.snap{opacity:0;pointer-events:none}   /* 캡쳐용으로만 띄운 미리보기: 자리는 차지하되 보이지 않게 */
 @keyframes tourIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 .tcount{margin:0 0 6px;font-size:14px;color:var(--muted)}
 .tart{position:relative;height:150px;border:2px solid var(--ink);border-radius:16px;background:var(--brand-weak);display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:12px;overflow:hidden}

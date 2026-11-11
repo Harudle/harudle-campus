@@ -13,7 +13,7 @@ export type CommandHost = {
   dance(style?: number): void
   dances: readonly string[]
   firework(): void
-  snapshot(): void
+  snapshot(kind?: "scene" | "avatar"): void   // 없으면 선택창
   floor(f: number): void
   follow(id: string): void
   stopFollow(): void
@@ -75,7 +75,7 @@ const COMMANDS: Command[] = [
   { names: ["하트", "heart"], desc: "하트 보내기", run: (_, h) => h.skill("heart") },
   { names: ["그리기", "네컷", "draw"], desc: "네 컷 그리기", run: (_, h) => h.skill("draw") },
   { names: ["폭죽", "firework"], desc: "폭죽 쏘기", run: (_, h) => h.firework() },
-  { names: ["캡처", "캡쳐", "사진", "snap"], desc: "지금 모습 캡쳐 (사진으로 저장)", run: (_, h) => h.snapshot() },
+  { names: ["캡처", "캡쳐", "사진", "snap"], args: "[화면·캐릭터]", desc: "캡쳐 (지금 화면 · 내 캐릭터)", run: (a, h) => h.snapshot(/캐릭|아바타|avatar|char/i.test(a) ? "avatar" : /화면|장면|scene|screen/i.test(a) ? "scene" : undefined) },
   { names: ["커피", "coffee"], desc: "아이스 아메리카노 마시기", run: (_, h) => h.item("coffee") },
   { names: ["노트북", "laptop"], desc: "노트북 펼치기 (앉아서)", run: (_, h) => h.item("laptop") },
   { names: ["책", "book"], desc: "책 읽기 (앉거나 누워서)", run: (_, h) => h.item("book") },
