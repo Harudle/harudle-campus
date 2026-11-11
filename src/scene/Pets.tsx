@@ -916,42 +916,9 @@ export function Penguin({ motion, act }: PetProps) {
   )
 }
 
-const DRAGON_D = '#6A4FC8'
+const DRAGON_L = '#A48DF0'   // 주둥이 · 날개 안쪽
 
-/** 용 날개(박쥐 날개): 팔뼈 하나 + 뒤로 부채처럼 펼쳐진 손가락뼈 셋 + 그 사이 막. 어깨가 원점, side 쪽으로 뻗는다 */
-function DragonWing({ side }: { side: 1 | -1 }) {
-  return (
-    <group>
-      {/* 팔뼈: 어깨에서 바깥 위로 */}
-      <mesh position={[side * 0.18, 0.04, 0]} rotation-z={side * (Math.PI / 2 - 0.2)}>
-        <capsuleGeometry args={[0.028, 0.34, 4, 8]} />
-        <Skin color={DRAGON_D} thickness={1.2} />
-      </mesh>
-      {/* 손가락뼈: 날개 끝에서 뒤로 부채꼴 */}
-      {[0.35, 0.85, 1.35].map((a, i) => (
-        <group key={a} position={[side * 0.36, 0.08, 0]} rotation-y={side * -a}>
-          <mesh position={[side * 0.16, 0, 0]} rotation-z={Math.PI / 2}>
-            <capsuleGeometry args={[0.014, 0.3 - i * 0.05, 3, 6]} />
-            <meshBasicMaterial color={INK} />
-          </mesh>
-        </group>
-      ))}
-      {/* 막: 뼈 사이를 메운다. 뒤 가장자리는 물결 */}
-      <mesh position={[side * 0.3, 0.02, -0.15]} rotation-y={side * -0.35} scale={[1.55, 0.06, 1.05]} castShadow>
-        <sphereGeometry args={[0.2, 16, 10]} />
-        <Skin color={LILAC} thickness={1.3} />
-      </mesh>
-      {[0.12, 0.3, 0.46].map((x, i) => (
-        <mesh key={x} position={[side * x, 0.015, -0.3 + i * 0.05]} scale={[1, 0.06, 1]}>
-          <sphereGeometry args={[0.08, 10, 8]} />
-          <Skin color={LILAC} thickness={1.1} />
-        </mesh>
-      ))}
-    </group>
-  )
-}
-
-/** 용(레어): 걷지 않고 박쥐 날개를 저으며 떠서 따라온다. 긴 주둥이 · 뒤로 휜 뿔 · 세로 동공 · 볏 · 등 가시 · 끝이 창 모양인 꼬리. 앉히거나 쓰다듬으면 내려앉는다 */
+/** 용(레어): 걷지 않고 날개를 저으며 떠서 따라온다. 큰 둥근 머리에 볼 터치 · 동글한 뿔 · 길쭉한 주둥이(콧구멍은 위에) · 송곳니 하나. 앉히거나 쓰다듬으면 내려앉아 날개를 접는다 */
 export function Dragon({ motion, act }: PetProps) {
   const rest = useRest(motion, 0.24, act, 'dragon')
   const fly = useRef<THREE.Group>(null), wings = useRef<(THREE.Group | null)[]>([]), hover = useRef(0), smoke = useRef<(THREE.Mesh | null)[]>([])
@@ -960,8 +927,8 @@ export function Dragon({ motion, act }: PetProps) {
     hover.current = THREE.MathUtils.damp(hover.current, up, 4, Math.min(delta, 0.05))
     if (fly.current) fly.current.position.y = hover.current * (0.3 + Math.sin(t * 2.4) * 0.05)
     const h = Math.min(1, hover.current), beat = Math.sin(t * (4 + 5 * h + 7 * r)), spread = 0.25 + 0.55 * h
-    wings.current.forEach((g, i) => { if (g) { const side = i ? 1 : -1; g.rotation.z = side * (spread * 0.4 + beat * spread * 0.6); g.rotation.y = side * (1 - h) * 0.9 } })   // 내려앉으면 날개를 뒤로 접는다
-    smoke.current.forEach((m, i) => { if (!m) return; const p = (t * 0.6 + i * 0.5) % 1; m.position.set((i ? 0.04 : -0.04) + Math.sin(p * 6) * 0.02, 0.06 + p * 0.22, 0.36 + p * 0.06); m.scale.setScalar(Math.sin(p * Math.PI) * 1.3) })   // 콧김 모락모락
+    wings.current.forEach((g, i) => { if (g) { const side = i ? 1 : -1; g.rotation.z = side * (spread * 0.4 + beat * spread * 0.6); g.rotation.y = side * (1 - h) * 0.7 } })   // 내려앉으면 날개를 뒤로 접는다
+    smoke.current.forEach((m, i) => { if (!m) return; const p = (t * 0.55 + i * 0.5) % 1; m.position.set((i ? 0.035 : -0.035) + Math.sin(p * 6) * 0.02, 0.0 + p * 0.22, 0.4 + p * 0.04); m.scale.setScalar(Math.sin(p * Math.PI) * 1.3) })   // 콧김 퐁퐁
   })
   return (
     <group scale={BIG}>
@@ -969,128 +936,122 @@ export function Dragon({ motion, act }: PetProps) {
         <FourLegs kind="dragon" motion={motion} y={0.24} front={0.18} back={-0.22} x={0.14} length={0.24} legs={rest.legs} hips={rest.hips} leg={<ThickLeg length={0.24} radius={0.06} color={DRAGON} paw={COLORS.butter} />} />
         <group ref={rest.body}>
           <mesh position-y={0.42} rotation-x={Math.PI / 2} castShadow>
-            <capsuleGeometry args={[0.2, 0.42, 8, 16]} />
+            <capsuleGeometry args={[0.21, 0.4, 8, 16]} />
             <Skin color={DRAGON} />
           </mesh>
-          {/* 배: 노란 비늘 띠 */}
-          <mesh position={[0, 0.33, 0.02]} rotation-x={Math.PI / 2} scale={[0.78, 1, 0.65]}>
-            <capsuleGeometry args={[0.19, 0.38, 6, 12]} />
+          {/* 노란 배 */}
+          <mesh position={[0, 0.34, 0.02]} rotation-x={Math.PI / 2} scale={[0.8, 1, 0.7]}>
+            <capsuleGeometry args={[0.19, 0.36, 6, 12]} />
             <meshBasicMaterial color={COLORS.butter} />
           </mesh>
-          {[-0.14, 0, 0.14].map((z) => (
-            <mesh key={z} position={[0, 0.235, z]} rotation-x={Math.PI / 2}>
-              <torusGeometry args={[0.1, 0.008, 4, 12, Math.PI]} />
-              <meshBasicMaterial color="#C9A227" />
-            </mesh>
-          ))}
-          {/* 등 가시: 목에서 꼬리까지 */}
-          {[-0.26, -0.12, 0.02, 0.16].map((z, i) => (
-            <mesh key={z} position={[0, 0.635 - Math.abs(z + 0.05) * 0.1, z]} scale={[0.35, 1, 1]}>
-              <coneGeometry args={[0.07, i === 1 || i === 2 ? 0.15 : 0.11, 4]} />
+          {/* 등 가시: 동글동글 */}
+          {[-0.24, -0.08, 0.08, 0.22].map((z, i) => (
+            <mesh key={z} position={[0, 0.66 - Math.abs(z) * 0.12, z]} rotation-x={-0.25}>
+              <coneGeometry args={[0.05, i % 2 ? 0.1 : 0.13, 6]} />
               <Skin color={COLORS.butter} thickness={1.1} />
             </mesh>
           ))}
-          {/* 길고 가늘어지는 꼬리, 끝은 창 모양 */}
-          <Tail motion={motion} position={[0, 0.42, -0.4]} speed={2.2} amount={0.35}>
-            <group rotation-x={-1.35}>
-              <mesh position-y={0.28} castShadow>
-                <coneGeometry args={[0.11, 0.6, 12]} />
+          <Tail motion={motion} position={[0, 0.44, -0.4]} speed={2.2} amount={0.35}>
+            <group rotation-x={-1.25}>
+              <mesh position-y={0.24} castShadow>
+                <coneGeometry args={[0.1, 0.52, 12]} />
                 <Skin color={DRAGON} thickness={1.3} />
               </mesh>
-              {[0.12, 0.3].map((y) => (
-                <mesh key={y} position={[0, y, 0.07 - y * 0.12]} rotation-x={0.3} scale={[0.35, 1, 1]}>
-                  <coneGeometry args={[0.05, 0.09, 4]} />
-                  <Skin color={COLORS.butter} thickness={1.1} />
-                </mesh>
-              ))}
-              <mesh position-y={0.62} rotation-y={Math.PI / 4} scale={[1.3, 1.5, 0.3]}>
-                <octahedronGeometry args={[0.08, 0]} />
-                <Skin color={COLORS.butter} thickness={1.2} />
+              <mesh position-y={0.53} scale={[1.2, 1.3, 0.5]}>
+                <octahedronGeometry args={[0.07, 0]} />
+                <Skin color={COLORS.butter} thickness={1.1} />
               </mesh>
             </group>
           </Tail>
-          {/* 박쥐 날개 */}
+          {/* 날개: 동글한 막에 물결 가장자리 · 손가락 선 두 줄 */}
           {[-1, 1].map((side, i) => (
-            <group key={side} ref={(g) => { wings.current[i] = g }} position={[side * 0.13, 0.58, 0.02]}>
-              <DragonWing side={side as 1 | -1} />
+            <group key={side} ref={(g) => { wings.current[i] = g }} position={[side * 0.15, 0.6, -0.04]}>
+              <group rotation-y={side * -0.25}>
+                <mesh position={[side * 0.24, 0.02, -0.03]} scale={[1.7, 0.1, 1]} castShadow>
+                  <sphereGeometry args={[0.16, 14, 10]} />
+                  <Skin color={LILAC} thickness={1.3} />
+                </mesh>
+                {[0.14, 0.3].map((x) => (
+                  <mesh key={x} position={[side * x, 0.01, -0.17]} scale={[1, 0.08, 0.9]}>
+                    <sphereGeometry args={[0.07, 10, 8]} />
+                    <Skin color={LILAC} thickness={1.1} />
+                  </mesh>
+                ))}
+                <mesh position={[side * 0.2, 0.03, 0.09]} rotation-z={Math.PI / 2}>
+                  <capsuleGeometry args={[0.018, 0.4, 3, 6]} />
+                  <meshBasicMaterial color={INK} />
+                </mesh>
+                {[0.6, 1.1].map((a) => (
+                  <group key={a} position={[side * 0.34, 0.035, 0.07]} rotation-y={side * -a}>
+                    <mesh position={[side * 0.08, 0, 0]} rotation-z={Math.PI / 2}>
+                      <capsuleGeometry args={[0.009, 0.14, 3, 4]} />
+                      <meshBasicMaterial color={INK} />
+                    </mesh>
+                  </group>
+                ))}
+              </group>
             </group>
           ))}
-          {/* 목: 앞으로 길게 빼고 머리를 든다 */}
-          <mesh position={[0, 0.62, 0.32]} rotation-x={0.75} castShadow>
-            <capsuleGeometry args={[0.11, 0.2, 6, 12]} />
-            <Skin color={DRAGON} />
-          </mesh>
-          <mesh position={[0, 0.74, 0.32]} rotation-x={-0.4} scale={[0.35, 1, 1]}>
-            <coneGeometry args={[0.06, 0.12, 4]} />
-            <Skin color={COLORS.butter} thickness={1.1} />
-          </mesh>
-          <group ref={rest.head} position={[0, 0.82, 0.46]}>
-            {/* 머리뼈 */}
-            <mesh scale={[1, 0.88, 1.12]} castShadow>
-              <sphereGeometry args={[0.17, 22, 16]} />
+          <group ref={rest.head} position={[0, 0.76, 0.44]}>
+            <mesh castShadow>
+              <sphereGeometry args={[0.27, 26, 20]} />
               <Skin color={DRAGON} />
             </mesh>
-            {/* 긴 주둥이 */}
-            <mesh position={[0, -0.045, 0.2]} rotation-x={Math.PI / 2} scale={[1.05, 1, 0.78]} castShadow>
-              <capsuleGeometry args={[0.095, 0.2, 6, 12]} />
-              <Skin color={DRAGON} />
+            {/* 주둥이: 앞으로 살짝 길쭉하게(정면 둥근 코가 아니다) */}
+            <mesh position={[0, -0.09, 0.2]} scale={[0.9, 0.62, 1.3]}>
+              <sphereGeometry args={[0.14, 18, 14]} />
+              <Skin color={DRAGON_L} thickness={1.2} />
             </mesh>
-            {/* 아래턱 선 · 송곳니 */}
-            <mesh position={[0, -0.1, 0.22]} rotation-x={Math.PI / 2}>
-              <capsuleGeometry args={[0.006, 0.2, 3, 4]} />
+            {/* 콧구멍: 주둥이 위쪽에 작게 */}
+            {[-1, 1].map((side) => (
+              <mesh key={side} position={[side * 0.04, -0.015, 0.34]} rotation-x={-0.5} scale={[1, 0.5, 1]}>
+                <sphereGeometry args={[0.012, 8, 6]} />
+                <meshBasicMaterial color={INK} />
+              </mesh>
+            ))}
+            {/* 미소 · 송곳니 하나 */}
+            <mesh position={[0, -0.135, 0.3]} rotation={[-0.5, 0, Math.PI]}>
+              <torusGeometry args={[0.05, 0.008, 4, 12, Math.PI]} />
               <meshBasicMaterial color={INK} />
             </mesh>
+            <mesh position={[0.035, -0.155, 0.31]} rotation-x={Math.PI}>
+              <coneGeometry args={[0.013, 0.035, 6]} />
+              <meshBasicMaterial color="#FFFFFF" />
+            </mesh>
+            <Face radius={0.27} smile={false} />
+            <Cheeks radius={0.27} z={0.2} y={-0.02} />
+            {/* 정수리 가시 둘 */}
+            {[-0.05, 0.05].map((z, i) => (
+              <mesh key={z} position={[0, 0.27 - i * 0.02, z - 0.08]} rotation-x={-0.4} scale={[0.5, 1, 1]}>
+                <coneGeometry args={[0.04, 0.09 - i * 0.02, 6]} />
+                <Skin color={COLORS.butter} thickness={1.1} />
+              </mesh>
+            ))}
             {[-1, 1].map((side) => (
               <group key={side}>
-                <mesh position={[side * 0.05, -0.125, 0.29]} rotation-x={Math.PI}>
-                  <coneGeometry args={[0.014, 0.04, 6]} />
-                  <meshBasicMaterial color="#FFFFFF" />
-                </mesh>
-                {/* 콧구멍: 주둥이 끝 위 */}
-                <mesh position={[side * 0.035, 0.02, 0.335]} scale={[1, 0.6, 1]}>
-                  <sphereGeometry args={[0.014, 8, 6]} />
-                  <meshBasicMaterial color={INK} />
-                </mesh>
-                {/* 눈: 노란 눈에 세로 동공 + 매서운 눈썹뼈 */}
-                <mesh position={[side * 0.1, 0.035, 0.11]} rotation-y={side * 0.5} scale={[0.75, 1, 0.5]}>
-                  <sphereGeometry args={[0.042, 12, 10]} />
-                  <meshBasicMaterial color={COLORS.butter} />
-                </mesh>
-                <mesh position={[side * 0.112, 0.035, 0.128]} rotation-y={side * 0.5}>
-                  <capsuleGeometry args={[0.009, 0.03, 3, 6]} />
-                  <meshBasicMaterial color={INK} />
-                </mesh>
-                <mesh position={[side * 0.1, 0.085, 0.1]} rotation={[0.2, side * 0.5, side * -0.35]}>
-                  <capsuleGeometry args={[0.022, 0.07, 4, 8]} />
-                  <Skin color={DRAGON_D} thickness={1.1} />
-                </mesh>
-                {/* 뒤로 휜 뿔(두 마디) */}
-                <group position={[side * 0.08, 0.12, -0.04]} rotation={[-1.05, 0, side * -0.25]}>
-                  <mesh position-y={0.08} castShadow>
-                    <coneGeometry args={[0.04, 0.17, 10]} />
+                {/* 동글한 뿔: 뒤로 살짝 눕힌다 */}
+                <group position={[side * 0.13, 0.24, -0.03]} rotation={[-0.55, 0, side * -0.3]}>
+                  <mesh position-y={0.07} castShadow>
+                    <coneGeometry args={[0.05, 0.16, 10]} />
                     <Skin color={COLORS.butter} thickness={1.2} />
                   </mesh>
-                  <mesh position={[0, 0.17, 0.03]} rotation-x={0.6}>
-                    <coneGeometry args={[0.018, 0.08, 8]} />
-                    <Skin color={COLORS.butter} thickness={1.1} />
+                  <mesh position-y={0.15}>
+                    <sphereGeometry args={[0.016, 8, 6]} />
+                    <Skin color={COLORS.butter} thickness={1} />
                   </mesh>
                 </group>
-                {/* 볏(귀 지느러미): 머리 옆에서 뒤로 */}
-                <group position={[side * 0.15, 0, -0.06]} rotation={[-0.5, side * 0.6, side * -1.2]}>
-                  {[0, 1].map((k) => (
-                    <mesh key={k} position={[0, 0.06 + k * 0.03, -k * 0.05]} scale={[1, 1, 0.3]}>
-                      <coneGeometry args={[0.05, 0.14 - k * 0.04, 4]} />
-                      <Skin color={LILAC} thickness={1.1} />
-                    </mesh>
-                  ))}
-                </group>
+                {/* 볏(귀 지느러미) */}
+                <mesh position={[side * 0.27, 0.05, -0.05]} rotation-z={side * -1.1} scale={[1, 1, 0.35]}>
+                  <coneGeometry args={[0.07, 0.16, 4]} />
+                  <Skin color={LILAC} thickness={1.1} />
+                </mesh>
               </group>
             ))}
             {/* 콧김 */}
             {[0, 1].map((i) => (
               <mesh key={i} ref={(el) => { smoke.current[i] = el }}>
-                <sphereGeometry args={[0.02, 8, 6]} />
-                <meshBasicMaterial color="#FFFFFF" transparent opacity={0.75} />
+                <sphereGeometry args={[0.022, 8, 6]} />
+                <meshBasicMaterial color="#FFFFFF" transparent opacity={0.8} />
               </mesh>
             ))}
           </group>
