@@ -693,6 +693,16 @@ body.duelFps #cross{transition:opacity .1s;width:18px;height:18px;margin:-9px 0 
 #shop .glist li.ghead.ultra{margin-top:10px}
 #shop .glist li.ghead.ultra b{background:linear-gradient(90deg,#FFB3C9,#FFE27A,#A6EBC4,#A9CCF5,#CDB9F2)}
 #shop .glist li.ghead.ultra::after{background:linear-gradient(90deg,#FF8FB1,#FFD43B,#7DDBA3,#7DB3F0,#B39DDB);opacity:.9;height:3px}
+/* 전설: 금빛 테두리가 은은하게 빛나는 카드 · 금빛 띠 · 검은 바탕 금글씨 태그 */
+#shop .glist li.legend{border:3px solid #E0A800;border-radius:14px;background:linear-gradient(135deg,#FFFDF3 35%,#FFEFB8);box-shadow:3px 4px 0 #8A5A00,0 0 0 0 rgba(255,201,59,.55);animation:legendGlow 2.4s ease-in-out infinite}
+#shop .glist li.legend.got{background:linear-gradient(135deg,#F4F0FD 35%,#FFEFB8)}
+#shop .glist li.legend .gicon{background:radial-gradient(circle at 35% 30%,#FFFFFF,#CFE6FB 60%,#FFE27A)}
+#shop .glist i.legend{font-style:normal;font-size:11px;font-weight:800;padding:1px 8px;border-radius:999px;border:1.5px solid #E0A800;color:#FFD43B;background:#1E1B2E;letter-spacing:.5px}
+@keyframes legendGlow{50%{box-shadow:3px 4px 0 #8A5A00,0 0 14px 3px rgba(255,201,59,.55)}}
+@media (prefers-reduced-motion:reduce){#shop .glist li.legend{animation:none}}
+#shop .glist li.ghead.legend{margin-top:10px}
+#shop .glist li.ghead.legend b{background:#1E1B2E;color:#FFD43B;border-color:#E0A800}
+#shop .glist li.ghead.legend::after{background:linear-gradient(90deg,#FFC93B,#E0A800,#FFE27A);opacity:1;height:3px}
 #shop .glist i.rare{font-style:normal;font-size:11px;padding:1px 7px;border-radius:999px;background:#FFD43B;border:1.5px solid var(--ink);color:var(--ink)}
 #shop .glist li.rare .gicon{background:#FFF3C4}
 /* 감정표현 휠(G를 꾹): 화면 가운데 피자 모양(가진 프리미엄 감정표현만). 고른 칸은 노랑 */
