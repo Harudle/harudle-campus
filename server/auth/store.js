@@ -46,6 +46,8 @@ export function createMemoryStore() {
     async listWalletEntries(userId, limit = 20) {
       return entries.filter((e) => e.userId === userId).slice(-limit).reverse().map((e) => ({ kind: e.kind, refKey: e.refKey, amount: e.amount, balanceAfter: e.balanceAfter, at: e.at }));
     },
+    // 가장 최근에 컷을 받은 네컷만화(하루들 피드 ID). 없으면 null
+    async latestFeedId(userId) { const e = entries.filter((x) => x.userId === userId && x.kind === "feed_daily" && typeof x.meta?.feedId === "string").pop(); return e ? e.meta.feedId : null; },
     async getInventory(userId) { return [...(inventory.get(userId) || [])]; },
     async buyItem({ userId, sku, price, at }) {
       if (!users.has(userId)) throw new Error("memory no_user");
@@ -131,6 +133,11 @@ export function createSupabaseStore({ url, key, fetch = globalThis.fetch }) {
     async listWalletEntries(userId, limit = 20) {
       const rows = await call(`/campus_wallet_entries?harudle_user_id=${eq(userId)}&select=kind,ref_key,amount,balance_after,created_at&order=id.desc&limit=${Math.max(1, Math.min(100, limit | 0))}`, { method: "GET" }, "count=none");
       return (Array.isArray(rows) ? rows : []).map((r) => ({ kind: r.kind, refKey: r.ref_key, amount: Number(r.amount), balanceAfter: Number(r.balance_after), at: Date.parse(r.created_at) }));
+    },
+    async latestFeedId(userId) {
+      const rows = await call(`/campus_wallet_entries?harudle_user_id=${eq(userId)}&kind=eq.feed_daily&select=meta&order=id.desc&limit=1`, { method: "GET" }, "count=none");
+      const id = (Array.isArray(rows) ? rows[0] : null)?.meta?.feedId;
+      return typeof id === "string" ? id : null;
     },
     async getInventory(userId) {
       const rows = await call(`/campus_inventory?harudle_user_id=${eq(userId)}&select=sku&order=acquired_at.asc`, { method: "GET" }, "count=none");
