@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createMediaAdmission, mediaClientAddress } from "../server/media/admission.js";
+import { createMediaAdmission, MAX_MEDIA_PARTICIPANTS, mediaClientAddress } from "../server/media/admission.js";
 
 test("전체 동시 연결 수와 IP별 반복 연결을 제한한다", () => {
   let now = 1000000;
@@ -22,4 +22,12 @@ test("신뢰하는 로컬 프록시의 주소만 클라이언트 주소로 사�
   assert.equal(mediaClientAddress(req, true), "192.0.2.5");
   req.socket.remoteAddress = "127.0.0.1"; req.headers["x-forwarded-for"] = "invalid";
   assert.equal(mediaClientAddress(req, true), "127.0.0.1");
+});
+
+test("동시 인원 상한은 자체 호스팅 기준 200까지 설정할 수 있다", () => {
+  const peers = new Map();
+  assert.equal(MAX_MEDIA_PARTICIPANTS, 200);
+  createMediaAdmission({ peers, maxParticipants: 200 });
+  assert.throws(() => createMediaAdmission({ peers, maxParticipants: 201 }), /invalid_media_config/);
+  assert.throws(() => createMediaAdmission({ peers, maxParticipants: 1 }), /invalid_media_config/);
 });

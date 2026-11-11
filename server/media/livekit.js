@@ -14,11 +14,12 @@ export function createLiveKitProvider(env) {
     configured = !!apiKey && !!apiSecret && (endpoint.protocol === "wss:" || local);
   } catch { }
 
+  const roomName = (scope) => `${namespace}-${createHash("sha256").update(scope).digest("hex").slice(0, 24)}`;
   return {
-    configured,
+    configured, roomName,
     async join({ identity, name, area, scope, canShare }) {
       if (!configured) throw new Error("not_configured");
-      const room = `${namespace}-${createHash("sha256").update(scope || area).digest("hex").slice(0, 24)}`;
+      const room = roomName(scope || area);
       const token = new AccessToken(apiKey, apiSecret, { identity, name, ttl: "10m" });
       token.addGrant({
         roomJoin: true, room, canSubscribe: true, canPublishData: false,
