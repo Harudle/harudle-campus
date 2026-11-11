@@ -11,7 +11,7 @@ type MockState = { owned: string[]; gear: GearState; balance: number };
 const mockRead = (): MockState => { try { const v = JSON.parse(localStorage.getItem(MOCK_KEY) || "null"); if (v && Array.isArray(v.owned)) return v; } catch { } return { owned: [], gear: {}, balance: 999 }; };
 const mockSave = (v: MockState) => { try { localStorage.setItem(MOCK_KEY, JSON.stringify(v)); } catch { } };
 
-type Item = { sku: string; slot: keyof GearState | "emote"; name: string; price: number; rare?: boolean };
+type Item = { sku: string; slot: keyof GearState | "emote"; name: string; price: number; rare?: boolean; ultra?: boolean };
 type Deps = {
   showToast: (h: string, p: string, ms?: number) => void;
   requireLogin: (reason: string) => boolean;
@@ -42,7 +42,8 @@ const TIP: Record<string, string> = {
   emote_lp: "내 앞에 턴테이블을 놓고 방석에 앉아, 헤드셋을 꽂고 LP를 들으며 고개를 까딱여요. G를 꾹 눌러 골라요.",
   emote_guitar: "통기타를 메고 줄을 튕기며 박자에 맞춰 몸을 흔들어요. G를 꾹 눌러 골라요.",
   pet_duck: "헤드셋을 쓴 고무 오리예요. 막힐 땐 말을 걸어 보세요. 뒤뚱뒤뚱 따라와요.", pet_capybara: "머리에 귤을 얹고 느긋하게 따라와요. 멈추면 식빵처럼 엎드려요.", pet_penguin: "날개를 파닥이며 뒤뚱뒤뚱 따라와요.",
-  pet_dragon: "걷지 않고 날개를 저으며 떠서 따라오는 커다란 용이에요. 앉히면 곁에 내려앉아요.",
+  pet_dragon: "뿔과 볏을 세우고 박쥐 날개를 저으며 떠서 따라오는 커다란 용이에요. 콧김이 모락모락, 앉히면 곁에 내려앉아요.",
+  pet_eagle: "하늘을 활공하며 따라오고, 달리면 옆에서 나란히 날아요. 멈추면 내 어깨에 내려앉고, 오래 서 있으면 머리 위를 빙글 돌아요.",
   fx_bulb: "번뜩! 좋은 생각이 난 것처럼 전구가 켜져요.", fx_zzz: "Zzz가 머리 위로 솔솔 떠올라요.", fx_question: "물음표가 갸우뚱갸우뚱 흔들려요.", fx_note: "음표가 박자에 맞춰 통통 튀어요.",
   head_beret: "만화가처럼 비스듬히 눌러쓰는 베레모예요.", head_crown: "보석이 반짝이는 금빛 왕관이에요.",
   neck_scarf: "끝자락이 살랑이는 라벤더 목도리예요.", neck_camera: "오늘의 한 컷을 찍으려고 목에 건 카메라예요. 가끔 플래시가 터져요.",
@@ -62,7 +63,8 @@ const ICON: Record<string, string> = {
   pet_duck: `<svg viewBox="0 0 40 40" aria-hidden="true"><ellipse cx="18" cy="27" rx="13" ry="9" fill="#FFD43B" stroke="#111118" stroke-width="2.2"/><circle cx="25" cy="14" r="8" fill="#FFD43B" stroke="#111118" stroke-width="2.2"/><path d="M31 14l6 1.500-6 3Z" fill="#FF9F45" stroke="#111118" stroke-width="1.8" stroke-linejoin="round"/><circle cx="26" cy="12.500" r="1.500" fill="#111118"/><path d="M5 24l-3-4" ${S}/></svg>`,
   pet_capybara: `<svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="7" r="4" fill="#FF9F45" stroke="#111118" stroke-width="1.8"/><rect x="6" y="11" width="28" height="24" rx="10" fill="#B98A5E" stroke="#111118" stroke-width="2.2"/><rect x="12" y="24" width="16" height="9" rx="4.500" fill="#7A5236"/><path d="M11 19h4M25 19h4" ${S}/><circle cx="17.500" cy="27" r="1" fill="#111118"/><circle cx="22.500" cy="27" r="1" fill="#111118"/></svg>`,
   pet_penguin: `<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M20 4c8 0 12 7 12 17s-4 15-12 15S8 31 8 21 12 4 20 4Z" fill="#2B2140" stroke="#111118" stroke-width="2.2"/><path d="M20 13c5 0 8 4 8 10s-3 11-8 11-8-5-8-11 3-10 8-10Z" fill="#fff"/><circle cx="16" cy="17" r="1.600" fill="#111118"/><circle cx="24" cy="17" r="1.600" fill="#111118"/><path d="M17.500 20h5L20 24Z" fill="#FFD97A" stroke="#111118" stroke-width="1.400" stroke-linejoin="round"/></svg>`,
-  pet_dragon: `<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M12 9 9 2M28 9l3-7" stroke="#FFD97A" stroke-width="3.400" stroke-linecap="round"/><path d="M6 20 1 15l1 9ZM34 20l5-5-1 9Z" fill="#B9A6EC" stroke="#111118" stroke-width="1.800" stroke-linejoin="round"/><circle cx="20" cy="21" r="14" fill="#8B6FE8" stroke="#111118" stroke-width="2.2"/><ellipse cx="20" cy="27" rx="7.500" ry="5" fill="#A48DF0" stroke="#111118" stroke-width="1.400"/><circle cx="14.500" cy="19" r="1.700" fill="#111118"/><circle cx="25.500" cy="19" r="1.700" fill="#111118"/><circle cx="17.500" cy="26.500" r=".9" fill="#111118"/><circle cx="22.500" cy="26.500" r=".9" fill="#111118"/></svg>`,
+  pet_dragon: `<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M16.500 13 7 1.500l3.500 11ZM21.500 11.500 18.500.5l7 9Z" fill="#FFD97A" stroke="#111118" stroke-width="1.800" stroke-linejoin="round"/><path d="M9 18 2 13l3 8-2 4 6-1Z" fill="#B9A6EC" stroke="#111118" stroke-width="1.800" stroke-linejoin="round"/><path d="M6 38c1-8 2-15 6-20 3-5 8-7 13-6 4 .5 7 3 10 6 2 2 3 4 2 6-1 1.500-3 2-5 1.500l-7-1c-1 3-2 6-5 8-2 2-3 4-3 6Z" fill="#8B6FE8" stroke="#111118" stroke-width="2.2" stroke-linejoin="round"/><path d="M24 22.500l3 2 2-2 2.500 2 2-2.500" fill="none" stroke="#111118" stroke-width="1.400" stroke-linejoin="round"/><path d="M27 24.500l.8 2 1-2M31.500 24l.8 1.800" fill="#fff" stroke="#111118" stroke-width=".8" stroke-linejoin="round"/><path d="M9 30l-3-1M10 25l-3-2M12 20l-3-3" stroke="#FFD97A" stroke-width="2.600" stroke-linecap="round"/><ellipse cx="22" cy="16" rx="3" ry="2.400" fill="#FFD97A" stroke="#111118" stroke-width="1.400"/><path d="M22 14v4" stroke="#111118" stroke-width="1.600" stroke-linecap="round"/><path d="M18.500 13.500l6-1.500" stroke="#111118" stroke-width="2" stroke-linecap="round"/><circle cx="34" cy="19" r="1" fill="#111118"/><path d="M34.500 17.500c.5-2.500-.5-4.500-2-6 3.500.5 6 3 5.500 6 1-.8 1.800-1.800 2-3 .8 3.500-1 6.500-4 7-1.200.2-1.800-.8-1.500-4Z" fill="#FF9F45" stroke="#111118" stroke-width="1.200" stroke-linejoin="round"/><path d="M35.500 17.500c.3-1.300 0-2.300-.5-3.200 1.500.6 2.500 1.800 2.200 3.200Z" fill="#FFD43B"/></svg>`,
+  pet_eagle: `<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M3 21c4-6 10-8 15-7l-3 6c-4-1-8 0-12 1Z" fill="#6B4428" stroke="#111118" stroke-width="1.800" stroke-linejoin="round"/><path d="M37 21c-4-6-10-8-15-7l3 6c4-1 8 0 12 1Z" fill="#6B4428" stroke="#111118" stroke-width="1.800" stroke-linejoin="round"/><path d="M4 21l-2 3M7 20.500l-1.500 3.500M10 20.200l-1 3.500M36 21l2 3M33 20.500l1.500 3.500M30 20.200l1 3.500" stroke="#111118" stroke-width="1.600" stroke-linecap="round"/><path d="M14 22c0-4 2.500-6 6-6s6 2 6 6c0 5-2 9-6 11-4-2-6-6-6-11Z" fill="#6B4428" stroke="#111118" stroke-width="2" stroke-linejoin="round"/><path d="M16 33l4 5 4-5Z" fill="#fff" stroke="#111118" stroke-width="1.600" stroke-linejoin="round"/><circle cx="20" cy="11" r="7" fill="#fff" stroke="#111118" stroke-width="2.2"/><path d="M20 11.500h5c1.500 0 2.500 1.500 1.500 3l-1.500 2-1-1.500H20Z" fill="#FFD97A" stroke="#111118" stroke-width="1.600" stroke-linejoin="round"/><circle cx="18" cy="9.500" r="1.400" fill="#111118"/><path d="M15.500 7l4 1.300" stroke="#111118" stroke-width="1.800" stroke-linecap="round"/><path d="M33 4l.8 2.200L36 7l-2.200.8L33 10l-.8-2.200L30 7l2.200-.8Z" fill="#FFD43B" stroke="#111118" stroke-width=".9" stroke-linejoin="round"/></svg>`,
   fx_bulb: `<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M20 6a10 10 0 0 1 6 18v3H14v-3a10 10 0 0 1 6-18Z" fill="#FFD97A" stroke="#111118" stroke-width="2.2" stroke-linejoin="round"/><rect x="15" y="27" width="10" height="6" rx="2" fill="#C9CDD4" stroke="#111118" stroke-width="2"/><path d="M5 12l3 2M35 12l-3 2M20 1v2" ${S}/></svg>`,
   fx_zzz: `<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M6 22h10L6 34h10" ${S.replace("2.2", "2.6")}/><path d="M19 12h8l-8 10h8" ${S}/><path d="M29 4h6l-6 7h6" ${S.replace("2.2", "1.8")}/></svg>`,
   fx_question: `<svg viewBox="0 0 40 40" aria-hidden="true"><path d="M12 14c0-5 3.500-8 8-8s8 3 8 7.500c0 6-7 5.500-7 11.500h-3c0-8 6-7.500 6-11.500 0-2.500-1.700-4-4-4s-4 1.500-4 4.500Z" fill="#B9A6EC" stroke="#111118" stroke-width="2.2" stroke-linejoin="round"/><circle cx="19.500" cy="32" r="3" fill="#B9A6EC" stroke="#111118" stroke-width="2.2"/></svg>`,
@@ -112,7 +114,7 @@ export function createShopUi(d: Deps) {
     tabs.innerHTML = TABS.map(([k, label]) => `<button type="button" role="tab" class="dbtn${k === tab ? " on" : ""}" aria-selected="${k === tab}" data-tab="${k}">${label}</button>`).join("");
     const pick = TABS.find(([k]) => k === tab)![2];
     // 레어는 아래로 모으고, 일반과 레어 사이에 구분 띠를 둔다(카탈로그 순서는 그대로 두고 화면에서만)
-    const shown = catalog.filter(pick), plain = shown.filter((it) => !it.rare), rares = shown.filter((it) => it.rare);
+    const shown = catalog.filter(pick), plain = shown.filter((it) => !it.rare), rares = shown.filter((it) => it.rare && !it.ultra), ultras = shown.filter((it) => it.ultra);
     const head = (cls: string, label: string, note: string) => `<li class="ghead ${cls}" role="presentation"><b>${label}</b><span>${note}</span></li>`;
     const card = (it: Item) => {
       const got = owned.includes(it.sku), emote = it.slot === "emote", on = !emote && gear[it.slot as keyof GearState] === it.sku, pet = it.slot === "pet", lack = loggedIn && !got && balance < it.price, off = busy ? " disabled" : "";
@@ -122,9 +124,13 @@ export function createShopUi(d: Deps) {
         : !got ? `<button type="button" class="btn${lack ? (earn.today ? " lack" : " lav") : ""}" data-buy="${esc(it.sku)}"${off}>${buyLabel}</button><button type="button" class="btn ghost" data-try="${esc(it.slot)}" data-sku="${esc(it.sku)}"${off}>${pet ? "미리 만나기" : "입어 보기"}</button>`
         : on ? `<button type="button" class="btn ghost" data-wear="${esc(it.slot)}" data-sku=""${off}>${pet ? "쉬게 하기" : "벗기"}</button>`
         : `<button type="button" class="btn" data-wear="${esc(it.slot)}" data-sku="${esc(it.sku)}"${off}>${pet ? "데리고 다니기" : "쓰기"}</button>`;
-      return `<li class="${got ? "got" : ""}${it.rare ? " rare" : ""}"><span class="gicon">${ICON[it.sku] || ""}</span><div><b>${esc(it.name)}${it.rare ? `<i class="rare">레어</i>` : ""}<em>${on ? (pet ? "함께 있어요" : "쓰는 중") : got ? "가졌어요 ✓" : lack ? `${it.price - balance}컷 모자라요` : `${it.price}컷`}</em></b><p>${esc(TIP[it.sku] || "")}</p><div class="gacts">${act}</div></div></li>`;
+      return `<li class="${got ? "got" : ""}${it.ultra ? " ultra" : it.rare ? " rare" : ""}"><span class="gicon">${ICON[it.sku] || ""}</span><div><b>${esc(it.name)}${it.ultra ? `<i class="ultra">초레어</i>` : it.rare ? `<i class="rare">레어</i>` : ""}<em>${on ? (pet ? "함께 있어요" : "쓰는 중") : got ? "가졌어요 ✓" : lack ? `${it.price - balance}컷 모자라요` : `${it.price}컷`}</em></b><p>${esc(TIP[it.sku] || "")}</p><div class="gacts">${act}</div></div></li>`;
     };
-    list.innerHTML = rares.length ? (plain.length ? head("plain", "일반", `${plain.length}종`) : "") + plain.map(card).join("") + head("rare", "★ 레어", `${rares.length}종 · 더 특별하고 더 비싸요`) + rares.map(card).join("") : shown.map(card).join("");
+    list.innerHTML = rares.length || ultras.length
+      ? (plain.length ? head("plain", "일반", `${plain.length}종`) : "") + plain.map(card).join("")
+        + (rares.length ? head("rare", "★ 레어", `${rares.length}종 · 더 특별하고 더 비싸요`) + rares.map(card).join("") : "")
+        + (ultras.length ? head("ultra", "★★ 초레어", `${ultras.length}종 · 하늘을 나는 단 하나`) + ultras.map(card).join("") : "")
+      : shown.map(card).join("");
   }
 
   function apply(data: any) {

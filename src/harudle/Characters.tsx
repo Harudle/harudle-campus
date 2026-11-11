@@ -11,7 +11,7 @@ export type CharacterKind = 'harudle' | 'haru' | 'doodle'
 
 /** phase는 걸음 위치, amount는 0(서 있음)부터 1(걷는 중)까지의 세기다. */
 /** sit은 0(서 있음)에서 1(앉음)까지의 자세 값이고, swing은 붓을 휘두른 정도(0~1)다. */
-export type WalkMotion = { phase: number; amount: number; sit?: number; sitH?: number; swing?: number; cross?: number }   // cross: 앉아서 다리 꼬기(0~1)
+export type WalkMotion = { phase: number; amount: number; sit?: number; sitH?: number; swing?: number; cross?: number; run?: number; fly?: number; flap?: number }   // fly · flap: 나는 펫(독수리)이 떠 있는 정도 · 날갯짓 세기(0~1)   // run: 달리는 정도(0~1, 펫 걸음걸이가 쓴다)   // cross: 앉아서 다리 꼬기(0~1)
 
 type CharacterProps = {
   motion?: RefObject<WalkMotion>

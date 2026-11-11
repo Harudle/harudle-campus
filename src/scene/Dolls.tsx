@@ -4,7 +4,7 @@ import { createPortal, useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { Avatar, type AvatarPose } from '../harudle/Avatar'
 import { Haru, Harudle, type WalkMotion } from '../harudle/Characters'
-import { Pet, type PetAct } from './Pets'
+import { GAIT, Pet, type PetAct } from './Pets'
 import { dollStore, type Doll } from '../engine/dolls'
 
 /** 하루들 월드 캐릭터는 키가 약 1.64라서 캠퍼스(사람 키 ≈ 1.12)에 맞춰 줄인다 */
@@ -19,14 +19,18 @@ function DollView({ doll }: { doll: Doll }) {
   useFrame((_, delta) => {
     const dt = Math.min(delta, 0.05), a = doll.anim, m = motion.current, pa = petAct.current
     if (pa.kind !== a.petAct) { pa.kind = a.petAct; pa.t = 0 } else pa.t += dt   // 펫: 앉기 · 쓰다듬기를 받은 뒤 흐른 시간
-    m.amount = THREE.MathUtils.damp(m.amount, a.moving || a.air ? 1 : 0, 10, dt)
+    const pet = doll.kind === 'dog' ? GAIT[doll.pet] ?? GAIT.doodle : null
+    m.run = THREE.MathUtils.damp(m.run ?? 0, a.moving && a.run ? 1 : 0, 6, dt)
+    // 펫: 달리면 다리를 더 크게 쓴다(두 발 펫은 amount로 보폭이 커진다). 걸음 빠르기는 펫마다(GAIT)
+    m.amount = THREE.MathUtils.damp(m.amount, a.moving || a.air ? (pet ? 1 + 0.4 * m.run : 1) : 0, 10, dt)
     if (a.air) m.phase = Math.PI / 2   // 점프: 다리를 앞뒤로 벌린 채
-    else if (a.moving) m.phase += dt * (a.run ? STEP.run : STEP.walk)
+    else if (a.moving) m.phase += dt * (pet ? THREE.MathUtils.lerp(pet.walkF, pet.runF, m.run) : a.run ? STEP.run : STEP.walk)
+    m.fly = a.fly ?? 0; m.flap = a.flap ?? 0   // 나는 펫: 엔진이 정한 값을 그대로(Eagle이 부드럽게 따라간다)
     m.sit = THREE.MathUtils.damp(m.sit ?? 0, a.seated ? 1 : 0, 12, dt)
     m.sitH = a.seatH ?? 0.26
     m.cross = THREE.MathUtils.damp(m.cross ?? 0, a.cross ? 1 : 0, 8, dt)
     pose.current.act = a.act; pose.current.waving = a.waving; pose.current.air = a.air; pose.current.style = a.style; pose.current.actT = a.actT; pose.current.noHead = a.noHead; pose.current.arms = a.arms; pose.current.sleep = !!a.sleep; pose.current.listen = !!a.listen; pose.current.guitar = !!a.guitar; pose.current.party = !!a.party
-    if (bob.current) {
+    if (bob.current && !pet) {   // 펫은 들썩임 · 숙이기를 Pet이 걸음걸이대로 한다
       bob.current.position.y = a.moving && !a.air && !a.seated ? Math.abs(Math.sin(m.phase)) * m.amount * 0.08 : 0
       bob.current.rotation.x = THREE.MathUtils.damp(bob.current.rotation.x, a.moving && a.run ? 0.14 : 0, 10, dt)
     }

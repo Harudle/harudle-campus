@@ -1,6 +1,7 @@
 // 컷 상점 상품. 이름 · 가격은 서버가 정한다(브라우저가 보낸 가격은 쓰지 않는다)
 //   slot: 한 번에 하나만 쓰는 자리. pet(따라다니는 펫) · fx(머리 위 만화 효과) · head · neck · held(외형 위에 덧씌우는 장식)
 //   emote: 감정표현(쓰는 자리가 아니라 가지면 G 감정표현 휠에서 고른다. SLOTS에 없어서 "쓰기"는 안 된다)
+//   rare: 레어(상점 아래쪽) · ultra: 초레어(rare와 함께. 상점 맨 아래 무지개 카드)
 //   sku는 한 번 정하면 바꾸지 않는다(보유 기록 · 거래 기록이 이것으로 남는다). 그리는 코드는 src/scene/Pets.tsx · Gear.tsx
 export const SLOTS = ["pet", "fx", "head", "neck", "held"];
 export const CATALOG = [
@@ -15,6 +16,7 @@ export const CATALOG = [
   { sku: "pet_capybara", slot: "pet", name: "카피바라", price: 10 },
   { sku: "pet_penguin", slot: "pet", name: "펭귄", price: 10 },
   { sku: "pet_dragon", slot: "pet", name: "용", price: 30, rare: true },   // 레어: 걷지 않고 떠서 따라온다
+  { sku: "pet_eagle", slot: "pet", name: "독수리", price: 80, rare: true, ultra: true },   // 초레어: 하늘을 날며 따라오고 주인 어깨에 앉는다
   { sku: "fx_bubble", slot: "fx", name: "말풍선", price: 3 },
   { sku: "fx_bang", slot: "fx", name: "느낌표", price: 3 },
   { sku: "fx_sparkle", slot: "fx", name: "반짝 효과선", price: 3 },
