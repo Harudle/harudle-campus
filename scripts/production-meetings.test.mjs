@@ -43,9 +43,13 @@ test("운영 설정에서 만든 비공개 회의는 서버 재시작 후에도 
   assert.equal((await second.meeting("join", { id: room.id, password: "test1234" })).result.id, room.id);
   second.socket.close(); await once(second.socket, "close"); child.kill("SIGTERM"); await once(child, "exit");
 
-  const db = openDurableMediaState(state), current = db.state();
-  const transition = db.beginSwitch({ provider: current.provider, generation: current.generation, allowedProviders: ["livekit"] });
-  db.completeCleanup({ transitionId: transition.id, allowedProviders: ["livekit"] }); db.close();
+  const db = openDurableMediaState(state);
+  // 운영에서 허용하는 세 제공자를 모두 소진한 상태를 만든다.
+  while (db.state().phase === "active") {
+    const current = db.state(), transition = db.beginSwitch({ provider: current.provider, generation: current.generation });
+    db.completeCleanup({ transitionId: transition.id });
+  }
+  db.close();
   await start(); const third = await connect(); t.after(() => third.socket.terminate());
   assert.equal((await third.meeting("create", { title: "한도 시험", locked: false, password: "" })).error, "media_unavailable");
   assert.equal((await third.meeting("join", { id: room.id, password: "test1234" })).error, "media_unavailable");
