@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import { createWeatherService } from "./weather.js";
 import { createHash, randomBytes, randomInt } from "node:crypto";
+import { brotliCompress, constants as zlib } from "node:zlib";
 import { roomKeyAt } from "./dist-check/world.mjs";
 import { createMediaService, mediaArea, canShareInRoom } from "./server/media/index.js";
 import { createSwitchCoordinator } from "./server/media/switch-coordinator.js";
@@ -44,7 +45,7 @@ const WORLD_ORIGINS = (process.env.WORLD_ORIGINS || "https://campus.harudle.com,
 const auth = createAuth(process.env);   // 하루들 로그인 연동. 비밀값·저장소가 없으면 꺼진 채(모두 게스트)
 auth.startCleanup();
 
-const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css; charset=utf-8", ".woff2": "font/woff2", ".json": "application/json", ".png": "image/png", ".svg": "image/svg+xml", ".ico": "image/x-icon" };
+const TYPES = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css; charset=utf-8", ".woff2": "font/woff2", ".json": "application/json", ".png": "image/png", ".jpg": "image/jpeg", ".webp": "image/webp", ".woff": "font/woff", ".txt": "text/plain; charset=utf-8", ".svg": "image/svg+xml", ".ico": "image/x-icon" };
 
 /* ───────── 하루들 공개 피드 ───────── */
 let feedCache = { at: 0, body: null, pending: null };
@@ -93,6 +94,24 @@ async function feedExists(id) {
   } catch { return true; }
 }
 
+/* ───────── 정적 파일 ─────────
+   파일 내용을 메모리에 두고(파일이 바뀌면 다시 읽는다), 글자 파일은 brotli로 한 번만 눌러 둔다.
+   누르는 동안 온 요청은 그대로 보내고(Caddy가 gzip으로 누른다), 다 눌리면 그다음부터 brotli로 보낸다(gzip보다 15~20% 작다). */
+const staticCache = new Map();
+const COMPRESSIBLE = new Set([".html", ".js", ".css", ".json", ".svg", ".txt"]);
+async function staticFile(file, s) {
+  let e = staticCache.get(file);
+  if (e && e.mtimeMs === s.mtimeMs && e.size === s.size) return e;
+  const body = await readFile(file);
+  e = { mtimeMs: s.mtimeMs, size: s.size, body, br: null, etag: `"${createHash("sha1").update(body).digest("base64url").slice(0, 20)}"` };
+  staticCache.set(file, e);
+  if (COMPRESSIBLE.has(extname(file)) && body.length > 1024) {
+    const entry = e;
+    brotliCompress(body, { params: { [zlib.BROTLI_PARAM_QUALITY]: 11, [zlib.BROTLI_PARAM_SIZE_HINT]: body.length } }, (err, br) => { if (!err && br.length < body.length) entry.br = br; });
+  }
+  return e;
+}
+
 /* ───────── HTTP ───────── */
 let world = null;   // 14층 하루들 월드 (아래에서 켠다)
 const server = http.createServer(async (req, res) => {
@@ -125,8 +144,13 @@ const server = http.createServer(async (req, res) => {
     if (!file.startsWith(ROOT)) { res.writeHead(403); return res.end(); }
     const s = await stat(file).catch(() => null);
     if (!s || !s.isFile()) { res.writeHead(404, { "content-type": "text/plain; charset=utf-8" }); return res.end("없는 페이지예요"); }
-    res.writeHead(200, { "content-type": TYPES[extname(file)] || "application/octet-stream", "cache-control": extname(file) === ".html" ? "no-cache" : path.startsWith("/assets/") ? "public, max-age=31536000, immutable" : "max-age=3600" });
-    res.end(await readFile(file));
+    const entry = await staticFile(file, s);
+    const headers = { "content-type": TYPES[extname(file)] || "application/octet-stream", "cache-control": extname(file) === ".html" ? "no-cache" : path.startsWith("/assets/") ? "public, max-age=31536000, immutable" : "max-age=3600", etag: entry.etag, vary: "Accept-Encoding" };
+    if (req.headers["if-none-match"] === entry.etag) { res.writeHead(304, headers); return res.end(); }   // 바뀌지 않았으면 본문 없이
+    const br = entry.br && /\bbr\b/.test(String(req.headers["accept-encoding"] || ""));
+    if (br) headers["content-encoding"] = "br";
+    res.writeHead(200, headers);
+    res.end(br ? entry.br : entry.body);
   } catch (e) {
     console.error(req.url, e.message);
     res.writeHead(502, { "content-type": "application/json" });

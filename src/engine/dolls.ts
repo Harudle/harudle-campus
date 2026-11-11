@@ -62,6 +62,8 @@ const turnTo = (from: number, to: number) => { let d = (to - from) % (Math.PI * 
 export function makeDoll(kind: Doll['kind'], config: AvatarConfig | null, blob: THREE.Mesh, extra: { pet?: PetKind; gear?: GearState | null } = {}): Doll {
   const root = new THREE.Group(), turn = new THREE.Group()
   root.add(turn); root.add(blob)
+  // 화면 밖이라 그리지 않는 프레임(엔진의 cullDolls가 turn을 끈다)에는 몸 안쪽 자리 계산도 건너뛴다
+  { const update = THREE.Object3D.prototype.updateMatrixWorld; turn.updateMatrixWorld = function (force?: boolean) { if (this.visible) update.call(this, force) } }
   let heading = 0
   const doll: Doll = {
     id: nextId++, kind, config, root, turn, blob, look: config, pet: extra.pet ?? 'doodle', gear: extra.gear ?? null,
@@ -77,6 +79,13 @@ export function makeDoll(kind: Doll['kind'], config: AvatarConfig | null, blob: 
     },
   }
   live.set(doll.id, doll); changed()
+  return doll
+}
+
+/** 숨겨진 동안(다른 층에 있는 크루)은 자리 계산을 건너뛴다. 다시 보이면 그 프레임에 바로 맞춰진다. 숨긴 채 월드 좌표를 읽는 캐릭터(1인칭의 나)에는 쓰지 않는다 */
+export function restWhenHidden(doll: Doll): Doll {
+  const update = THREE.Object3D.prototype.updateMatrixWorld
+  doll.root.updateMatrixWorld = function (force?: boolean) { if (this.visible) update.call(this, force) }
   return doll
 }
 
